@@ -75,7 +75,7 @@ fail() {
 # Print in the same shape every time: "[n/5] name          message".
 say() { printf '[%d/5] %-15s %s\n' "$STEP" "$1" "$2"; }
 
-echo "qwen3.8free — setup"
+echo "airgap — setup"
 
 # --- 0. Can this Mac run the model at all? -----------------------------------
 # The earliest possible stop. Installing tools for a model that cannot load is

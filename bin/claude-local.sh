@@ -37,7 +37,7 @@ USAGE (run from the folder you want to work in)
 
   Anything you type after the script name is passed straight to Claude Code.
   You can run this script from any folder. Use its full path, for example:
-      ~/dev/local-llms/qwen3.8free/bin/claude-local.sh
+      ~/dev/local-llms/airgap/bin/claude-local.sh
 
 SETTINGS
   LEAN_MCP=0      load your normal extra tool servers. They cost about 17,000

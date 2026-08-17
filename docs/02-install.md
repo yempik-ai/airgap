@@ -330,23 +330,18 @@ This prints nothing. That is success.
 
 ### 4c. Copy the repo
 
-You need the repository's web address. Open the project's page on GitHub in your
-browser, click the green **Code** button, and copy the HTTPS address it shows.
-It ends in `.git`.
-
-In the command below, replace `<REPO_URL>` with that address, including the
-`.git` at the end. Worked example: if the page shows
-`https://github.com/example-owner/qwen3.8free.git`, then your command is
-`git clone https://github.com/example-owner/qwen3.8free.git qwen3.8free`.
+Copy this command exactly as it is written. It downloads the repository — the
+scripts and these documents, about half a megabyte. It does **not** download the
+model; that is step 10.
 
 ```bash
-git clone <REPO_URL> qwen3.8free
+git clone https://github.com/yempik-ai/airgap.git airgap
 ```
 
 You should see something like this:
 
 ```
-Cloning into 'qwen3.8free'...
+Cloning into 'airgap'...
 remote: Enumerating objects: 74, done.
 remote: Counting objects: 100% (74/74), done.
 remote: Compressing objects: 100% (52/52), done.
@@ -369,7 +364,7 @@ connection speed. The last line always ends with `done.`.
 ### 4d. Move into the repo folder
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 This prints nothing. That is success.
@@ -382,7 +377,7 @@ arrived.
 This lists the scripts in the repo's `bin` folder.
 
 ```bash
-ls ~/dev/local-llms/qwen3.8free/bin
+ls ~/dev/local-llms/airgap/bin
 ```
 
 You should see something like this:
@@ -402,7 +397,7 @@ out the memory settings the other scripts use.
 in step 4c did not finish. Run step 4c again.
 
 **From this point on, every command in this guide is run from
-`~/dev/local-llms/qwen3.8free`.** Each section repeats the `cd` command, because
+`~/dev/local-llms/airgap`.** Each section repeats the `cd` command, because
 Terminal windows get closed and folders get forgotten.
 
 ---
@@ -417,7 +412,7 @@ pieces of this setup are published through Homebrew and not through the App Stor
 Move into the repo folder first.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 ### 5a. Check whether you already have it
@@ -558,7 +553,7 @@ you cannot get them.
 Move into the repo folder first.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 This installs git-lfs through Homebrew.
@@ -719,7 +714,7 @@ this page.
 Move into the repo folder first.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 ### 8a. Add the tap
@@ -837,7 +832,7 @@ your own Mac.
 Move into the repo folder first.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 ### 9a. Check whether you already have it
@@ -914,7 +909,7 @@ checks before it acts and does nothing when a tool is already present. It never
 downloads the model and never starts the server.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 ```bash
@@ -924,7 +919,7 @@ cd ~/dev/local-llms/qwen3.8free
 You should see something like this:
 
 ```
-qwen3.8free — setup
+airgap — setup
 [1/5] homebrew        ok (6.0.17)
 [2/5] git-lfs         ok (3.7.1)
 [2/5] git-lfs         ok (switched on for your account)
@@ -985,7 +980,7 @@ is 19.1 GB instead of about 54 GB.
 Move into the repo folder first.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 This downloads the model. Leave the Terminal window open and let it run.
@@ -998,7 +993,7 @@ You should see something like this:
 
 ```
 repo     chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
-target   /Users/<YOUR_USER_NAME>/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+target   /Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 disk     460.0 GB free (need 45 GB)
 
 [1/5] git-lfs                ok (3.7.1)
@@ -1055,7 +1050,7 @@ stays on disk.
 To resume, run the same command again from the repo folder.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 ```bash
@@ -1069,7 +1064,7 @@ If the script refuses to touch the existing folder, fetch the remaining large
 files directly. This is the same command the script runs internally.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+cd ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 ```
 
 ```bash
@@ -1100,7 +1095,7 @@ twenty.
 Move into the model folder first.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+cd ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 ```
 
 This lists the five model files with their sizes in human-readable units.
@@ -1129,7 +1124,7 @@ and one of roughly 1.8G means you have the model.
 have placeholder files and not the model. This is FIX THIS, not STOP. The fix:
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+cd ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 ```
 
 ```bash
@@ -1149,7 +1144,7 @@ start a server.
 Move into the repo folder first.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 ```bash
@@ -1244,7 +1239,7 @@ It reads only. It starts nothing, stops nothing and changes nothing.
 Move into the repo folder first.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 ```bash
@@ -1255,7 +1250,7 @@ At this point the server is not running yet, so you should see something like
 this:
 
 ```
-qwen3.8free doctor
+airgap doctor
 ── environment ──────────────────────────────
 PASS  macos             26.5.2 (arm64)
 PASS  apple silicon     Apple M3 Max, 30 GPU cores
@@ -1271,7 +1266,7 @@ PASS  git-lfs enabled   switched on for your account
 PASS  mlx-serve         26.8.8
 PASS  claude code       2.1.233
 ── model ────────────────────────────────────
-PASS  model dir         ~/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+PASS  model dir         ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 PASS  weights           5 shards, no pointers, 20.0 GB on disk (19.1 GB is loaded)
 PASS  model id          Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 ── server ───────────────────────────────────
@@ -1359,7 +1354,7 @@ and Docker running (MEASURED).
 Move into the repo folder first.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 This reads macOS's memory statistics and prints two numbers: how much memory is
@@ -1440,7 +1435,7 @@ Stop here. Before continuing, confirm that **the first number is now at least as
 large as the second**.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 ```bash
@@ -1506,7 +1501,7 @@ second window for step 15.
 In the new window, move into the repo folder.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 This starts the server. It stays running until you stop it.
@@ -1519,7 +1514,7 @@ You should see something like this first:
 
 ```
 memory   24.3 GB available (need 22 GB) — ok
-model    /Users/<YOUR_USER_NAME>/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+model    /Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 endpoint http://127.0.0.1:11234   (Anthropic: http://127.0.0.1:11234/v1/messages)
 context  65536 tokens, kv-quant turbo4
 budget   weights<=21GB, prefix 1536MB, idle-evict 900s
@@ -1626,7 +1621,7 @@ server window from step 14 must stay open and running.
 Move into the repo folder.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 This starts Claude Code and points it at your own Mac instead of at the internet.
@@ -1672,7 +1667,7 @@ Expect, roughly in this order:
    changes nothing but colors.
 2. **"Do you trust the files in this folder?"** Claude Code asks this the first
    time it opens any folder. The folder in question is
-   `~/dev/local-llms/qwen3.8free` — your own copy of this repository, containing
+   `~/dev/local-llms/airgap` — your own copy of this repository, containing
    the scripts you have been reading. Answering yes is safe and is required to
    continue.
 
@@ -1775,7 +1770,7 @@ Replace `~/some/other/project` with the folder you want to work in. Worked
 example: `cd ~/dev/my-website`.
 
 ```bash
-~/dev/local-llms/qwen3.8free/bin/claude-local.sh
+~/dev/local-llms/airgap/bin/claude-local.sh
 ```
 
 The banner is the same as above. Claude Code now reads and writes files in the
@@ -1793,7 +1788,7 @@ There are two ways. Both give the memory back immediately.
 **The command way**, which works from any window. Move into the repo folder first.
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 ```bash
@@ -1835,7 +1830,7 @@ is complete.
 1. The doctor reports no failures. From the repo folder:
 
    ```bash
-   cd ~/dev/local-llms/qwen3.8free
+   cd ~/dev/local-llms/airgap
    ```
 
    ```bash
@@ -1863,7 +1858,7 @@ is complete.
 Covered in step 16. In short, from the repo folder:
 
 ```bash
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 ```bash
@@ -1882,7 +1877,7 @@ Every part of this is removable. Do these in any order, or only the ones you wan
 folder and everything in it. It cannot be undone except by downloading again.
 
 ```bash
-rm -rf ~/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+rm -rf ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 ```
 
 This prints nothing. That is success.
@@ -1891,7 +1886,7 @@ This prints nothing. That is success.
 documents. Do the model removal first, or this removes both at once.
 
 ```bash
-rm -rf ~/dev/local-llms/qwen3.8free
+rm -rf ~/dev/local-llms/airgap
 ```
 
 This prints nothing. That is success.

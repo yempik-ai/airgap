@@ -69,10 +69,10 @@ Close, in this order, whatever you have running:
 
 Now measure. Every command from here runs from the repository folder, and this
 puts your Terminal window there. Throughout these documents the folder is written
-as `~/dev/local-llms/qwen3.8free`; if you put it somewhere else, use your path.
+as `~/dev/local-llms/airgap`; if you put it somewhere else, use your path.
 
 ```
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 This prints nothing. That is success.
@@ -139,7 +139,7 @@ You should see something like this, and then the window keeps printing:
 
 ```
 memory   24.3 GB available (need 22 GB) — ok
-model    /Users/<YOUR_USER_NAME>/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+model    /Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 endpoint http://127.0.0.1:11234   (Anthropic: http://127.0.0.1:11234/v1/messages)
 context  65536 tokens, kv-quant turbo4
 budget   weights<=21GB, prefix 1536MB, idle-evict 900s
@@ -214,7 +214,7 @@ your own Mac, and with any real Anthropic key in your shell blanked out so it
 cannot take priority.
 
 ```
-cd ~/dev/local-llms/qwen3.8free && ./bin/claude-local.sh
+cd ~/dev/local-llms/airgap && ./bin/claude-local.sh
 ```
 
 That is one action expressed as two commands, because the script needs to be
@@ -484,7 +484,7 @@ cd ~/my-other-project
 This prints nothing. That is success. Then:
 
 ```
-~/dev/local-llms/qwen3.8free/bin/claude-local.sh
+~/dev/local-llms/airgap/bin/claude-local.sh
 ```
 
 Everything works exactly as in Section 4. The server keeps running in its own
@@ -532,7 +532,7 @@ Five checks, in order:
 Either press **Control-C** in the server's window, or, from any other window:
 
 ```
-cd ~/dev/local-llms/qwen3.8free && ./bin/stop.sh
+cd ~/dev/local-llms/airgap && ./bin/stop.sh
 ```
 
 You should see something like this:

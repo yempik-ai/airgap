@@ -75,14 +75,14 @@ If you meet the problem anyway, the fix is one command and is in
 
 Every command on this page runs from the folder you copied this repository into.
 Throughout these documents that folder is written as
-`~/dev/local-llms/qwen3.8free`. If you put it somewhere else, use your own path.
+`~/dev/local-llms/airgap`. If you put it somewhere else, use your own path.
 Do not assume your Terminal window is still where an earlier page left it;
 windows get closed.
 
 This puts your Terminal window inside the repository folder.
 
 ```
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 This prints nothing. That is success.
@@ -117,7 +117,7 @@ The version number will differ on your Mac. Both lines must say `PASS`.
 You will probably also see this line, and it is EXPECTED at this point:
 
 ```
-FAIL  model dir         nothing at ~/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit. Run: ./bin/download-model.sh  -> docs/03-get-the-model.md
+FAIL  model dir         nothing at ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit. Run: ./bin/download-model.sh  -> docs/03-get-the-model.md
 ```
 
 That is the page you are on, telling you to do the thing you are about to do.
@@ -161,7 +161,7 @@ You should see something like this:
 
 ```
 repo     chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
-target   /Users/<YOUR_USER_NAME>/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+target   /Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 disk     460.4 GB free (need 45 GB)
 
 [1/5] git-lfs                ok (3.7.1)
@@ -244,13 +244,13 @@ size comes back.
 folder occupies.
 
 ```
-du -sh ~/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+du -sh ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 ```
 
 You should see something like this:
 
 ```
- 20G	/Users/<YOUR_USER_NAME>/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+ 20G	/Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 ```
 
 The number is yours and the path contains your own account name. If it reads
@@ -258,7 +258,7 @@ about 40G rather than about 20G, the dedup step was skipped — either you set
 `DEDUP=0`, or the step failed quietly. Run it yourself:
 
 ```
-cd ~/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit && git lfs dedup
+cd ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit && git lfs dedup
 ```
 
 That is one action expressed as two commands joined by `&&`, because `git lfs
@@ -347,7 +347,7 @@ design, so that is what it reports, and that is what makes the right code run.
 file.
 
 ```
-grep model_type ~/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit/config.json
+grep model_type ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit/config.json
 ```
 
 You should see something like this:
@@ -467,7 +467,7 @@ is the folder's own name — so a folder that says `5bit` always contains the
 first if you have not:
 
 ```
-cp ~/dev/local-llms/qwen3.8free/config.env.example ~/dev/local-llms/qwen3.8free/config.env
+cp ~/dev/local-llms/airgap/config.env.example ~/dev/local-llms/airgap/config.env
 ```
 
 This prints nothing. That is success. Then open `config.env` in any text editor
@@ -496,7 +496,7 @@ This repository must never contain model weights, and the `.gitignore` file
 ([Glossary](09-glossary.md#gitignore)) is what enforces it. Confirm it worked.
 
 ```
-cd ~/dev/local-llms/qwen3.8free && git status --short
+cd ~/dev/local-llms/airgap && git status --short
 ```
 
 That is one action expressed as two commands, because the check only means
@@ -551,7 +551,7 @@ folder record this, and you should read both.
 This prints the first lines of the model's own license.
 
 ```
-head -5 ~/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit/LICENSE
+head -5 ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit/LICENSE
 ```
 
 You should see something like this:
@@ -605,7 +605,7 @@ immediately. Replace the folder name if yours is different — use the one
 `./bin/doctor.sh` prints.
 
 ```
-rm -rf ~/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+rm -rf ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 ```
 
 This prints nothing. That is success. Nothing else on your Mac depends on that

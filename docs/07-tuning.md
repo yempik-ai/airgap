@@ -48,10 +48,10 @@ doing anything.
 
 All commands on this page run from the repository folder. This puts your Terminal
 window there. Throughout these documents that folder is written as
-`~/dev/local-llms/qwen3.8free`; use your own path if it differs.
+`~/dev/local-llms/airgap`; use your own path if it differs.
 
 ```
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 This prints nothing. That is success.
@@ -660,7 +660,7 @@ The memory comes straight back and the command prints how much.
 Delete `config.env`. Every setting returns to what your Mac was measured as.
 
 ```
-rm ~/dev/local-llms/qwen3.8free/config.env
+rm ~/dev/local-llms/airgap/config.env
 ```
 
 This prints nothing. That is success. Nothing else on your Mac is affected —

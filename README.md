@@ -1,8 +1,21 @@
-# Run a 27B model on your Mac, and let Claude Code use it
+# airgap
 
-This repository gives you the scripts and the instructions to run a large
-AI model entirely on your own Mac, and to point Claude Code at it, so your
-code and your questions never leave the machine and cost nothing to answer.
+**An air-gapped Claude Code.** Run a large AI model entirely on your own Mac and
+point Claude Code at it, so your code and your questions never leave the machine
+and cost nothing to answer.
+
+This is the setup [yempik](https://github.com/yempik-ai) uses when we want an
+abliterated Qwen3.8-27B working on sensitive projects — the kind of work that
+cannot be sent to a hosted API, for reasons of confidentiality rather than
+content. An *air gap* is the practice of keeping a machine off every network so
+nothing can travel in or out. That is the property this repository is built
+around, and the scripts enforce it rather than merely recommending it: the
+server refuses to start if it is pointed anywhere but your own Mac.
+
+It is also written to be read. Every technical term is explained where it first
+appears and again in the [Glossary](docs/09-glossary.md), and
+[docs/08-how-it-works.md](docs/08-how-it-works.md) explains the machinery from
+first principles. You do not need to be an engineer to get this running.
 
 ---
 
@@ -350,21 +363,17 @@ Five commands, in this order. **Do not run them yet.** Each one has its own
 page below that tells you what to expect and what to do when something goes
 wrong. This list is a map, not the instructions.
 
-**First, get this repository onto your Mac.** Replace `<REPO_URL>` with the
-address from this project's page on GitHub: click the green **Code** button and
-copy the HTTPS address, which ends in `.git`. Worked example: if the page shows
-`https://github.com/example-owner/qwen3.8free.git`, that is what goes in place of
-`<REPO_URL>`.
+**First, get this repository onto your Mac.** Copy this line exactly:
 
 ```
-mkdir -p ~/dev/local-llms && cd ~/dev/local-llms && git clone <REPO_URL> qwen3.8free
+mkdir -p ~/dev/local-llms && cd ~/dev/local-llms && git clone https://github.com/yempik-ai/airgap.git airgap
 ```
 
 That is one action: make a folder, move into it, and copy the repository. It ends
 with a line saying `done.` Then move into the new folder:
 
 ```
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 This prints nothing. That is success. If `git clone` reports
@@ -373,7 +382,7 @@ This prints nothing. That is success. If `git clone` reports
 this more slowly.
 
 Every command below runs from that folder. Throughout the documentation it is
-written as `~/dev/local-llms/qwen3.8free`. Yours may be somewhere else. Use your
+written as `~/dev/local-llms/airgap`. Yours may be somewhere else. Use your
 own path.
 
 Before command 4, you must free memory on your Mac. The server needs a block of

@@ -47,7 +47,7 @@ closed, so no section on this page assumes you are already there.
 
 This moves you into the repository folder. Replace `<PATH_TO_THE_REPO_FOLDER>`
 with the full path where you cloned it — for example,
-`~/dev/local-llms/qwen3.8free`.
+`~/dev/local-llms/airgap`.
 
 ```bash
 cd <PATH_TO_THE_REPO_FOLDER>
@@ -69,7 +69,7 @@ settings. It reads only. It never starts, stops, or changes anything.
 You should see something like this:
 
 ```
-qwen3.8free doctor
+airgap doctor
 ── environment ──────────────────────────────
 PASS  macos             26.5.2 (arm64)
 PASS  apple silicon     Apple M3 Max, 30 GPU cores
@@ -114,7 +114,7 @@ When you start the server:
 
 ```
 error: model-00002-of-00005.safetensors is still a git-lfs pointer, not weights.
-       run: cd '/Users/<YOUR_USER_NAME>/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit' && git lfs pull
+       run: cd '/Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit' && git lfs pull
 ```
 
 Or, if you look at the model folder, the large files are tiny — around 135 bytes
@@ -583,7 +583,7 @@ long as it runs, so you need one window for the server and one for Claude Code.
 
 **Step 2.** In the new window, move into the repository folder. Replace
 `<PATH_TO_THE_REPO_FOLDER>` with your path, for example
-`~/dev/local-llms/qwen3.8free`.
+`~/dev/local-llms/airgap`.
 
 ```bash
 cd <PATH_TO_THE_REPO_FOLDER>
@@ -812,7 +812,7 @@ The two names from Step 1 and Step 2 must match character for character.
 
 **Step 3.** If they do not match, point the scripts at the folder you actually
 have. Replace `<FULL_PATH_TO_MODEL_FOLDER>` with the real path — for example,
-`/Users/<YOUR_USER_NAME>/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit`.
+`/Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit`.
 
 ```bash
 MODEL_DIR=<FULL_PATH_TO_MODEL_FOLDER> ./bin/serve.sh

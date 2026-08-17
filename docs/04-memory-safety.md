@@ -231,7 +231,7 @@ are already somewhere.
 
 This moves you into the repository folder. Replace
 `<PATH_TO_THE_REPO_FOLDER>` with the full path where you cloned it — for
-example, `~/dev/local-llms/qwen3.8free`.
+example, `~/dev/local-llms/airgap`.
 
 ```bash
 cd <PATH_TO_THE_REPO_FOLDER>
@@ -793,7 +793,7 @@ You should see something like this:
 
 ```
 memory   24.3 GB available (need 22 GB) — ok
-model    /Users/<YOUR_USER_NAME>/dev/local-llms/qwen3.8free/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+model    /Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 endpoint http://127.0.0.1:11234   (Anthropic: http://127.0.0.1:11234/v1/messages)
 context  65536 tokens, kv-quant turbo4
 budget   weights<=21GB, prefix 1536MB, idle-evict 900s

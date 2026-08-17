@@ -97,7 +97,7 @@ section() {
 # Shorten a long path so the line still fits a normal terminal.
 shortpath() { echo "$1" | sed "s|^$HOME|~|"; }
 
-echo "qwen3.8free doctor"
+echo "airgap doctor"
 
 # =============================================================================
 section "environment"

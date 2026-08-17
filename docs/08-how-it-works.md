@@ -54,11 +54,11 @@ downloads, or starts anything.
 
 All of them run from the repository folder. That is the folder you cloned in
 [02 — Install](02-install.md). Throughout these documents it is written as
-`~/dev/local-llms/qwen3.8free`. Yours is wherever you cloned it.
+`~/dev/local-llms/airgap`. Yours is wherever you cloned it.
 
 **Go to the repository folder.** Replace `<YOUR_REPO_FOLDER>` with the full path
 to your copy. A worked example: if you cloned into a `dev` folder inside your
-home folder, the path is `~/dev/local-llms/qwen3.8free`.
+home folder, the path is `~/dev/local-llms/airgap`.
 
 ```bash
 cd <YOUR_REPO_FOLDER>

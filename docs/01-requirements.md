@@ -200,7 +200,7 @@ Two commands. Both only read; neither changes anything, downloads anything, or
 starts anything.
 
 Both run from the folder you cloned this repository into. Throughout these
-documents that folder is written as `~/dev/local-llms/qwen3.8free`. If you put it
+documents that folder is written as `~/dev/local-llms/airgap`. If you put it
 somewhere else, use your own path.
 
 ### 4a. Move into the repository folder
@@ -211,7 +211,7 @@ where you type commands instead of clicking buttons; open it from Applications,
 then Utilities.
 
 ```
-cd ~/dev/local-llms/qwen3.8free
+cd ~/dev/local-llms/airgap
 ```
 
 This prints nothing. That is success.
@@ -266,7 +266,7 @@ Two extra blocks may appear, and both are worth reading if they do:
 
 **If you do not see that.** `command not found` or `Permission denied` means you
 are not in the repository folder, or the file lost its permission to run. Run
-`cd ~/dev/local-llms/qwen3.8free` again first. If that does not help, see
+`cd ~/dev/local-llms/airgap` again first. If that does not help, see
 [06 — troubleshooting](06-troubleshooting.md).
 
 ### 4c. "36 GB total" is not "36 GB free"
