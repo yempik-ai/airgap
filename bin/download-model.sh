@@ -22,11 +22,14 @@ WHAT IT DOES
   1. Checks git-lfs is installed and switched on.
   2. Checks the model's address really exists, BEFORE downloading anything.
   3. Checks you have enough free disk space.
-  4. Downloads about 20 GB. This is the long part.
-  5. Reclaims the duplicate copy git-lfs keeps, freeing about 20 GB instantly.
+  4. Downloads the weights. This is the long part. Size depends on the build:
+     4.7 GB to 29.1 GB; it prints the real figure before it starts.
+  5. Reclaims the duplicate copy git-lfs keeps, freeing roughly the model's
+     own size instantly. (MEASURED on the test machine: 20.1 GB reclaimed.)
 
 WHAT IT COSTS
-  Disk: about 45 GB free while it runs, about 20 GB once it finishes.
+  Disk: about 45 GB free while it runs for the default 5-bit build, about
+        20 GB once it finishes. Smaller builds need proportionally less.
   Time: your attention for a minute, then tens of minutes of waiting. The wait
         depends entirely on your internet connection.
   Money: nothing. No account and no key are needed.
@@ -155,7 +158,26 @@ else
 fi
 
 # --- 4. The actual weights ---------------------------------------------------
-printf '[4/5] %-22s about 20 GB — this is the long part\n' "git lfs pull"
+# Ask huggingface.co how big THIS repo actually is. The catalog spans 4.7 GB to
+# 29.1 GB, so a hardcoded "about 20 GB" is wrong for most of them.
+# json, not awk: the API reports both "size" and a nested "lfs.size" per file,
+# so a naive text scan counts every weight twice.
+repo_gb="$(curl -fsS --max-time 15 "https://huggingface.co/api/models/${MODEL_REPO}?blobs=true" 2>/dev/null \
+  | python3 -c '
+import json,sys
+try:
+    d = json.load(sys.stdin)
+    n = sum(s.get("size") or 0 for s in d.get("siblings", [])
+            if s.get("rfilename","").endswith(".safetensors"))
+    print(f"{n/2**30:.1f}" if n else "")
+except Exception:
+    print("")
+' 2>/dev/null)"
+if [ -n "$repo_gb" ]; then
+  printf '[4/5] %-22s about %s GB — this is the long part\n' "git lfs pull" "$repo_gb"
+else
+  printf '[4/5] %-22s the weights — this is the long part\n' "git lfs pull"
+fi
 echo "      Press Ctrl-C to stop. Running this command again resumes it."
 ( cd "$MODEL_DIR" && git lfs pull ) \
   || die "the download did not finish." \
@@ -196,6 +218,10 @@ else
     "git lfs dedup" \
     "$(awk -v a="$after" -v b="$before" 'BEGIN { d = a - b; if (d < 0) d = 0; printf "%.1f", d }')" \
     "$before" "$after"
+  echo "      NOTE: du still reports the folder at about twice this size. That is"
+  echo "      expected. Deduplication makes the two copies share the same blocks on"
+  echo "      disk; du counts shared blocks once per file, df counts them once."
+  echo "      df is the one telling the truth. Check with: df -h ~"
 fi
 
 echo

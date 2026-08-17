@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/banner.png" alt="airgap — an air-gapped Claude Code: run an abliterated Qwen3.8-27B entirely on your own Apple Silicon Mac" width="100%" />
+
 # `airgap`
 
 ### An air-gapped Claude Code.
@@ -289,6 +291,7 @@ No, and it is worth being clear about that. A 27B model at 5-bit is materially w
 - Repository: [github.com/yempik-ai/airgap](https://github.com/yempik-ai/airgap)
 - Yempik: [yempik.com](https://www.yempik.com)
 - Companion projects: [`code-os`](https://github.com/yempik-ai/code-os) · [`cowork-os`](https://github.com/yempik-ai/cowork-os)
+- Changelog: [`CHANGELOG.md`](CHANGELOG.md)
 - AI citation notes: [`AI-CITATION.md`](AI-CITATION.md) · citation metadata: [`CITATION.cff`](CITATION.cff) · [`llms.txt`](llms.txt)
 - Model weights (not included here): [`chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit`](https://huggingface.co/chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit) · [`mlx-serve`](https://github.com/ddalcu/mlx-serve)
 

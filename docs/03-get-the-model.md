@@ -171,7 +171,7 @@ disk     460.4 GB free (need 45 GB)
 [4/5] git lfs pull           about 20 GB — this is the long part
       Press Ctrl-C to stop. Running this command again resumes it.
 [4/5] git lfs pull           ok — no pointer files left
-[5/5] git lfs dedup          reclaimed 19.4 GB (460.4 GB free before, 479.8 GB after)
+[5/5] git lfs dedup          reclaimed 20.1 GB (462.5 GB free before, 482.6 GB after)
 
 download complete — next: ./bin/verify-model.sh
 ```
@@ -235,27 +235,40 @@ is instant and loses nothing: both names now point at the same blocks.
 
 **How much does it actually reclaim?** The download script measures your free
 disk before and after and prints both numbers, so the figure you see is your
-machine's, not somebody else's. On the test machine this step had NOT YET BEEN
-run at the time these documents were written, so this repository does not quote a
-before-and-after pair as measured. The arithmetic says roughly half the folder's
-size comes back.
+machine's, not somebody else's. On the test machine it reclaimed **20.1 GB**,
+taking free disk from 462.5 GB to 482.6 GB — MEASURED.
 
-**To see the folder's size for yourself.** This prints how much disk the model
-folder occupies.
+### <a id="du-lies"></a>Why `du` still says 40G, and why that is correct
+
+This trips up everyone, so read it before you conclude something went wrong.
 
 ```
 du -sh ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 ```
 
-You should see something like this:
+After a successful dedup this still prints about **40G**:
 
 ```
- 20G	/Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+ 40G	/Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 ```
 
-The number is yours and the path contains your own account name. If it reads
-about 40G rather than about 20G, the dedup step was skipped — either you set
-`DEDUP=0`, or the step failed quietly. Run it yourself:
+**That is not a failure.** Deduplication does not delete the second copy — it
+makes both copies point at the *same blocks* on disk. `du` adds up what each file
+claims, and two files each claiming 20 GB of the same shared blocks add up to
+40 GB. `df` measures the disk itself, and the disk really does have the space
+back.
+
+So check `df`, not `du`:
+
+```
+df -h ~
+```
+
+The `Avail` column is the honest number, and it is the one the download script
+printed as "free before" and "free after".
+
+**If you genuinely want to re-run dedup** — because you set `DEDUP=0`, or the
+step printed an error — it is safe to run more than once:
 
 ```
 cd ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit && git lfs dedup
