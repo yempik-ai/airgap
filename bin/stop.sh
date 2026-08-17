@@ -66,4 +66,9 @@ else
   echo "nothing running on port ${PORT}."
 fi
 
-echo "memory: ${before} GB -> $(available_gb) GB available"
+after="$(available_gb)"
+echo "memory: ${before} GB -> ${after} GB available"
+echo
+echo "If that barely moved, nothing is wrong. macOS returns freed pages lazily,"
+echo "so the memory comes back over the next few seconds rather than at once."
+echo "Check again with:  bash -c 'source bin/env.sh && available_gb'"

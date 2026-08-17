@@ -176,11 +176,26 @@ if [ "${HW_VERDICT:-}" != "impossible" ]; then
   # you have rather than the ones this Mac was advised to get. The figures are
   # text-only: the image-reading part is on disk but is not loaded.
   # Add up the shards on disk instead and you would over-count by that part.
+  # The three constants describe the 27B OrcaRouter builds and nothing else, so
+  # they are only used for those. Matching on a bare "-4bit" suffix was wrong
+  # twice over: it claimed a 9B at 4-bit weighs the same as a 27B at 4-bit, and
+  # it missed folders spelled "-4Bit", which fell through to the 5-bit figure.
+  # The result was a 4.7 GB model asking for 22 GB of free memory and serve.sh
+  # refusing to start it — exactly backwards for someone who switched to a
+  # smaller build BECAUSE memory was short.
+  #
+  # For anything else, measure the shards actually on disk. That is exact for a
+  # text-only checkpoint and slightly conservative for one carrying a vision
+  # tower, which is the safe direction to be wrong in.
   case "$(basename "$MODEL_DIR")" in
-    *-4bit|*-4BIT) _w="$HW_WEIGHTS_GB_4BIT" ;;
-    *-5bit|*-5BIT) _w="$HW_WEIGHTS_GB_5BIT" ;;
-    *-8bit|*-8BIT) _w="$HW_WEIGHTS_GB_8BIT" ;;
-    *)             _w="${HW_WEIGHTS_GB:-$HW_WEIGHTS_GB_5BIT}" ;;
+    *OrcaRouter*-4bit|*OrcaRouter*-4BIT|*OrcaRouter*-4Bit) _w="$HW_WEIGHTS_GB_4BIT" ;;
+    *OrcaRouter*-5bit|*OrcaRouter*-5BIT|*OrcaRouter*-5Bit) _w="$HW_WEIGHTS_GB_5BIT" ;;
+    *OrcaRouter*-8bit|*OrcaRouter*-8BIT|*OrcaRouter*-8Bit) _w="$HW_WEIGHTS_GB_8BIT" ;;
+    *)
+      _w="$(find "$MODEL_DIR" -maxdepth 1 -name '*.safetensors' -exec stat -f%z {} + 2>/dev/null \
+            | awk '{s+=$1} END { if (s>0) printf "%.1f", s/1073741824 }')"
+      [ -n "$_w" ] || _w="${HW_WEIGHTS_GB:-$HW_WEIGHTS_GB_5BIT}"
+      ;;
   esac
 
   hw_rebudget "$_w" "$CTX_SIZE"

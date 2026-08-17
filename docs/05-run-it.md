@@ -266,9 +266,12 @@ Expect to be asked, roughly in this order:
    already read. Answering yes is safe and is required to continue.
 
 Exact wording and the number of screens vary between versions of Claude Code.
-This description was written against Claude Code 2.1.233, the version measured on
-the test machine. If you meet a screen not listed here, read it: none of them
-asks for a password, a card, or a key, because this setup uses none of those.
+**These particular screens were NOT observed on the test machine** — Claude Code
+2.1.233 was already set up there, so a first run never happened. The list above
+comes from Claude Code's documented behaviour, not from a screen anyone here saw.
+Treat it as a guide, not a transcript. If you meet a screen not listed, read it:
+none of them asks for a password, a card, or a key, because this setup uses
+none of those.
 
 Once through, you reach the normal Claude Code input prompt.
 

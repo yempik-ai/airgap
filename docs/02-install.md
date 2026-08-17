@@ -1671,10 +1671,12 @@ Expect, roughly in this order:
    the scripts you have been reading. Answering yes is safe and is required to
    continue.
 
-The exact wording and the number of screens differ between versions. This
-description was written against Claude Code 2.1.233, the version on the test
-machine. If you meet a screen not listed here, read it: none of them asks for a
-password, a card, or an account, because this setup uses none of those.
+The exact wording and the number of screens differ between versions. **These
+screens were NOT observed on the test machine** — Claude Code 2.1.233 was already
+set up there, so no first run ever happened. The list above is from Claude Code's
+documented behaviour, not a transcript of screens anyone here saw. If you meet a
+screen not listed, read it: none of them asks for a password, a card, or an
+account, because this setup uses none of those.
 
 After that you reach the normal Claude Code input prompt.
 

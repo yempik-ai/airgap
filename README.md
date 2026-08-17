@@ -174,13 +174,16 @@ Being precise about this matters more than looking finished.
 
 | | |
 |:--|:--|
-| Checkpoint integrity, architecture, MTP head present in the bytes | ✓ verified — `bin/verify-model.sh` |
-| Claude Code driving a local `mlx-serve` model, end to end | ✓ verified — but with **Qwen3.5-0.8B**, same `qwen3_5` architecture family |
-| Anthropic `/v1/messages`, tool calling, prefix-cache reuse | ✓ verified on that smaller model |
-| Every script's syntax, guards and refusals | ✓ verified |
-| **The 27B itself, loaded and served** | **✕ not yet** — it needs 23 GB free; the test machine had 10.5 GB |
+| Checkpoint integrity, architecture, MTP head present in the bytes | ✓ `bin/verify-model.sh` |
+| **Every script, actually run** — `start`, `setup`, `download-model`, `models`, `verify-model`, `doctor`, `serve`, `claude-local`, `stop` | ✓ all of them |
+| **Claude Code answering from a local model, end to end** | ✓ `pull → use → serve → claude-local` returned `AIRGAP OK` |
+| Anthropic `/v1/messages`, tool calling, prefix-cache reuse | ✓ verified |
+| `doctor.sh` against a live server, including the `mtp_loaded` probe | ✓ correctly reported WARN on a checkpoint with no MTP head |
+| **The 27B itself, loaded and served** | **✕ not yet** — the end-to-end runs used the 9B (4.7 GB) and Qwen3.5-0.8B |
 | **`mtp_loaded: true` on this checkpoint** | **✕ not yet confirmed** — see below |
 | Tokens per second, prefill rate | ✕ never measured |
+
+The end-to-end runs above used **`Qwen3.8-9B` at 4-bit** and **Qwen3.5-0.8B** — both the same `qwen3_5` architecture family as the 27B, so they exercise the same code path at a size that fits alongside a working day. What has not been run is the 27B itself.
 
 **The MTP caveat, stated plainly.** `mlx-serve` documents its native Qwen MTP head as auto-loading *"when the model dir ships `mtp/weights.safetensors`"*. **This checkpoint ships no such file** — its 29 MTP tensors are embedded in the main shards as `language_model.mtp.*`. The publisher reports MTP working on this exact checkpoint under mlx-serve 26.8.7, which is good evidence, but it is their measurement and has not been reproduced here.
 
