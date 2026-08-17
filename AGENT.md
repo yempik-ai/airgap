@@ -14,14 +14,15 @@ against the installed binaries, and what has already been tried and found false.
 not a record — [`AUDIT.md`](AUDIT.md) holds the status of every item, and if the
 two ever disagree, `AUDIT.md` is right.*
 
-- **Last landed:** `B1` (`bench.sh` keeps prefill and peak memory, takes
-  `PROMPT_FILE=`, and loads under `serve.sh`'s own flags via one shared list,
-  `LOAD_SHAPE_ARGS` in `env.sh`), 2026-08-17. Its first long-prompt run put a
-  number on `A3`: a 2.6 GB working set on the 9B at 16k tokens.
-- **Next:** `D3` — doctor probes a streamed tool call. Then `E1`, which now
-  has evidence behind it (`PREFILL_CHUNK` 4096 → 1024 cut the working set
-  2.6 → 1.1 GB at a 24% prefill cost). The ranked list is at the top of
-  `AUDIT.md`.
+- **Last landed:** `D3` (`doctor.sh` sends one forced-by-the-question tool
+  call twice, plain and streamed, thinking on, and reads the answer back —
+  two rows, `tool call` and `streamed call`, each with a named failure shape;
+  `claude-local.sh` now sets `CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK=1` so
+  a broken stream fails where the fault is), 2026-08-17. Running it showed
+  `tool_choice` is ignored by `mlx-serve 26.8.8` — see the facts below.
+- **Next:** `E1`, which has evidence behind it (`PREFILL_CHUNK` 4096 → 1024
+  cut the working set 2.6 → 1.1 GB at a 24% prefill cost). The ranked list is
+  at the top of `AUDIT.md`.
 - **Blocked on hardware, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `AUDIT.md` E5 and A5 both stop short
   of a measurement for this reason, and `ROADMAP.md` Phase 0 names it.
@@ -191,6 +192,41 @@ $ API_KEY=s3cret ./bin/serve.sh          # then, from the same Mac:
 $ curl -sS -o /dev/null -w '%{http_code}\n' -H 'x-api-key: nope' http://127.0.0.1:11234/v1/models
 200
 ```
+
+**`mlx-serve` accepts `tool_choice` and ignores it.** `{"type":"any"}`,
+`{"type":"tool","name":…}` and no `tool_choice` at all produce the same
+answer to the same prompt — the rendered prompt is byte-identical (the log
+shows a `reused 283/284` cache hit across the three), and a question the tool
+does not fit ("Say hello in three words", one `get_weather` tool offered)
+comes back as text under all three. So a doctor row cannot use `tool_choice`
+to separate *declined* from *unparsed*; it has to ask a question that needs
+the tool and read *how* the answer failed. `doctor.sh` does that and does not
+send `tool_choice` (the real Anthropic API also rejects a forced choice with
+thinking on, so sending it would be wrong on the one server that enforces it).
+
+```
+$ curl -sS -H 'content-type: application/json' http://127.0.0.1:11234/v1/messages -d '{"model":"Qwen3.8-9B-mlx-4Bit","max_tokens":256,"temperature":0,"tool_choice":{"type":"any"},"tools":[{"name":"get_weather","description":"Get the current weather in a city.","input_schema":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}}],"messages":[{"role":"user","content":"Say hello in three words."}]}'
+{"content":[{"type":"text","text":"Hello, friend!"}],"stop_reason":"end_turn",…}
+```
+
+**The streamed tool-call shape is known.** With thinking on (which Claude
+Code always sends), the SSE stream is: `content_block_start` index 0
+`{"type":"thinking",…}` → `thinking_delta`s → `signature_delta` with
+`"signature":"mlx-serve-local"` → `content_block_stop` → `content_block_start`
+index 1 `{"type":"tool_use","id":"toolu_…","name":…,"input":{}}` → **one**
+`input_json_delta` carrying the whole `partial_json` → `content_block_stop` →
+`message_delta` with `stop_reason: tool_use` and `usage.output_tokens` →
+`message_stop`. Non-streamed, the same request returns `content` with the
+`thinking` block then a `tool_use` block whose `input` is already an object.
+Both MEASURED on the 9B: 69 output tokens, ~1.5 s streamed on a warm server;
+25 tokens / ~0.5 s with thinking off. Not measured on the 27B.
+
+**`CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK` exists in 2.1.233** and gates
+the retry that turns a failed streamed request — including one that idled
+past `CLAUDE_STREAM_IDLE_TIMEOUT_MS` — into a non-streamed one
+(`strings -a` shows it OR'd with `tengu_disable_streaming_to_non_streaming_fallback`
+next to `"Stream idle timeout - partial response received"`).
+`claude-local.sh` sets it to 1.
 
 **`mlx-serve` binds its port *before* loading the model.** A second start on the
 same port dies immediately at bind with a named error and never loads weights.

@@ -1950,6 +1950,86 @@ good reason to do this on a Mac that cannot hold two copies of the weights.
 
 ---
 
+<a id="tool-calls"></a>
+## 24. "answered in words instead of calling the tool"
+
+### What you see
+
+`./bin/doctor.sh`, with the server running, prints one of these on its
+`tool call` or `streamed call` line:
+
+```
+FAIL  tool call         answered in words instead of calling the tool: "It is sunny in Paris." — pick another build: ./bin/models.sh list  -> docs/06-troubleshooting.md#tool-calls
+FAIL  streamed call     the call came back as plain text, the server did not parse it: "<tool_call>{"name":"get_weather"..."  -> docs/06-troubleshooting.md#tool-calls
+FAIL  streamed call     the streamed call did not add up to valid JSON: {"city":"Par  -> docs/06-troubleshooting.md#tool-calls
+WARN  streamed call     still reasoning at the 1024-token cap, no tool call yet — this build thinks too long for agent work. See docs/06-troubleshooting.md#tool-calls
+```
+
+Or, in a session, Claude Code keeps describing what it *would* do — read a
+file, run a command — and never does it, or reports a malformed tool request.
+
+### What it means
+
+Everything Claude Code does — reading a file, editing it, running a command —
+is a **tool call**: the model asks for a tool by name, with its arguments as a
+small block of JSON, and the server hands that block back to Claude Code in a
+shape it can act on. That is the one thing a model must be able to do to drive
+an agent at all. A model that answers questions beautifully but writes its
+tool calls as prose cannot.
+
+`doctor.sh` checks it directly. It offers the server one tool
+(`get_weather`, taking a `city`), asks a question that plainly needs it, and
+looks at what comes back — twice, once as a single answer and once
+**streamed**, because streaming is the path Claude Code actually uses and the
+server assembles a streamed tool call with different code. When the two lines
+disagree, that difference is the finding.
+
+The four outcomes mean four different things:
+
+- **answered in words** — the model chose not to call the tool. This is a
+  property of the model build, not of your install: some quantizations, and
+  most models outside the catalog, cannot do it reliably.
+- **came back as plain text** — the model *did* write a tool call, but not in
+  the exact form the server recognises, so it was passed through as text. Also
+  a property of the build.
+- **did not add up to valid JSON** — the pieces of the streamed call, put back
+  together, are not JSON. Rare; a server-side problem, worth reporting with
+  the doctor output.
+- **still reasoning at the cap** (a WARN) — the model spent 1024 tokens
+  thinking and had not called the tool yet. It may well have got there
+  eventually, but a build that thinks that long over "what is the weather in
+  Paris" will be slow in an agent loop.
+
+### What to do
+
+Choose a build from the catalog — every build listed there is a Qwen3.8 MLX
+build, and tool calling is what they were kept for:
+
+```bash
+./bin/models.sh list
+./bin/models.sh use 27b-5bit      # or another that fits your Mac
+```
+
+If you changed `KV_QUANT` or another setting in `config.env`, put the defaults
+back and run `./bin/doctor.sh` again first, so the finding is about the build
+and not about a setting. (Whether `KV_QUANT` affects tool calls has NOT been
+measured here; ruling it out is the point.)
+
+### How to know it is fixed
+
+Both lines PASS and show the call the model made:
+
+```
+PASS  tool call         get_weather({"city":"Paris"}) in one answer, 69 tokens
+PASS  streamed call     get_weather({"city":"Paris"}) reassembled from the stream, 69 tokens
+```
+
+(69 tokens is what the 9B produced on the test machine, thinking included —
+MEASURED. A bigger model may think longer; the count is there so you can see
+how much.)
+
+---
+
 ## What this page will not do
 
 - It will not make the model as capable as a large hosted model. A

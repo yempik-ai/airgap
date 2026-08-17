@@ -37,12 +37,33 @@ First public release.
   actually selected. Covers 8 GB to 128 GB; where a 27B cannot fit it names the
   catalog builds that do, and the scripts default to one of them instead of
   refusing.
-- `bin/doctor.sh` — 22 checks with a fix per failure (25 with the server up),
+- `bin/doctor.sh` — 22 checks with a fix per failure (29 with the server up),
   including whether git-lfs is *enabled* rather than merely installed, whether
   the weights are real files or 135-byte pointers, whether the selected model
   fits under the GPU wired ceiling, whether `CTX_SIZE` is within the model's own
   maximum, whether a real `ANTHROPIC_API_KEY` is set in the shell, and whether
   the listening socket is reachable from off the machine.
+- **Doctor reads the cache evidence the server already writes.** Two rows,
+  `prefix cache` and `/metrics.json`: the first quotes the biggest
+  `[hot-cache] reused N/M` line of the *current* run from the server's own log
+  (scoped past the last `Logging to` banner, because the log has no timestamps
+  and spans restarts), the second reads `hits/queries` and reused/total prompt
+  tokens from the counters. A 503 is "metrics off", not a failure. Every
+  server probe now goes through one `srv_curl` that adds `x-api-key` when
+  `API_KEY` is set. Closes `AUDIT.md` C1 and C2.
+- **Doctor proves the model can call a tool — plainly and streamed.** Two
+  rows, `tool call` and `streamed call`: one tool, a question that needs it,
+  thinking on (as Claude Code sends it), the same body with only `stream`
+  toggled, so a difference between the rows is streaming and nothing else. The
+  streamed answer is reassembled from its `input_json_delta` pieces the way a
+  client must. Every failure has a name — answered in words, a raw call passed
+  through as text, torn JSON on the stream, a stream that never ended, still
+  reasoning at the cap — and points at `docs/06` §24. `mlx-serve 26.8.8`
+  ignores `tool_choice`, so it is not sent (recorded in `AGENT.md`).
+  MEASURED on the 9B: 69 output tokens per row, both PASS, whole doctor 4.3 s.
+  `bin/claude-local.sh` now sets `CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK=1`
+  so Claude Code cannot paper over a broken stream by retrying non-streamed.
+  Closes `AUDIT.md` D3.
 - `bin/serve.sh` — refuses, rather than warns, on a non-Apple-Silicon Mac, on a
   build that does not fit under the GPU wired ceiling, on a non-loopback host, on
   `--host`, `--lan-share`, `--lan-discover`, `--skip-mem-preflight`, `--no-mtp`

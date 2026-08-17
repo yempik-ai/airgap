@@ -119,6 +119,14 @@ export DISABLE_AUTOUPDATER=1
 export CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL=1
 export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
 
+# When a streamed request breaks — including when it idles past the limit
+# below — Claude Code quietly retries it non-streamed. Against a local server
+# that hides two things: a streamed tool call the server assembles wrongly
+# (which ./bin/doctor.sh's "streamed call" row exists to catch), and a stall,
+# which then reappears as a second, slower wait under a different timeout.
+# Fail where the fault is instead. Name verified in the 2.1.233 binary.
+export CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK=1
+
 # A 27B model is much weaker than Sonnet or Opus at long chains of tool use.
 # Keeping the answer budget modest stops it talking past a tool call.
 : "${CLAUDE_CODE_MAX_OUTPUT_TOKENS:=8192}"

@@ -18,7 +18,7 @@ environment facts established along the way. Read that file first — it exists 
 these findings are not researched twice.
 
 Items are referenced by id from [`ROADMAP.md`](ROADMAP.md). All are **OPEN**
-except `A1`, `A5`, `C1` and `B1`, marked **DONE** below.
+except `A1`, `A5`, `C1`, `B1` and `D3`, marked **DONE** below.
 
 Evidence is cited as `file:line` at the time of the audit. Line numbers drift;
 the greps are given where the reader will need to re-locate something.
@@ -38,8 +38,8 @@ marks *never measured*.
 | ✅ | `A5` name the stall timeout — **DONE** | small | medium |
 | ✅ | `C1` read the cache evidence already being written — **DONE** | medium | high |
 | ✅ | `B1` make `bench.sh` keep prefill and peak memory — **DONE** | medium | high |
-| 5 | `D3` doctor probes a streamed tool call | medium | high |
-| 6 | `E1` stop overriding the engine's prefill sizing | small | medium |
+| ✅ | `D3` doctor probes a streamed tool call — **DONE** | medium | high |
+| 6 | `E1` stop overriding the engine's prefill sizing — next | small | medium |
 
 `E4` (thinking off) carries the largest measured speed-up in this audit but is
 a behavioural change with an unmeasured quality cost; it ships opt-in or not at
@@ -536,7 +536,45 @@ here" in `start.sh`, is accepted by `models.sh use`, and the download step is
 skipped — so the user is caught two steps later by `verify-model.sh` instead of
 simply having the download resumed.
 
-### D3 — doctor never exercises a tool call, and never the streamed path
+### D3 — doctor never exercises a tool call, and never the streamed path — **DONE**
+
+> **Shipped 2026-08-17.** Two rows in `doctor.sh`'s server section, after
+> the `/v1/messages` round trip so a cold server has already reloaded:
+> `tool call` (`stream:false`) and `streamed call` (`stream:true`). One body,
+> built once, only that flag differs — one tool (`get_weather`, required
+> `city`), "What is the weather in Paris?", **thinking on** because Claude
+> Code always sends it (so the `tool_use` block arrives after a thinking
+> block, as in a session), `temperature: 0`, `max_tokens: 1024`. The streamed
+> answer is reassembled from its `input_json_delta` pieces by a python3 reader
+> that also checks for `message_stop`, so "the pieces do not add up to JSON"
+> and "the stream never ended" are outcomes of their own. Every outcome names
+> a different fault: `declined` (words, not a call), `unparsed` (a raw
+> `<tool_call>` passed through as text), `wrong_tool`, `bad_input` (required
+> arg missing), `unassembled`, `unterminated`, `error` (the server refused),
+> `truncated` (a WARN: still reasoning at the cap — a slow build, not a
+> broken one), `empty`. FAILs point at a new `docs/06` §24. `PROBE=0` SKIPs
+> both. `claude-local.sh` exports `CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK=1`
+> (name verified in 2.1.233 with `strings -a`).
+>
+> Two things the shape below did not predict, found by running it. **(1)**
+> `tool_choice` is **ignored** by `mlx-serve 26.8.8` — `any`, a named tool and
+> nothing at all render the same prompt (a `283/284` cache hit across the
+> three) and an off-topic question comes back as text under all three. So it
+> cannot do the job the shape gave it, and it is not sent: the question has
+> to need the tool, and the row reads *how* the answer failed instead. **(2)**
+> The 8-token "hi" probe was kept as the liveness row and the two new rows
+> come after it; the reasoning cost is 44 tokens on the 9B (69 with thinking
+> against 25 without), well inside the estimate.
+>
+> Verified on the reference machine against the 9B, `mlx-serve 26.8.8`: both
+> rows PASS (`get_weather({"city":"Paris"})`, 69 tokens each; whole doctor
+> 4.3 s — MEASURED); all thirteen reader outcomes exercised against captured
+> answers (live: decline, truncation at `max_tokens: 5`, an API error;
+> crafted from live captures: an unparsed `<tool_call>`, a stream with a torn
+> `partial_json`, a stream missing `message_stop`, a wrong tool name, an empty
+> `input`, an empty body, non-JSON); `PROBE=0` → three SKIP rows; a
+> `claude-local.sh -p` turn with the fallback disabled answered, streamed.
+> Doctor is 29 checks against a live server (was 27), 22 with it down.
 
 `bin/doctor.sh:323-331` sends `max_tokens: 8`, content `"hi"`, and checks only
 that curl exited 0. Every check can pass on a build — the 2-bit at

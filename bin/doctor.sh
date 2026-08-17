@@ -24,9 +24,11 @@ WHAT IT DOES
     environment       your Mac: version, chip, memory, disk
     tools             homebrew, git-lfs, mlx-serve, Claude Code
     model             the folder of weights, and whether they are real files
-    server            whether the server is running, answering correctly, and
+    server            whether the server is running, answering correctly,
                       whether its prefix cache is doing its job (read from the
-                      server's own log and counters — see docs/07-tuning.md §5)
+                      server's own log and counters — see docs/07-tuning.md §5),
+                      and whether the model can make a tool call — plainly and
+                      streamed, the way Claude Code needs it
     claude code       whether Claude Code will be pointed at your Mac
 
   Each line starts with one of four words:
@@ -40,18 +42,21 @@ WHAT IT DOES NOT DO
   never changes a setting. Running it cannot break anything.
 
 WHAT IT COSTS
-  A second or two. No memory. Nothing leaves your Mac, except a few short
-  requests to your own server if it happens to be running.
+  A few seconds. No memory. Nothing leaves your Mac, except three short
+  requests to your own server if it happens to be running: an 8-token
+  question and two small tool calls, one plain and one streamed (about 70
+  output tokens each — MEASURED on the 9B; a longer wait on a bigger model
+  is that model thinking first, which is what it will do in a session too).
 
 USAGE (run from the repo root)
   ./bin/doctor.sh            run every check
   ./bin/doctor.sh --help     print this help
 
 SETTINGS
-  PROBE=0    do not send the one small test question to a running server.
-             Default is 1. The test question is 8 tokens long and goes to your
-             own Mac. Set 0 if the server has handed its memory back and you do
-             not want to make it reload the model.
+  PROBE=0    do not send the three small test requests to a running server.
+             Default is 1. They go to your own Mac and nowhere else. Set 0 if
+             the server has handed its memory back and you do not want to make
+             it reload the model.
 
 EXIT CODE
   0 when nothing FAILED (warnings do not fail). 1 when something FAILED.
@@ -135,6 +140,154 @@ cache_log_evidence() {
     }
     END                     { print state; print hit; print hits }
   ' "$1"
+}
+
+# The one capability Claude Code cannot do without is a tool call the server
+# hands back as a tool_use block — and it must arrive that way on the STREAMED
+# path, which is the one Claude Code uses, and which is assembled by different
+# code from the plain one. Nothing else in this file proves either; a build
+# that answers "hi" perfectly can still hand every tool call back as prose.
+#
+# The request is a miniature of a real turn: one tool, a question that plainly
+# needs it, thinking on (Claude Code always sends it, so the tool_use block
+# arrives after a thinking block, exactly as it will in a session) and
+# temperature 0 so the row is the same on every run. The cap of 1024 tokens is
+# there so a build that reasons at length reports as "still reasoning", not as
+# "cannot call a tool". `tool_choice` is NOT sent: mlx-serve 26.8.8 accepts it
+# and ignores it (see AGENT.md), so the question has to earn the call by itself.
+PROBE_TOOL="get_weather"
+PROBE_ARG="city"
+PROBE_TOOL_CAP=1024
+tool_probe_body() {
+  printf '{"model":"%s","max_tokens":%s,"temperature":0,"stream":%s,' "$MODEL_ID" "$PROBE_TOOL_CAP" "$1"
+  printf '"thinking":{"type":"enabled","budget_tokens":512},'
+  printf '"tools":[{"name":"%s","description":"Get the current weather in a city.",' "$PROBE_TOOL"
+  printf '"input_schema":{"type":"object","properties":{"%s":{"type":"string","description":"City name"}},"required":["%s"]}}],' "$PROBE_ARG" "$PROBE_ARG"
+  printf '"messages":[{"role":"user","content":"What is the weather in Paris?"}]}'
+}
+
+# Reads one answer on stdin — the JSON body ($1 = json) or the raw SSE text
+# ($1 = sse) — and prints one line: OUTCOME OUTPUT_TOKENS DETAIL. The SSE
+# reader reassembles the tool_use block from its input_json_delta pieces, the
+# way a client has to, so "the pieces do not add up to JSON" is an outcome of
+# its own rather than a mystery two steps later.
+tool_call_verdict() {
+  python3 -c '
+import json, sys
+mode, tool, arg = sys.argv[1:4]
+raw = sys.stdin.read().strip()
+
+def out(kind, tokens="-", detail=""):
+    print(kind, tokens, detail)
+    sys.exit(0)
+
+def api_error(obj):
+    if isinstance(obj, dict) and obj.get("type") == "error":
+        out("error", "-", obj.get("error", {}).get("message", "unnamed error"))
+
+if not raw:
+    out("empty")
+if mode == "sse":
+    events = []
+    for line in raw.splitlines():
+        if line.startswith("data:"):
+            try:
+                events.append(json.loads(line[5:].strip()))
+            except ValueError:
+                out("garbled", "-", line[:80])
+    if not events:
+        try:
+            api_error(json.loads(raw))
+        except ValueError:
+            pass
+        out("garbled", "-", raw[:80])
+    blocks, stop, tokens, stopped = {}, None, "?", False
+    for e in events:
+        t = e.get("type")
+        api_error(e)
+        if t == "content_block_start":
+            b = e.get("content_block", {})
+            blocks[e.get("index", 0)] = {"type": b.get("type"), "name": b.get("name"), "json": "", "text": b.get("text", "")}
+        elif t == "content_block_delta":
+            b = blocks.get(e.get("index", 0))
+            d = e.get("delta", {})
+            if b is None:
+                continue
+            if d.get("type") == "input_json_delta":
+                b["json"] += d.get("partial_json", "")
+            elif d.get("type") == "text_delta":
+                b["text"] += d.get("text", "")
+        elif t == "message_delta":
+            stop = e.get("delta", {}).get("stop_reason", stop)
+            tokens = e.get("usage", {}).get("output_tokens", tokens)
+        elif t == "message_stop":
+            stopped = True
+    if not stopped:
+        out("unterminated", tokens, stop or "no stop_reason")
+    content = []
+    for i in sorted(blocks):
+        b = blocks[i]
+        if b["type"] == "tool_use":
+            try:
+                inp = json.loads(b["json"]) if b["json"] else {}
+            except ValueError:
+                out("unassembled", tokens, b["json"][:80])
+            content.append({"type": "tool_use", "name": b["name"], "input": inp})
+        else:
+            content.append({"type": b["type"], "text": b["text"]})
+else:
+    try:
+        r = json.loads(raw)
+    except ValueError:
+        out("garbled", "-", raw[:80])
+    api_error(r)
+    stop = r.get("stop_reason")
+    tokens = r.get("usage", {}).get("output_tokens", "?")
+    content = r.get("content", [])
+
+calls = [b for b in content if b.get("type") == "tool_use"]
+text = " ".join(b.get("text", "") for b in content if b.get("type") == "text").strip()
+if calls:
+    c = calls[0]
+    if c.get("name") != tool:
+        out("wrong_tool", tokens, str(c.get("name")))
+    inp = c.get("input")
+    if not isinstance(inp, dict) or not isinstance(inp.get(arg), str):
+        out("bad_input", tokens, json.dumps(inp))
+    out("tool_use", tokens, json.dumps(inp, separators=(",", ":")))
+if stop == "max_tokens":
+    out("truncated", tokens)
+if tool in text or "tool_call" in text or "<function" in text:
+    out("unparsed", tokens, text[:60])
+out("declined", tokens, text[:60])
+' "$1" "$PROBE_TOOL" "$PROBE_ARG" 2>/dev/null || echo "garbled - the answer could not be read"
+}
+
+# One row per path. $1 is the row name, $2 "true" or "false" for stream. The
+# body is built once and only that flag differs, so when the two rows disagree
+# the difference is streaming and nothing else. Captured to a variable and read
+# afterwards on purpose: `curl | grep -q` under pipefail dies of SIGPIPE on the
+# first match and would report a working server as a broken one.
+tool_call_row() {
+  _name="$1"; _stream="$2"
+  if [ "$_stream" = "true" ]; then _mode=sse; _how="reassembled from the stream"; else _mode=json; _how="in one answer"; fi
+  _fix="docs/06-troubleshooting.md#tool-calls"
+  _out="$(srv_curl 120 -N -H "content-type: application/json" -H "anthropic-version: 2023-06-01" \
+            -d "$(tool_probe_body "$_stream")" "$BASE_URL/v1/messages" 2>/dev/null || true)"
+  read -r _kind _tokens _detail <<< "$(printf '%s' "$_out" | tool_call_verdict "$_mode")"
+  case "$_kind" in
+    tool_use)     row PASS "$_name" "${PROBE_TOOL}(${_detail}) ${_how}, ${_tokens} tokens" ;;
+    truncated)    row WARN "$_name" "still reasoning at the ${PROBE_TOOL_CAP}-token cap, no tool call yet — this build thinks too long for agent work. See docs/06-troubleshooting.md#tool-calls" ;;
+    declined)     row FAIL "$_name" "answered in words instead of calling the tool: \"${_detail}\" — pick another build: ./bin/models.sh list" "$_fix" ;;
+    unparsed)     row FAIL "$_name" "the call came back as plain text, the server did not parse it: \"${_detail}\"" "$_fix" ;;
+    wrong_tool)   row FAIL "$_name" "called '${_detail}', not the one tool it was given" "$_fix" ;;
+    bad_input)    row FAIL "$_name" "called ${PROBE_TOOL} with ${_detail} — the required '${PROBE_ARG}' is missing" "$_fix" ;;
+    unassembled)  row FAIL "$_name" "the streamed call did not add up to valid JSON: ${_detail}" "$_fix" ;;
+    unterminated) row FAIL "$_name" "the stream ended without message_stop (${_detail})" "$_fix" ;;
+    error)        row FAIL "$_name" "the server refused the request: ${_detail}" "$_fix" ;;
+    empty)        row FAIL "$_name" "the server did not answer" "docs/06-troubleshooting.md#no-server" ;;
+    *)            row FAIL "$_name" "the answer was not in a shape this script knows: ${_detail}" "$_fix" ;;
+  esac
 }
 
 echo "airgap doctor"
@@ -431,8 +584,14 @@ print(c.get("prefix_cache_hits_total", 0), c.get("prefix_cache_queries_total", 0
     else
       row FAIL "/v1/messages" "the server did not answer a small test question" "docs/06-troubleshooting.md#no-server"
     fi
+    # After the round trip, so a cold server has already reloaded the model
+    # by the time these are timed against a real answer.
+    tool_call_row "tool call" false
+    tool_call_row "streamed call" true
   else
     row SKIP "/v1/messages" "not sent (PROBE=0)"
+    row SKIP "tool call" "not sent (PROBE=0)"
+    row SKIP "streamed call" "not sent (PROBE=0)"
   fi
 elif [ -n "$port_pids" ]; then
   check_bind
