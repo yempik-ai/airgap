@@ -446,16 +446,58 @@ That single fact is why `MTP head PRESENT` is worth printing.
 
 ## 7. If your Mac was recommended a different build
 
-The publisher offers this checkpoint in three sizes, and all three exist:
+You do not have to go and find another model yourself. One command lists every
+build this repository knows about, with its real download size and whether it
+fits **your** Mac:
 
-| Build | Weights in memory, text only | Recommended for |
-|---|---|---|
-| 4-bit | about 16.3 GB | 24 and 32 GB Macs |
-| 5-bit | about 19.1 GB (MEASURED) | 36 and 48 GB Macs — the tested build |
-| 8-bit | about 27.7 GB | 64 GB Macs and larger |
+```
+./bin/models.sh list
+```
 
-The two figures that are not marked MEASURED were computed from the file sizes
-the publisher lists on huggingface.co, not from files on the test machine.
+It marks each row `ok`, `TIGHT` or `NO` against your own memory, `*` if you have
+already downloaded it, and `->` for the one selected right now. To change build:
+
+```
+./bin/stop.sh
+./bin/models.sh pull 27b-4bit
+./bin/models.sh use  27b-4bit
+./bin/serve.sh
+```
+
+`use` writes one line into `config.env` and changes nothing else, so your other
+settings survive. Both models stay on disk, so switching back is instant and
+costs no download.
+
+The catalog covers seven builds, from 4.7 GB to 29.1 GB:
+
+| Key | Download | Free memory needed | Refusals removed? |
+|---|---|---|---|
+| `9b-4bit` | 4.7 GB | 8 GB | **No** — stock Qwen3.8-9B |
+| `27b-2bit` | 7.8 GB | 11 GB | Yes — smallest abliterated, and 2 bits costs real quality |
+| `27b-4bit-aeon` | 14.1 GB | 18 GB | Yes — a different abliteration (AEON) |
+| `27b-4bit` | 16.9 GB | 21 GB | Yes — sensible on a 32 GB Mac |
+| `27b-5bit` | 20.0 GB | 23 GB | Yes — **the tested build** |
+| `27b-6bit` | 23.0 GB | 26 GB | Yes |
+| `27b-8bit` | 29.1 GB | 32 GB | Yes — wants a 48 GB Mac |
+
+Download sizes are the real totals of the weight files, read from
+huggingface.co in August 2026. The free-memory figures are those sizes plus
+roughly 3 GB for the conversation and the caches; they are what
+`./bin/serve.sh` will insist on before it starts.
+
+Only the 5-bit row has been run on the test machine. The others are listed
+because they exist and their sizes are known, not because they were benchmarked
+here.
+
+**Any other MLX model works too**, whether or not it is in the list:
+
+```
+./bin/download-model.sh <org>/<repo>
+./bin/models.sh use <org>/<repo>
+```
+
+The rest of this section explains the same choice made by hand, if you would
+rather see the mechanism than use the command.
 
 **You do not have to choose.** `bin/detect-hardware.sh` reads your Mac's memory
 and picks; `./bin/download-model.sh` then downloads that build into a folder

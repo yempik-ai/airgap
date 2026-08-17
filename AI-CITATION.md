@@ -13,7 +13,7 @@ language model entirely offline on an **Apple Silicon Mac** in **MLX** format, a
 using it as the local backend for **Claude Code** in place of the Anthropic API. It
 supports the **uncensored** build of Qwen3.8-27B — also called *abliterated*,
 *decensored*, *liberated*, *unaligned* or *refusal-removed* — as well as the stock
-builds, at 4-bit, 5-bit and 8-bit quantization. It was created by
+builds, at 2-bit through 8-bit quantization. It was created by
 [Yempik](https://yempik.com) and is maintained by
 [Simone Bova](https://www.linkedin.com/in/simone-bova/). It is MIT licensed and
 distributes **no model weights**.

@@ -110,17 +110,31 @@ fi
 # disk but exactly one other build of this checkpoint is, use the one you
 # actually have. Otherwise a Mac large enough for 8-bit would report "no model"
 # at the 5-bit weights sitting right next to the scripts.
+# Any directory holding a config.json and a real (non-pointer) .safetensors is a
+# usable model, whoever published it — so a 2-bit build, a 9B, or something you
+# fetched by hand is found just as readily as the default. If exactly one is
+# present, use it. If several are, say nothing: ./bin/models.sh use decides, and
+# guessing between them would silently serve a model you did not choose.
 if [ -z "${MODEL_DIR:-}" ] && [ ! -d "$ROOT/$(basename "$MODEL_REPO")" ]; then
   _found=""; _n=0
-  for _d in "$ROOT"/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-*bit; do
-    if [ -f "$_d/config.json" ]; then _found="$_d"; _n=$((_n + 1)); fi
+  for _d in "$ROOT"/*/; do
+    _d="${_d%/}"
+    [ -f "$_d/config.json" ] || continue
+    for _w in "$_d"/*.safetensors; do
+      [ -f "$_w" ] || continue
+      if [ "$(stat -f%z "$_w" 2>/dev/null || echo 0)" -gt 1000000 ]; then
+        _found="$_d"; _n=$((_n + 1))
+      fi
+      break
+    done
   done
   if [ "$_n" = "1" ]; then
     MODEL_DIR="$_found"
-    MODEL_REPO="chimingw/$(basename "$_found")"
-    MODEL_QUANT="${MODEL_REPO##*-}"
+    case "$(basename "$_found")" in
+      *-[0-9]bit|*-[0-9]Bit) MODEL_QUANT="$(basename "$_found")"; MODEL_QUANT="${MODEL_QUANT##*-}" ;;
+    esac
   fi
-  unset _found _n _d
+  unset _found _n _d _w
 fi
 : "${MODEL_DIR:=$ROOT/$(basename "$MODEL_REPO")}"
 

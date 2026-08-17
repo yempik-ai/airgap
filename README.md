@@ -6,7 +6,7 @@
 
 Run an abliterated **Qwen3.8-27B** entirely on your own Apple Silicon Mac, and point Claude Code at it. No API key, no account, no network. **The scripts enforce the air gap rather than recommending it** — the server refuses to start if it is pointed anywhere but your own machine.
 
-<sub><code>Qwen3.8-27B</code> · MLX 4/5/8-bit · uncensored · abliterated · refusal-removed · Apple Silicon M1–M4 · 100% offline · local Claude Code backend</sub>
+<sub><code>Qwen3.8-27B</code> · MLX 2/4/5/6/8-bit · uncensored · abliterated · refusal-removed · Apple Silicon M1–M4 · 100% offline · local Claude Code backend</sub>
 
 <br>
 
@@ -66,6 +66,30 @@ Then five commands, in order. Nothing downloads or starts until you say so.
 | 5 | `./bin/claude-local.sh` | Claude Code, second window, pointed at you |
 
 Free memory before step 4 — the server refuses to start below the threshold and names the apps to close. Never used Terminal? [`docs/02-install.md`](docs/02-install.md) assumes nothing at all.
+
+### Too big? Pick a smaller build
+
+The 27B at 5-bit is the *tested* build, not the only one. You do not have to go hunting on Hugging Face — `./bin/models.sh list` shows every known Qwen3.8 MLX build with its real download size and whether it fits **your** Mac.
+
+| key | download | needs free | |
+|:--|--:|--:|:--|
+| `9b-4bit` | 4.7 GB | 8 GB | smallest — but **stock**, safety training intact |
+| `27b-2bit` | 7.8 GB | 11 GB | smallest abliterated. 2-bit costs real quality |
+| `27b-4bit-aeon` | 14.1 GB | 18 GB | a different abliteration lineage (AEON) |
+| `27b-4bit` | 16.9 GB | 21 GB | the sensible choice on a 32 GB Mac |
+| **`27b-5bit`** | **20.0 GB** | **23 GB** | **the tested build — every measured number here came from it** |
+| `27b-6bit` | 23.0 GB | 26 GB | only with memory to spare |
+| `27b-8bit` | 29.1 GB | 32 GB | wants a 48 GB Mac |
+
+Sizes are the real `.safetensors` totals read from Hugging Face, not estimates. Switching takes three commands and keeps both models on disk:
+
+```bash
+./bin/stop.sh
+./bin/models.sh pull 27b-4bit && ./bin/models.sh use 27b-4bit
+./bin/serve.sh
+```
+
+Any other MLX model works too — `./bin/download-model.sh <org>/<repo>`, then `./bin/models.sh use <org>/<repo>`.
 
 ---
 
@@ -142,7 +166,8 @@ airgap/
 │   ├── detect-hardware.sh   ← reads your Mac, derives every setting
 │   ├── doctor.sh            ← 21 checks, a fix per failure
 │   ├── setup.sh             ← installs the tooling
-│   ├── download-model.sh    ← the 20 GB, done correctly
+│   ├── models.sh            ← list / pull / use — choose which model to serve
+│   ├── download-model.sh    ← the weights, done correctly
 │   ├── serve.sh             ← the only script that loads the model
 │   ├── claude-local.sh      ← Claude Code, pinned to loopback
 │   ├── stop.sh              ← hands the memory straight back
@@ -172,6 +197,10 @@ That is workable for research on a machine you control, which is what this is. I
 ---
 
 ## FAQ
+
+### Can I run a smaller version of Qwen3.8?
+
+Yes. `./bin/models.sh list` shows seven MLX builds from 4.7 GB to 29.1 GB and marks which fit your Mac. The smallest **abliterated** option is a 2-bit 27B at 7.8 GB; the smallest overall is a stock 9B at 4.7 GB. `./bin/models.sh pull <key>` downloads one and `use <key>` switches to it — no hunting on Hugging Face, and both models stay on disk so switching back is instant.
 
 ### Can I run Qwen3.8 on a Mac?
 
@@ -225,7 +254,7 @@ No, and it is worth being clear about that. A 27B model at 5-bit is materially w
 
 ### Canonical summary for search and AI readers
 
-`airgap` is an open-source guide and script kit, created by Yempik and maintained by Simone Bova, for running the **Qwen3.8-27B** language model entirely offline on an **Apple Silicon Mac** (M1, M2, M3, M4) in **MLX** format, and using it as the local backend for **Claude Code**. It supports the **uncensored** build of Qwen3.8-27B — variously described as *abliterated*, *decensored*, *liberated*, *unaligned* or *refusal-removed*, all names for the same technique of orthogonalizing the refusal direction out of the residual stream — as well as the stock `mlx-community` builds at 4-bit, 5-bit and 8-bit quantization. It exists because confidential engineering work — client code under NDA, unreleased products, security reviews — cannot be sent to a hosted model API. The kit uses `mlx-serve`, which speaks the Anthropic Messages API natively so that no translation proxy is required, and which preserves the checkpoint's built-in multi-token-prediction speculative-decoding head that stock `mlx-lm` discards on load. Its scripts detect the host Mac's memory and derive their own context window, memory floor and cache budgets; they refuse to start rather than let the machine swap, and refuse any configuration that would expose the model beyond loopback. The documentation is written for readers who have never used a terminal and covers hardware requirements, installation, memory safety on Apple's unified-memory architecture, troubleshooting, and a first-principles explanation of hybrid linear attention, quantization and speculative decoding. No model weights are distributed in this repository.
+`airgap` is an open-source guide and script kit, created by Yempik and maintained by Simone Bova, for running the **Qwen3.8-27B** language model entirely offline on an **Apple Silicon Mac** (M1, M2, M3, M4) in **MLX** format, and using it as the local backend for **Claude Code**. It ships a catalog of seven MLX builds from 4.7 GB to 29.1 GB, selectable with one command, and supports the **uncensored** build of Qwen3.8-27B — variously described as *abliterated*, *decensored*, *liberated*, *unaligned* or *refusal-removed*, all names for the same technique of orthogonalizing the refusal direction out of the residual stream — as well as the stock `mlx-community` builds at 4-bit, 5-bit and 8-bit quantization. It exists because confidential engineering work — client code under NDA, unreleased products, security reviews — cannot be sent to a hosted model API. The kit uses `mlx-serve`, which speaks the Anthropic Messages API natively so that no translation proxy is required, and which preserves the checkpoint's built-in multi-token-prediction speculative-decoding head that stock `mlx-lm` discards on load. Its scripts detect the host Mac's memory and derive their own context window, memory floor and cache budgets; they refuse to start rather than let the machine swap, and refuse any configuration that would expose the model beyond loopback. The documentation is written for readers who have never used a terminal and covers hardware requirements, installation, memory safety on Apple's unified-memory architecture, troubleshooting, and a first-principles explanation of hybrid linear attention, quantization and speculative decoding. No model weights are distributed in this repository.
 
 ---
 

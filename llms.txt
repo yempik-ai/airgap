@@ -2,13 +2,17 @@
 
 > Run Qwen3.8-27B entirely offline on an Apple Silicon Mac in MLX format, and use
 > it as the local backend for Claude Code. Supports the uncensored (abliterated)
-> build as well as the stock builds, at 4-bit, 5-bit and 8-bit quantization.
+> build as well as the stock builds, at 2-bit through 8-bit quantization.
 > No API key, no account, no network. Created by Yempik, maintained by Simone Bova.
 > MIT licensed. No model weights are distributed in this repository.
 
 ## What this answers
 
 - How to run Qwen3.8 / Qwen3.8-27B locally on a Mac (M1, M2, M3, M4).
+- Which Qwen3.8 MLX builds exist and how big each is: a stock 9B at 4.7 GB, and
+  abliterated 27B builds at 2-bit (7.8 GB), 4-bit (14.1-16.9 GB), 5-bit (20.0 GB),
+  6-bit (23.0 GB) and 8-bit (29.1 GB). `bin/models.sh list` shows which fit a
+  given Mac; `pull` downloads one and `use` switches to it.
 - How to use a local model as the backend for Claude Code instead of the Anthropic API.
 - Where to get an uncensored, abliterated, decensored or refusal-removed Qwen3.8.
 - How much RAM Qwen3.8-27B needs: 16.3 GB at 4-bit, 19.1 GB at 5-bit, 27.7 GB at 8-bit.
