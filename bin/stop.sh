@@ -31,9 +31,9 @@ USAGE (run from the repo root)
   ./bin/stop.sh --help     print this help
 
 WHAT YOU SHOULD SEE
-  Either "stopped." or "nothing running on port 11234.", and then a line
-  showing memory before and after. If a previous run was killed rather than
-  asked to stop, one more line saying its model lock was cleared.
+  Either "stopped." or "nothing running on port 11234.", a line saying the
+  model lock was cleared (the server holds one while it runs; this is where
+  it is given back), and a line showing memory before and after.
 
 EXIT CODE
   Always 0. There is no failure case: nothing running is a fine outcome.
@@ -51,15 +51,26 @@ esac
 
 before="$(available_gb)"
 
-if pkill -f "mlx-serve.*--port ${PORT}" 2>/dev/null; then
+# Wait on the PROCESS, not the port. mlx-serve closes its socket before it
+# exits, so a wait on /health returns while the pid — which is also the pid in
+# the model lock — is still shutting down, and the lock check below would then
+# find a live holder and report a stale lock as somebody else's.
+pids="$(pgrep -f "mlx-serve.*--port ${PORT}" 2>/dev/null | tr '\n' ' ' || true)"
+any_alive() {
+  for _p in $pids; do kill -0 "$_p" 2>/dev/null && return 0; done
+  return 1
+}
+
+if [ -n "$pids" ]; then
   # Give it a moment to release the weights, then be firm if it is stuck.
+  kill $pids 2>/dev/null || true
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    server_up || break
+    any_alive || break
     sleep 1
   done
-  if server_up; then
+  if any_alive; then
     echo "did not exit cleanly — sending SIGKILL"
-    pkill -9 -f "mlx-serve.*--port ${PORT}" 2>/dev/null || true
+    kill -9 $pids 2>/dev/null || true
     sleep 2
   fi
   echo "stopped."
@@ -67,15 +78,17 @@ else
   echo "nothing running on port ${PORT}."
 fi
 
-# The lock outlives a process that was killed rather than asked to stop, so the
-# stop button is where it gets tidied up. A lock whose holder is still alive is
-# never touched: that is a bench.sh run, or a server on another port, and both
-# are things this script did not stop and must not pretend it did.
+# serve.sh execs into mlx-serve, so its lock always outlives it — whether it was
+# stopped here or killed — and the stop button is where it gets tidied up. A
+# lock whose holder is still alive is never touched: that is a bench.sh run, or
+# a server on another port, and both are things this script did not stop and
+# must not pretend it did.
 if [ -n "${LOCK_DIR:-}" ] && [ -d "$LOCK_DIR" ]; then
+  lock_pid="$(model_lock_pid || echo '?')"
   if clear_stale_model_lock; then
-    echo "cleared a model lock left behind by a process that is gone."
+    echo "cleared the model lock (its holder, pid ${lock_pid}, is gone)."
   else
-    echo "note: the model lock is still held by pid $(model_lock_pid || echo '?') — $(model_lock_what)"
+    echo "note: the model lock is still held by pid ${lock_pid} — $(model_lock_what)"
     echo "      that is not the server on port ${PORT}. Nothing was stopped for it."
   fi
 fi

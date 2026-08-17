@@ -69,12 +69,13 @@ all. Everything in §F is roadmap sequencing, not code.
 > correctly in all three states; `stop.sh` clears a stale lock and refuses to
 > touch a live one.
 >
-> *Observed while landing `C1`, not fixed:* `stop.sh` reads the lock the moment
-> `/health` stops answering, but `mlx-serve` closes its port before its process
-> exits, so the check can find the holder still alive and print "the model lock
-> is still held … that is not the server on port N" — then the pid exits and
-> the lock is stale. Harmless (`serve.sh` reclaims it, doctor WARNs on it) but
-> the message is wrong. A short wait on the pid, not the port, would fix it.
+> *Follow-up, 2026-08-17:* `stop.sh` waited on `/health`, but `mlx-serve`
+> closes its port before its process exits, so the lock check could find the
+> holder still alive, print "still held … not the server on port N", and leave
+> a lock that went stale a second later. It now records the pids before the
+> signal and waits on `kill -0`, not the port. Verified three start/stop
+> cycles: lock cleared each time, correct message; a lock held by a live
+> non-server pid is still left alone.
 
 `bin/bench.sh:81-86` refuses to run when the port is busy. `bin/serve.sh` has no
 equivalent: it is a bare `exec mlx-serve` at `:313`. Grepped `bin/` and

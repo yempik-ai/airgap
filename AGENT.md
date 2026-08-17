@@ -15,8 +15,8 @@ not a record — [`AUDIT.md`](AUDIT.md) holds the status of every item, and if t
 two ever disagree, `AUDIT.md` is right.*
 
 - **Last landed:** `C1` (doctor reads the `[hot-cache]` log line and the
-  `/metrics.json` counters) with `C2` folded in, 2026-08-17. `A1` and `A5`
-  earlier the same day.
+  `/metrics.json` counters) with `C2` folded in, and an `A1` follow-up
+  (`stop.sh` waits on the pid, not the port), 2026-08-17.
 - **Next:** `B1` — make `bench.sh` keep prefill and peak memory. Then `D3`,
   `E1`. The ranked list with efforts is at the top of `AUDIT.md`.
 - **Blocked on hardware, not on decisions:** anything needing the 27B loaded.
