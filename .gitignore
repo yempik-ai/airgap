@@ -1,0 +1,105 @@
+# This file is the most consequential file in the repository.
+#
+# The model weights are about 20 GB, and about 40 GB on disk before the
+# duplicate copy is reclaimed. Without the rules below, a single
+# "git add -A" tries to commit all of it. GitHub rejects that, and the
+# attempt leaves a broken repository folder behind.
+#
+# Every rule has a comment saying what it catches and why.
+# A line that starts with "#" is a comment. A line that starts with "/"
+# matches only at the top level of this repository.
+
+# --- model weights: NEVER commit (20-40 GB) ---
+
+# The model folder this repository downloads by default.
+/Qwen3.8-*/
+
+# Other Qwen folders converted for MLX, whatever version number they carry.
+/Qwen*-MLX-*/
+
+# Belt and braces: any top-level folder with MLX or GGUF in its name is a
+# model folder. Both strings appear only in model folder names in practice.
+#
+# Spelled out letter by letter because git matches these case-sensitively
+# whenever core.ignorecase is false — which is the case on a case-sensitive
+# disk and in most Linux build machines. The community publishes folders named
+# "...-mlx-4bit" in lower case, and /*MLX*/ alone does not catch those.
+/*[Mm][Ll][Xx]*/
+/*[Gg][Gg][Uu][Ff]*/
+
+# The conventional folder people use when they keep several models.
+/models/
+
+# git-lfs storage. It normally lives inside .git, but a mis-set GIT_LFS_PATH or
+# an interrupted download can create it here instead. It holds a full second
+# copy of the weights, so it is as large as the model folder itself.
+/lfs/
+
+# The file format MLX model weights ship in. This glob is the safety net:
+# it catches a model downloaded into a folder name the rules above miss.
+*.safetensors
+
+# The file format llama.cpp model weights ship in. Same safety net.
+*.gguf
+
+# Older single-file weight formats. Still common on model download pages.
+*.bin
+*.pt
+*.pth
+*.npz
+*.mlx
+
+# The other large files a model folder carries. These are not weights, so none
+# of the rules above catch them, and a model downloaded into a folder name the
+# rules above do not anticipate would otherwise stage about 22 MB of them.
+# Measured in this checkpoint: tokenizer.json 12.2 MB, vocab.json 6.4 MB,
+# merges.txt 3.2 MB, model.safetensors.index.json 207 KB.
+tokenizer.json
+tokenizer_config.json
+vocab.json
+merges.txt
+model.safetensors.index.json
+chat_template.jinja
+
+# --- python ---
+
+# The optional Python virtual environment. It is a few hundred MB, it is
+# rebuilt in one command, and it contains machine-specific absolute paths
+# that break on anyone else's Mac.
+.venv/
+venv/
+
+# Compiled Python files. Generated on every run, never worth committing.
+__pycache__/
+*.pyc
+
+# --- logs and runtime state ---
+
+# Server logs. They can grow to hundreds of MB and they may quote the text
+# of your own prompts.
+logs/
+*.log
+
+# The mlx-serve working folder: its cached prompt data and its own logs.
+# The cached data alone can reach 10 GB.
+.mlx-serve/
+
+# Output from the benchmark script.
+bench-out/
+
+# --- local config (may contain an API_KEY) ---
+
+# Your own copy of config.env.example. It can hold a secret key, so it must
+# never leave your Mac. The example file IS committed; this one is not.
+config.env
+.env
+.env.local
+
+# --- macOS / editors ---
+
+# The hidden file macOS writes into every folder you open in Finder.
+.DS_Store
+
+# Editor settings. Personal, not project settings.
+.idea/
+.vscode/

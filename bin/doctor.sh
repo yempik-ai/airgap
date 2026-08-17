@@ -1,0 +1,380 @@
+#!/usr/bin/env bash
+# bin/doctor.sh — check everything, change nothing.
+#
+# This is the script to run when something is wrong, and the script to run
+# before you ask anyone for help. It looks at your Mac, your tools, your model
+# folder, the server, and Claude Code's settings, and prints one line per check.
+#
+# It NEVER starts anything, stops anything, installs anything, or edits
+# anything. If the server is not running, it says so and skips those checks
+# instead of failing them.
+#
+# Read docs/06-troubleshooting.md for what each failure means.
+
+set -euo pipefail
+
+source "$(dirname "${BASH_SOURCE[0]}")/env.sh"
+
+usage() {
+  cat <<'EOF'
+doctor.sh — check the whole setup and tell you what to fix.
+
+WHAT IT DOES
+  Prints one line per check, in five groups:
+    environment       your Mac: version, chip, memory, disk
+    tools             homebrew, git-lfs, mlx-serve, Claude Code
+    model             the folder of weights, and whether they are real files
+    server            whether the server is running, and answering correctly
+    claude code       whether Claude Code will be pointed at your Mac
+
+  Each line starts with one of four words:
+    PASS   this is fine
+    WARN   this works, but it is not what is recommended
+    FAIL   this must be fixed. The line ends with the page that fixes it.
+    SKIP   this could not be checked yet, usually because the server is off
+
+WHAT IT DOES NOT DO
+  It never starts the server, never stops it, never installs anything, and
+  never changes a setting. Running it cannot break anything.
+
+WHAT IT COSTS
+  A second or two. No memory. Nothing leaves your Mac, except one short
+  request to your own server if it happens to be running.
+
+USAGE (run from the repo root)
+  ./bin/doctor.sh            run every check
+  ./bin/doctor.sh --help     print this help
+
+SETTINGS
+  PROBE=0    do not send the one small test question to a running server.
+             Default is 1. The test question is 8 tokens long and goes to your
+             own Mac. Set 0 if the server has handed its memory back and you do
+             not want to make it reload the model.
+
+EXIT CODE
+  0 when nothing FAILED (warnings do not fail). 1 when something FAILED.
+  So you can paste the whole output into a support request.
+
+READ NEXT
+  docs/06-troubleshooting.md
+EOF
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+  "") : ;;
+  *) echo "doctor.sh: I do not understand '$1'. Try: ./bin/doctor.sh --help" >&2; exit 2 ;;
+esac
+
+: "${PROBE:=1}"
+
+N_PASS=0; N_WARN=0; N_FAIL=0; N_SKIP=0
+
+row() {
+  _st="$1"; _name="$2"; _detail="$3"; _ptr="${4:-}"
+  case "$_st" in
+    PASS) N_PASS=$((N_PASS + 1)) ;;
+    WARN) N_WARN=$((N_WARN + 1)) ;;
+    FAIL) N_FAIL=$((N_FAIL + 1)) ;;
+    SKIP) N_SKIP=$((N_SKIP + 1)) ;;
+  esac
+  if [ -n "$_ptr" ]; then
+    printf '%-6s%-18s%s  -> %s\n' "$_st" "$_name" "$_detail" "$_ptr"
+  else
+    printf '%-6s%-18s%s\n' "$_st" "$_name" "$_detail"
+  fi
+}
+
+# Header rule, padded so every section line is the same 45 characters wide as
+# the closing rule at the bottom of the report.
+section() {
+  printf '\xe2\x94\x80\xe2\x94\x80 %s ' "$1"
+  _n=$((41 - ${#1}))
+  while [ "$_n" -gt 0 ]; do printf '\xe2\x94\x80'; _n=$((_n - 1)); done
+  printf '\n'
+}
+
+# Shorten a long path so the line still fits a normal terminal.
+shortpath() { echo "$1" | sed "s|^$HOME|~|"; }
+
+echo "qwen3.8free doctor"
+
+# =============================================================================
+section "environment"
+# =============================================================================
+
+if [ "$(uname -s)" = "Darwin" ]; then
+  row PASS "macos" "$(sw_vers -productVersion 2>/dev/null || echo unknown) ($(uname -m))"
+else
+  row FAIL "macos" "this is $(uname -s), not macOS" "docs/01-requirements.md#apple-silicon"
+fi
+
+if [ "${HW_CHIP:-}" != "${HW_CHIP#Apple M}" ]; then
+  row PASS "apple silicon" "${HW_CHIP}${HW_GPU_CORES:+, ${HW_GPU_CORES} GPU cores}"
+else
+  row FAIL "apple silicon" "this Mac reports ${HW_CHIP:-unknown}" "docs/01-requirements.md#apple-silicon"
+fi
+
+case "${HW_VERDICT:-unknown}" in
+  comfortable|workable)
+    row PASS "ram tier" "${HW_RAM_GB} GB total — ${HW_VERDICT}, recommends ${HW_QUANT} at ${CTX_SIZE} tokens" ;;
+  tight)
+    row WARN "ram tier" "${HW_RAM_GB} GB total — tight. Recommends ${HW_QUANT}, not 5-bit. Close apps before running." ;;
+  not-recommended)
+    row WARN "ram tier" "${HW_RAM_GB} GB total — a 27B model is not recommended here. ${HW_ALT_MODEL}" ;;
+  impossible)
+    row FAIL "ram tier" "${HW_RAM_GB} GB total — this Mac cannot run the 27B model. ${HW_ALT_MODEL}" "docs/01-requirements.md#ram-tiers" ;;
+  *)
+    row WARN "ram tier" "could not work out this Mac's memory size" ;;
+esac
+
+if [ "${HW_WIRED_OK:-yes}" = "no" ]; then
+  row FAIL "gpu ceiling" "weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) do not fit under Apple's ${HW_WIRED_AUTO_GB} GB ceiling" "docs/04-memory-safety.md#free-memory"
+else
+  row PASS "gpu ceiling" "weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) fit under Apple's ${HW_WIRED_AUTO_GB} GB ceiling"
+fi
+
+avail="$(available_gb)"
+if awk -v a="$avail" -v m="$MIN_FREE_GB" 'BEGIN { exit !(a >= m) }'; then
+  row PASS "memory" "${HW_RAM_GB} GB total, ${avail} GB available (need ${MIN_FREE_GB})"
+else
+  row FAIL "memory" "${avail} GB available, need ${MIN_FREE_GB}" "docs/04-memory-safety.md#free-memory"
+  echo "                        EXPECTED before you free memory. Close these, then run this again:"
+  hw_top_memory_users "                        " 4
+fi
+
+# The dangerous value is a fraction of THIS Mac's memory, not a fixed number:
+# 14336 MB on a 16 GB Mac is dangerous, 30720 MB on a 128 GB Mac is not.
+wired="$(sysctl -n iogpu.wired_limit_mb 2>/dev/null || echo 0)"
+danger="$(hw_wired_danger_mb)"
+if [ "$wired" = "0" ]; then
+  row PASS "wired limit" "iogpu.wired_limit_mb=0 (auto, about ${HW_WIRED_AUTO_GB} GB) — recommended"
+elif [ "$wired" -gt "$danger" ] 2>/dev/null; then
+  row FAIL "wired limit" "iogpu.wired_limit_mb=${wired} — over 80% of ${HW_RAM_GB} GB. Run: sudo sysctl iogpu.wired_limit_mb=0" "docs/04-memory-safety.md#wired-limit"
+else
+  row WARN "wired limit" "iogpu.wired_limit_mb=${wired} (set by hand) — recommend 0 (auto). Reverts on restart."
+fi
+
+disk="$(free_disk_gb)"
+if [ -f "$MODEL_DIR/config.json" ]; then
+  need_disk=5
+else
+  need_disk="$MIN_DISK_GB"
+fi
+if awk -v d="$disk" -v m="$need_disk" 'BEGIN { exit !(d >= m) }'; then
+  row PASS "disk" "${disk} GB free"
+else
+  row FAIL "disk" "${disk} GB free, need ${need_disk} GB" "docs/06-troubleshooting.md#disk-space"
+fi
+
+# =============================================================================
+section "tools"
+# =============================================================================
+
+if command -v brew >/dev/null 2>&1; then
+  row PASS "homebrew" "$(brew --version 2>/dev/null | head -1 | awk '{print $2}')"
+else
+  row FAIL "homebrew" "not installed" "docs/02-install.md#homebrew"
+fi
+
+if git lfs version >/dev/null 2>&1; then
+  row PASS "git-lfs" "$(git lfs version 2>/dev/null | awk '{print $1}' | sed 's|^git-lfs/||')"
+  # Installed is not enough. It must also be switched on for your account, or
+  # git clone quietly leaves 135-byte pointer files instead of weights.
+  if git config --global --get filter.lfs.process >/dev/null 2>&1; then
+    row PASS "git-lfs enabled" "switched on for your account"
+  else
+    row FAIL "git-lfs enabled" "installed but not switched on. Run: git lfs install" "docs/06-troubleshooting.md#lfs-pointers"
+  fi
+else
+  row FAIL "git-lfs" "not installed. Run: ./bin/setup.sh" "docs/02-install.md#git-lfs"
+  row SKIP "git-lfs enabled" "cannot check until git-lfs is installed"
+fi
+
+if command -v mlx-serve >/dev/null 2>&1; then
+  row PASS "mlx-serve" "$(mlx-serve --version 2>/dev/null | awk '{print $NF}' | head -1)"
+else
+  row FAIL "mlx-serve" "not installed. Run: ./bin/setup.sh" "docs/02-install.md#mlx-serve"
+fi
+
+if command -v "$CLAUDE_BIN" >/dev/null 2>&1; then
+  row PASS "claude code" "$("$CLAUDE_BIN" --version 2>/dev/null | awk '{print $1}')"
+else
+  row FAIL "claude code" "the command '$CLAUDE_BIN' was not found" "docs/02-install.md#claude-code"
+fi
+
+# =============================================================================
+section "model"
+# =============================================================================
+
+model_ok=0
+if [ -f "$MODEL_DIR/config.json" ]; then
+  row PASS "model dir" "$(shortpath "$MODEL_DIR")"
+  model_ok=1
+else
+  row FAIL "model dir" "nothing at $(shortpath "$MODEL_DIR"). Run: ./bin/download-model.sh" "docs/03-get-the-model.md"
+fi
+
+if [ "$model_ok" = "1" ]; then
+  n_shards=0; bad=""; bytes=0
+  while IFS= read -r shard; do
+    [ -n "$shard" ] || continue
+    n_shards=$((n_shards + 1))
+    sz="$(stat -f%z "$shard" 2>/dev/null || echo 0)"
+    bytes=$((bytes + sz))
+    if [ "$sz" -lt 1000000 ] && [ -z "$bad" ]; then
+      bad="$(basename "$shard") is a ${sz}-byte pointer"
+    fi
+  done < <(find "$MODEL_DIR" -name '*.safetensors' 2>/dev/null)
+
+  gb="$(awk -v b="$bytes" 'BEGIN { printf "%.1f", b / 1073741824 }')"
+  if [ "$n_shards" = "0" ]; then
+    row FAIL "weights" "no .safetensors files found" "docs/03-get-the-model.md"
+  elif [ -n "$bad" ]; then
+    row FAIL "weights" "$bad" "docs/06-troubleshooting.md#lfs-pointers"
+  else
+    row PASS "weights" "${n_shards} shards, no pointers, ${gb} GB on disk (${HW_WEIGHTS_GB} GB is loaded)"
+  fi
+
+  row PASS "model id" "$MODEL_ID"
+else
+  row SKIP "weights" "cannot check until the model is downloaded"
+  row SKIP "model id" "cannot check until the model is downloaded"
+fi
+
+# =============================================================================
+section "server"
+# =============================================================================
+
+# What is holding the port? Three cases: our server, somebody else's program,
+# or nothing at all.
+port_pids="$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t 2>/dev/null | tr '\n' ' ' || true)"
+port_cmd=""
+if [ -n "$port_pids" ]; then
+  port_cmd="$(ps -o comm= -p ${port_pids%% *} 2>/dev/null || true)"
+fi
+
+# The address the socket is REALLY listening on, read from the system rather
+# than from this script's own settings. Reading $HOST here would report what
+# the server was asked for, not what it did, and would say "this Mac only"
+# about a server another window started on every network interface.
+bound_addr=""
+if [ -n "$port_pids" ]; then
+  bound_addr="$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null \
+    | awk 'NR > 1 { n = $(NF - 1); sub(/:[0-9]+$/, "", n); print n; exit }' || true)"
+fi
+
+check_bind() {
+  # Two separate facts, and both must hold: what this repo is configured to ask
+  # for, and what is actually listening right now.
+  case "$HOST" in
+    127.0.0.1|::1|localhost) : ;;
+    *)
+      row FAIL "bind setting" "HOST is set to ${HOST} — that is every network this Mac is on" "docs/06-troubleshooting.md#exposed-server"
+      return ;;
+  esac
+  if [ -z "$bound_addr" ]; then
+    row PASS "bind setting" "HOST=${HOST} — serve.sh will listen on this Mac only"
+    return
+  fi
+  case "$bound_addr" in
+    127.0.0.1|\[::1\]|localhost)
+      row PASS "bind address" "${bound_addr}:${PORT} (loopback only)" ;;
+    *)
+      row FAIL "bind address" "${bound_addr}:${PORT} — reachable from your network" "docs/06-troubleshooting.md#exposed-server" ;;
+  esac
+}
+
+if server_up; then
+  check_bind
+  row PASS "/health" "up"
+
+  models_json="$(curl -fsS --max-time 5 "$BASE_URL/v1/models" 2>/dev/null || true)"
+  if echo "$models_json" | grep -q -- "$MODEL_ID"; then
+    row PASS "/v1/models" "advertises $MODEL_ID"
+  elif [ -n "$models_json" ]; then
+    advertised="$(echo "$models_json" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')"
+    row FAIL "/v1/models" "server offers '${advertised:-nothing}', Claude Code will send '$MODEL_ID'" "docs/06-troubleshooting.md#model-id"
+  else
+    row WARN "/v1/models" "the server did not answer this question"
+  fi
+
+  health_json="$(curl -fsS --max-time 5 "$BASE_URL/health" 2>/dev/null || true)"
+  probe_src="${health_json}${models_json}"
+  if echo "$probe_src" | grep -q '"mtp_loaded"[[:space:]]*:[[:space:]]*true'; then
+    row PASS "mtp_loaded" "true"
+  elif echo "$probe_src" | grep -q '"mtp_loaded"[[:space:]]*:[[:space:]]*false'; then
+    row WARN "mtp_loaded" "false — the fast-answer head is not in use. See docs/08-how-it-works.md"
+  else
+    row SKIP "mtp_loaded" "this server version does not report it"
+  fi
+
+  if [ "$PROBE" = "1" ]; then
+    body='{"model":"'"$MODEL_ID"'","max_tokens":8,"messages":[{"role":"user","content":"hi"}]}'
+    hdr=(-H "content-type: application/json" -H "anthropic-version: 2023-06-01")
+    if [ -n "$API_KEY" ]; then hdr+=(-H "x-api-key: $API_KEY"); fi
+    if curl -fsS --max-time 120 "${hdr[@]}" -d "$body" "$BASE_URL/v1/messages" >/dev/null 2>&1; then
+      row PASS "/v1/messages" "round trip ok (8 tokens)"
+    else
+      row FAIL "/v1/messages" "the server did not answer a small test question" "docs/06-troubleshooting.md#no-server"
+    fi
+  else
+    row SKIP "/v1/messages" "not sent (PROBE=0)"
+  fi
+elif [ -n "$port_pids" ]; then
+  check_bind
+  row FAIL "port ${PORT}" "in use by '${port_cmd:-another program}' (pid ${port_pids%% *}), which is not our server" "docs/06-troubleshooting.md#port-in-use"
+  row SKIP "server" "cannot check while something else holds the port"
+else
+  check_bind
+  row SKIP "server" "not running — start ./bin/serve.sh"
+fi
+
+# =============================================================================
+section "claude code wiring"
+# =============================================================================
+
+# A real key in your shell would take priority over the local server and send
+# your questions to Anthropic instead. claude-local.sh blanks it, but if you
+# run `claude` by hand it would win.
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+  row PASS "ANTHROPIC_API_KEY" "not set in this shell"
+else
+  row WARN "ANTHROPIC_API_KEY" "set in this shell. ./bin/claude-local.sh blanks it, plain 'claude' does not."
+fi
+
+if [ -z "${ANTHROPIC_BASE_URL:-}" ] || [ "${ANTHROPIC_BASE_URL:-}" = "$BASE_URL" ]; then
+  row PASS "base url" "claude-local.sh will point at $BASE_URL"
+else
+  row WARN "base url" "ANTHROPIC_BASE_URL is already set to ${ANTHROPIC_BASE_URL}; claude-local.sh overrides it"
+fi
+
+row PASS "context declared" "CLAUDE_CODE_MAX_CONTEXT_TOKENS follows CTX_SIZE (${CTX_SIZE})"
+
+if [ "$LEAN_MCP" = "1" ]; then
+  row PASS "mcp mode" "strict (LEAN_MCP=1) — saves about 17,000 prompt tokens per turn"
+else
+  row WARN "mcp mode" "your normal config (LEAN_MCP=0) — costs about 17,000 prompt tokens per turn"
+fi
+
+# =============================================================================
+printf '\xe2\x94\x80%.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 \
+  21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45; printf '\n'
+
+summary="${N_PASS} pass, ${N_WARN} warn, ${N_FAIL} fail"
+if [ "$N_SKIP" -gt 0 ]; then summary="${summary}, ${N_SKIP} skipped"; fi
+echo "$summary"
+
+if [ "$N_FAIL" -gt 0 ]; then
+  echo "doctor: ${N_FAIL} FAILURE(S) — fix these first, see docs/06-troubleshooting.md"
+  exit 1
+elif [ "$N_WARN" -gt 0 ]; then
+  echo "doctor: ${N_WARN} WARNING(S) — safe to continue, see the lines above"
+else
+  if [ "$model_ok" = "1" ]; then
+    echo "doctor: OK — next: ./bin/serve.sh"
+  else
+    echo "doctor: OK — next: ./bin/download-model.sh"
+  fi
+fi
+exit 0
