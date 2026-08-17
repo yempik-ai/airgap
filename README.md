@@ -131,7 +131,7 @@ Three things make this model unusually good on a laptop:
 
 - **48 of its 64 layers are not attention layers.** They are Gated DeltaNet layers with a *fixed-size* memory, so only 16 layers hold a cache that grows with your conversation — a 4× smaller KV cache than a normal 27B, and the reason a 262,144-token context is arithmetically possible at all.
 - **It ships its own drafter.** A multi-token-prediction head inside the checkpoint guesses its own next tokens; the model then verifies a whole batch in one pass. The output is *mathematically identical*, not approximated — the publisher measured 10.15 s → 6.81 s with a matching SHA-256.
-- **Stock `mlx-lm` deletes that head on load.** One line: `if "mtp." not in k`. This stack uses `mlx-serve`, which keeps it. That single choice is worth roughly 1.5×.
+- **Stock `mlx-lm` deletes that head on load.** One line: `if "mtp." not in k`. That is why this stack runs `mlx-serve`, which implements native Qwen MTP. The publisher measured the difference at roughly 1.5× — [not yet reproduced here](#what-has-and-has-not-been-run-here).
 
 ### Measured on the test machine
 
@@ -140,10 +140,28 @@ Three things make this model unusually good on a laptop:
 | Claude Code system prompt, MCP servers loaded | 38,054 tokens |
 | …with `--strict-mcp-config`, the default here | **20,909 tokens** |
 | Prefix cache reuse on turn 2 | 16,384 / 20,906 |
-| Weights resident, 5-bit, text-only | 19.1 GB |
+| Weights on disk, 5-bit, text-only (vision skipped) | 19.1 GB |
 | Tokens per second | **not measured** |
 
 No speed figure has been benchmarked, on this machine or any other. `./bin/bench.sh` produces a real one. Anything unmeasured is labelled unmeasured, here and throughout the docs.
+
+### What has and has not been run here
+
+Being precise about this matters more than looking finished.
+
+| | |
+|:--|:--|
+| Checkpoint integrity, architecture, MTP head present in the bytes | ✓ verified — `bin/verify-model.sh` |
+| Claude Code driving a local `mlx-serve` model, end to end | ✓ verified — but with **Qwen3.5-0.8B**, same `qwen3_5` architecture family |
+| Anthropic `/v1/messages`, tool calling, prefix-cache reuse | ✓ verified on that smaller model |
+| Every script's syntax, guards and refusals | ✓ verified |
+| **The 27B itself, loaded and served** | **✕ not yet** — it needs 23 GB free; the test machine had 10.5 GB |
+| **`mtp_loaded: true` on this checkpoint** | **✕ not yet confirmed** — see below |
+| Tokens per second, prefill rate | ✕ never measured |
+
+**The MTP caveat, stated plainly.** `mlx-serve` documents its native Qwen MTP head as auto-loading *"when the model dir ships `mtp/weights.safetensors`"*. **This checkpoint ships no such file** — its 29 MTP tensors are embedded in the main shards as `language_model.mtp.*`. The publisher reports MTP working on this exact checkpoint under mlx-serve 26.8.7, which is good evidence, but it is their measurement and has not been reproduced here.
+
+`./bin/doctor.sh`, run while the server is up, reports `mtp_loaded` as PASS, WARN or SKIP. That is the check that settles it on your machine — and if it comes back WARN, the ~1.5× is not being delivered and the case for `mlx-serve` over `mlx-lm` is weaker than this page implies.
 
 ---
 
@@ -228,7 +246,7 @@ Because `qwen3_5` is the **architecture family**, not the model version. Qwen3.8
 
 ### Why MLX instead of Ollama, LM Studio, llama.cpp or vLLM?
 
-MLX is built for Apple's unified memory, so a 20 GB model is directly addressable with no host-to-GPU copies. **vLLM** cannot read MLX-quantized tensors and its PagedAttention and continuous batching optimize throughput across many users, while a single local user is bound by latency. **Ollama, LM Studio and llama.cpp** all run GGUF well, but on this checkpoint they do not use its built-in MTP speculative-decoding head, which is worth roughly 1.5×.
+MLX is built for Apple's unified memory, so a 20 GB model is directly addressable with no host-to-GPU copies. **vLLM** cannot read MLX-quantized tensors and its PagedAttention and continuous batching optimize throughput across many users, while a single local user is bound by latency. **Ollama, LM Studio and llama.cpp** all run GGUF well, but on this checkpoint they do not use its built-in MTP speculative-decoding head, which the publisher measured at roughly 1.5×.
 
 ### Which Macs does this work on — M1, M2, M3, M4?
 

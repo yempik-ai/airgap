@@ -1738,7 +1738,7 @@ curl -s http://127.0.0.1:11234/v1/models
 You should see something like this:
 
 ```
-{"object":"list","data":[{"id":"Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit","object":"model","mtp_loaded":true}]}
+{"object":"list","data":[{"id":"Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit","object":"model","mtp_loaded":...}]}
 ```
 
 The exact fields may vary between mlx-serve versions. The `id` value must match

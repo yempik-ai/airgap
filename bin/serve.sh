@@ -41,8 +41,10 @@ WHAT IT DOES
     7. there is enough free memory (it refuses rather than stall your Mac)
 
 WHAT IT COSTS
-  Memory: about 19.1 GB while the 5-bit model is loaded (MEASURED on the test
-          machine). It hands that back to macOS after IDLE_EVICT_SECS seconds
+  Memory: about 19.1 GB while the 5-bit model is loaded. The 19.1 GB is the
+          MEASURED size of the weight files; resident memory has not itself
+          been observed, because the model has not been loaded on the test
+          machine. It hands that back to macOS after IDLE_EVICT_SECS seconds
           of silence (default 900, so 15 minutes).
   Time:   about a minute for the first load.
   Money:  nothing. Nothing you type leaves your Mac.
