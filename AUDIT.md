@@ -1,0 +1,738 @@
+# Audit — 2026-08-17
+
+An audit of `airgap` against [`antirez/ds4`](https://github.com/antirez/ds4)
+(DwarfStar), a DeepSeek-V4 inference engine for Metal, CUDA and ROCm. The
+question was narrow: *what should airgap take from ds4 to be better and faster
+for everybody?*
+
+Nothing here is a proposal to port C. ds4 is 240,000 lines of engine; `airgap`
+is shell over a server someone else compiled. What transfers is technique,
+policy and discipline — and, as it turned out, a set of capabilities airgap
+already installs and never uses.
+
+**Every item below was checked against the files and binaries on disk, then
+attacked by a second reviewer whose default position was to reject it.** Seven
+candidates went in; one was falsified outright and is recorded in
+[`AGENT.md`](AGENT.md) under *Falsified — do not retry*, along with the
+environment facts established along the way. Read that file first — it exists so
+these findings are not researched twice.
+
+Items are referenced by id from [`ROADMAP.md`](ROADMAP.md). All are **OPEN**.
+
+Evidence is cited as `file:line` at the time of the audit. Line numbers drift;
+the greps are given where the reader will need to re-locate something.
+
+---
+
+## Order of work
+
+Ranked by user-visible benefit against effort and confidence. `A1` and `A5`
+first because they are small and self-contained; `C1` and `B1` next because
+`B1`'s measurement is what finally puts a number on claims the README currently
+marks *never measured*.
+
+| | item | effort | confidence |
+|:--|:--|:--|:--|
+| 1 | `A1` instance lock in `serve.sh` | small | high |
+| 2 | `A5` name the stall timeout | small | medium |
+| 3 | `C1` read the cache evidence already being written | medium | high |
+| 4 | `B1` make `bench.sh` keep prefill and peak memory | medium | high |
+| 5 | `D3` doctor probes a streamed tool call | medium | high |
+| 6 | `E1` stop overriding the engine's prefill sizing | small | medium |
+
+`E4` (thinking off) carries the largest measured speed-up in this audit but is
+a behavioural change with an unmeasured quality cost; it ships opt-in or not at
+all. Everything in §F is roadmap sequencing, not code.
+
+---
+
+## A. Guards that do not guard
+
+### A1 — `serve.sh` has no instance lock
+
+`bin/bench.sh:81-86` refuses to run when the port is busy. `bin/serve.sh` has no
+equivalent: it is a bare `exec mlx-serve` at `:313`. Grepped `bin/` and
+`start.sh` for `flock|lockfile|pidfile|pgrep` — zero matches; `lsof` appears only
+in `bench.sh:82` and `doctor.sh:252`. So the repository enforces this rule on
+one script and not on the one that actually loads the model.
+
+**Narrower than it first appears, and the write-up must say so.** `mlx-serve`
+binds its port before loading (see `AGENT.md`), so a same-port double-start dies
+at bind. It also runs its own free-RAM preflight, which catches a *staggered*
+second load even off-port. The genuinely unguarded window is: two `bench.sh`
+runs (bench passes no `--port`, so `bench.sh:82` cannot see a sibling bench), a
+`PORT=` override, which defeats every port-based check in the repo, or two
+starts within the same few seconds on different ports.
+
+`bin/stop.sh:53` compounds it: its `pkill -f "mlx-serve.*--port ${PORT}"` cannot
+match a bench run or an off-port server, and then reports *"nothing running on
+port 11234"* — see `D4`.
+
+**ds4** takes an exclusive `flock` before weights are read (`ds4.c:49172-49214`,
+`LOCK_EX|LOCK_NB` at `:49183`, pid written at `:49211`, `atexit` release at
+`:49213`, single call site at `ds4.c:57209`) and raises it to a stated safety
+rule in `AGENT.md:29`: *"Do not run multiple huge model processes concurrently.
+The instance lock is intentional."*
+
+**Shape.** `acquire_model_lock` / release helper in `bin/env.sh`; a new guard in
+`bin/serve.sh` ahead of the memory guard at `:198-217`; `bench.sh` takes the same
+lock but **keeps** its port probe, whose message is the more specific one;
+`stop.sh` clears it; `doctor.sh` reports a stale one. Liveness via `kill -0` and
+a named override are mandatory so a SIGKILL cannot brick the start path.
+
+**Do not** use `/tmp/ds4.lock` — the installed `mlx-serve` binary embeds ds4's
+lock code and that literal path. `flock(1)` is absent on macOS; `/usr/bin/shlock`
+exists if a platform primitive is preferred over `mkdir` + `kill -0`.
+
+**Also update** `bin/serve.sh:35`, which says "Checks seven things" and
+enumerates 1–7 at `:36-41`.
+
+### A2 — no disk guard for the prefix cache
+
+`bin/env.sh:233` sets `PREFIX_CACHE_DISK=10GB` and `bin/serve.sh:253` passes it.
+`bin/doctor.sh:160-164` requires only 5 GB free once `config.json` exists, and
+`serve.sh` performs no disk check at all (`MIN_DISK_GB` appears in
+`download-model.sh`, `doctor.sh` and `env.sh` only). A Mac with 6 GB free passes
+every check and then starts a server configured to write up to 10 GB of cache.
+
+Disk is the one resource in the stack with no refusal covering it. Principle (3)
+also applies: `MIN_DISK_GB` should be weights + cache tier, from one function.
+
+### A3 — the memory guard is a single startup snapshot
+
+`bin/serve.sh:202-217` samples `available_gb()` once and then `exec`s. Nothing
+re-checks. `hw_rebudget` (`bin/detect-hardware.sh:210-223`) budgets weights + KV
++ prefix cache + 1 GB spare + an 8 GB macOS reserve, with **no line item for the
+harness itself** — and the documented workflow starts Claude Code in window 2,
+i.e. *after* the guard has already passed (`start.sh:146-158`).
+
+Related and measured: a 4051-token prompt raised mlx-serve's reported peak by
+1.67 GB over a 15-token one, while the KV term predicts 0.06 GB for that depth.
+The remainder is prefill activation working set, which the arithmetic does not
+model at all and which the 1 GB spare may not cover at `PREFILL_CHUNK=4096`.
+`docs/04-memory-safety.md:196-200` narrates a "~1 GB working space" into the
+peak, but `hw_rebudget` never adds it. `B1` is what turns this into a number.
+
+### A4 — `CTX_SIZE` is validated only in `doctor.sh`
+
+Grepped for `max_position_embeddings` across `bin/` and `start.sh`: one hit,
+`bin/doctor.sh:370`. `serve.sh:250` passes `--ctx-size` unvalidated. So
+`CTX_SIZE=262144 ./bin/serve.sh` on a model whose ceiling is lower inflates
+`MIN_FREE_GB`, may trip the wired-ceiling guard for the wrong reason, or starts
+and fails per-request. This is a guard living in the advisory script — the
+inverse of principle (1).
+
+### A5 — the stall timeout has no name, and both ends expire together
+
+`mlx-serve --timeout` defaults to **300 s**. Claude Code's
+`CLAUDE_STREAM_IDLE_TIMEOUT_MS` floors at **300000 ms**. The two coincide
+exactly, so a cold turn that crosses 300 s without a token fails on both ends
+simultaneously, under two different unnamed defaults. Neither appears anywhere
+in `bin/` or `config.env.example`.
+
+The exposed class is the **36 GB machine and larger** running `27b-5bit` — not
+small Macs, which `detect-hardware.sh:262-265` steers to the 4.7 GB 9B. Say so;
+the obvious phrasing ("on a slower Mac") is backwards.
+
+**`mlx-serve` already sends SSE keepalive frames** — this is about *naming a
+limit airgap inherits*, not adding a mechanism.
+
+**Shape.** `SERVE_TIMEOUT` through all three lists in `bin/env.sh` (see
+`AGENT.md` § Layout), passed by `serve.sh`; explicit values for the two Claude
+Code variables in `claude-local.sh:109-128`. Docs: `docs/06-troubleshooting.md`
+§12 already covers the slow-but-working case at `:981-1046` — do **not** add a
+second copy. The missing sentence is the *failure* case: what the abort looks
+like and which of the two limits produced it.
+
+Leave `--timeout` out of the `serve.sh` denylist, or justify it differently: the
+denylist's stated rationale at `:152-154` is that the help promises the script
+never passes those flags, which stops being true once it passes `--timeout`.
+
+**Unknowns.** Whether mlx-serve's stall clock starts at request receipt (thus
+counting an idle-evict reload) or at generation entry; and whether its keepalive
+comment frames reset Claude Code's stream watchdog or only its byte watchdog.
+One experiment settles both — `SERVE_TIMEOUT=30 IDLE_EVICT_SECS=5`, one cold
+~20k-token turn, record which side aborts — and it produces the first real 27B
+prefill timing as a side effect.
+
+### A6 — no minimum-version check on `mlx-serve`
+
+`serve.sh:245-276` passes `--kv-quant turbo4`, `--prefix-cache-disk`,
+`--idle-evict-secs`, `--metrics` and `--prefill-chunk` with no capability probe.
+Grepped `bin/*.sh` for `version`: display only (`doctor.sh:196`,
+`setup.sh:153,166`), never compared. A user on an older brew build gets an
+argparse error after passing every guard — the exact failure doctor exists to
+pre-empt. `doctor.sh:320` already anticipates version drift for `mtp_loaded`;
+nothing generalises it.
+
+### A7 — the wired ceiling is arithmetic presented as fact
+
+`bin/detect-hardware.sh:119-127` computes the GPU ceiling as
+`g <= 32 ? g*2/3 : g*3/4`, and `docs/04-memory-safety.md:577-580` states it
+without a label. This is the number behind the repository's hardest refusal, and
+it is the one figure that carries no MEASURED / REPORTED / ARITHMETIC tag —
+principle (2) broken at the highest-stakes point in the stack.
+
+ds4 does not guess: it asks Metal for `recommendedMaxWorkingSetSize`
+(`ds4_metal.m:4239-4243`) and **refuses rather than falling back to a heuristic**
+when it is unavailable (`ds4.c:55110-55117`). MLX exposes the same property from
+Python, and `mlx-serve` already derives `--max-resident-mem auto` from it
+("80% of MLX wired limit at startup"). Grepped airgap for
+`recommendedMaxWorkingSet|metal.device_info|max_recommended`: zero hits.
+
+Both failure directions are silent: refusing a build that would have fitted, or
+admitting one that will not.
+
+---
+
+## B. Measurement
+
+### B1 — `bench.sh` throws away two numbers it already receives
+
+`mlx-serve` prints three lines; `bin/bench.sh:145` greps one. The comment at
+`:120-127` *quotes the other two* and then discards them:
+
+```
+Prompt: 18 tokens, 130.792 tokens-per-sec     ← discarded
+Generation: …                                  ← the only one parsed
+Peak memory: 4.821 GB                          ← discarded
+```
+
+Peak memory measured against `MIN_FREE_GB` is the only empirical check that
+exists on `hw_rebudget`'s arithmetic (see `A3`). Prefill is the number behind
+"the first response is slow" (`README.md:244`), which `README.md:189` and
+`AI-CITATION.md:74` both currently declare never measured.
+
+**Two corrections that would otherwise blow up mid-implementation.**
+
+1. **Parsing the prefill line alone publishes noise.** At `bench.sh`'s default
+   ~30-token prompt (`:115`) the figure is dominated by fixed per-call overhead.
+   Measured, same model and machine: 15 tokens → **115 tok/s**; 4051 tokens →
+   **448 tok/s**. A ~4× understatement. The change must add a long-prompt input
+   (`PROMPT_FILE=`) and report the prompt length beside the rate.
+2. **Peak memory must be measured with the flags `serve.sh` uses.**
+   `bench.sh:132-137` passes neither `--ctx-size` nor `--kv-quant` nor
+   `--prefill-chunk`, while `serve.sh:250-256` passes all three. A peak measured
+   at model-max context under mlx-serve's own defaults is not comparable to the
+   guard it is supposed to check.
+
+The plumbing already exists: `run()` forwards extra flags (`:129`, `:137`) and
+the caller at `:164` uses that path for `--no-mtp --no-pld`. What is missing is
+a CLI, not a rewrite.
+
+**Unknown.** Whether "Peak memory" is MLX buffer accounting or whole-process
+RSS. It includes the weights (4.789 GB reported against a 4804.8 MB checkpoint)
+and tracks the working set, but it may exclude process overhead — label it
+*mlx-serve's own figure* and treat it as a lower bound.
+
+### B2 — the only speed measurement is taken outside the workload
+
+`bench.sh` measures at ~30 tokens of context. Every real Claude Code turn starts
+at 20,909. There is no `PROMPT_FILE`, no context sweep, and no document stating
+that decode speed decays with depth — `docs/08-how-it-works.md:350-372` presents
+a context-independent bandwidth ceiling.
+
+ds4's committed CSVs show the decay is large on this hardware class: M5 Max
+Flash q2 falls **39.35 → 27.64 t/s decode** and **790 → 398 t/s prefill**
+between ctx 2048 and 65536. Its bench produces a curve, not a number:
+`ctx_tokens,prefill_tokens,prefill_tps,gen_tokens,gen_tps,gen_first_ms,gen_steady_tps,kvcache_bytes`,
+with first-token time separated from steady state and each row flushed
+immediately so an aborted sweep keeps its rows.
+
+**Shape.** `CTX_SWEEP=1 ./bin/bench.sh` behind the existing memory refusal,
+capped at what the detected Mac can hold — the sweep must never be the thing
+that swaps the machine.
+
+Note for any sweep touching `PREFILL_CHUNK`: at ~30 tokens that flag is a literal
+no-op (mlx-serve's help calls it "the ceiling, not a floor"). A sweep on the
+stock prompt will report "no difference" and be wrong.
+
+### B3 — the exactness claim rests on one 9B run, and is stated six times
+
+`README.md:186`, `docs/07-tuning.md:421-424`, `:473`, `:484`, `:495-497` and
+`docs/09-glossary.md:990-991` all assert that speculative decoding is exact and
+that `bench.sh` proves it. The evidence is a single `IDENTICAL` on the 9B.
+
+ds4 treats byte identity as something an implementation must *guarantee* — it
+commits the batched verifier state, and its rule is that no faster path may keep
+unexplained attention, KV or logits drift. **Whether `mlx-serve` does the same
+is unknowable**: it is a closed binary. So the honest wording is *"byte identity
+is not guaranteed by the algorithm and has not been established for mlx-serve;
+IDENTICAL was observed on the 9B on the test machine"* — not "divergence is
+expected", which would replace one unearned confident claim with another.
+
+The single recorded run is also 57.114 vs 56.302 tok/s — a 1.01× ratio that
+`docs/07-tuning.md:477-479` has to explain away as noise. A repository that must
+talk its reader out of its only measured ratio is the argument for a
+median-of-N and a spread.
+
+### B4 — contributed benchmarks arrive in a form nothing can use
+
+`ROADMAP.md` asks contributors to *"paste the whole output into an issue"*.
+Prose in issues cannot be diffed, plotted, aggregated or used as a baseline —
+and evidence from Macs that are not the 36 GB M3 Max is the thing the roadmap
+says it needs most.
+
+ds4 asks for one CSV per machine committed to the repo (`m2_ultra.csv`,
+`m4_max.csv`, `m5_max.csv`, `gb10.csv`) plus a stdlib-only plotter that renders
+an SVG beside it.
+
+### B5 — there is no checked-in release gate
+
+Phase 0 lists three evidence tasks in prose. Nothing states what must be re-run
+before a tag, on what hardware, with what configuration recorded, or what counts
+as a blocker. Grepped for `QA|release checklist|sign-off|.github/workflows`: no
+such file.
+
+ds4 ships a numbered release matrix recording commit, hardware, model file,
+context size and non-default flags for every manual run, and makes a repeatable
+>10% slowdown a release blocker unless the trade-off is documented.
+
+The MEASURED convention is currently enforced by the author's memory, which is
+the failure mode the convention exists to prevent.
+
+### B6 — the quality claims are the most consequential and the least measured
+
+*"Materially weaker at long tool-calling chains"* (`README.md:242,301`) and
+*"a 27B handles many tool descriptions badly — it picks the wrong tool, or
+produces a malformed request"* (`docs/07-tuning.md:340-342`) are stated three
+times, unlabelled, with no evidence. `LEAN_MCP=1` — a default that costs the
+user their MCP servers — rests partly on the second.
+
+ds4 ships a small embedded capability suite framed exactly as this repository
+would want: explicitly not a leaderboard, deliberately including questions the
+model should fail, published as a regression gate with a deterministic
+four-question sub-gate whose expected answers and token counts are in the
+README, plus `--regrade-trace` to re-score a saved transcript without reloading
+the model.
+
+Without something equivalent, a user cannot tell whether malformed tool calls
+are inherent to the model, caused by their `KV_QUANT`, or a regression in a new
+`mlx-serve` — and neither can the repository. `D3` is the cheap first step.
+
+---
+
+## C. Observability
+
+### C1 — the stack writes its own evidence and nothing reads it
+
+`METRICS` defaults to 1 and `serve.sh:263-265` passes `--metrics`; `serve.sh:258`
+passes `--log-file`. Neither is ever read. Grepped `/metrics` across `bin/`,
+`start.sh`, `docs/` and `README.md`: `env.sh:269` (a comment), `serve.sh:263-265`
+(the flag), `docs/07-tuning.md:517` (a curl the *user* is told to type).
+`LOG_FILE` is set, `mkdir`'d and echoed — `doctor.sh` never opens it.
+
+Meanwhile the single measured cache figure — `reused 16384/20906 tokens` — is
+hand-typed into **five** documents (`docs/05-run-it.md:478`,
+`06-troubleshooting.md:1017`, `07-tuning.md:284`, `08-how-it-works.md:1026`,
+`09-glossary.md:834-835`). That exact line is already on disk in
+`~/.mlx-serve/logs/`, written by the server on every request.
+
+So the repository's central performance claim — the prefix cache is "the single
+biggest speed win" — is unverifiable on the user's own Mac, while the evidence
+for it is being generated and discarded continuously.
+
+**ds4** logs every cache hit with tokens, quant, key kind and load milliseconds
+(`ds4_kvstore.c:1320-1327`) and a per-request `cached..prompt:suffix` span
+(`ds4_server.c:10204-10209`), and treats the startup cache report as *the line
+the user is told to read*.
+
+**Shape.** A `doctor.sh` row that scopes the log to the current server run and
+reports the last `[hot-cache]` line, plus the `/metrics.json` counters when the
+server is up. Key names and the stale-log hazard are recorded in `AGENT.md` —
+do not re-derive them. A 503 from `/metrics.json` is a SKIP row, not a FAIL.
+
+Also fix `docs/08-how-it-works.md:1100`, which says of the `[hot-cache]` line
+"Where to look for it is covered in 05 — Run it", while `docs/05` §7d
+(`:464-479`) quotes the measurement and never names the log path.
+
+### C2 — doctor's auth header is applied to one probe out of three
+
+`bin/doctor.sh:325-326` builds the `x-api-key` header for the `/v1/messages`
+probe. The `/v1/models` fetch at `:293` has none, and `--api-key` gates
+`/v1/models` and `/metrics` (not `/health`). With `API_KEY` set, the failing
+curl yields an empty `models_json` and falls through to `:300` — a **false WARN**,
+not a false FAIL, and doctor still exits 0. Hoist the header array above `:293`
+and reuse it for the metrics fetch in `C1`.
+
+### C3 — the log is unbounded, unread, and never surfaced on failure
+
+Grepped `bin/` for `rotate|logrotate`: zero. At `LOG_LEVEL=debug` a long-lived
+server writes into `~/.mlx-serve/logs/` forever, on a Mac whose disk requirement
+drops to 5 GB once the model exists (`doctor.sh:161-163`). And when the server
+dies, the one artifact that explains why is shown to the user by no script.
+(mlx-serve rotates its own log at 32 MB; airgap neither knows nor states this.)
+
+### C4 — the banner reports requested values, never effective ones
+
+`bin/serve.sh:302-311` echoes `$MODEL_DIR`, `$CTX_SIZE`, `$KV_QUANT`,
+`$MAX_RESIDENT_MEM`, `$PREFIX_CACHE_MEM`, `$IDLE_EVICT_SECS` — the values airgap
+*asked for*. It says nothing about what mlx-serve chose for everything it was
+not given (`prefix-cache-entries=32`, `ssm-checkpoint-stride=256`, adaptive MTP
+depth), nor about a requested budget that was silently clamped after context and
+KV accounting.
+
+ds4's operating advice is the opposite: the startup cache report is the line the
+user is told to read, *because* the requested budget may be capped.
+
+Principle (3) is violated invisibly here — a clamped value looks identical to an
+honoured one, and `doctor.sh` cannot tell them apart either.
+
+---
+
+## D. Verification that does not verify
+
+### D1 — `verify-model.sh` cannot detect a truncated shard
+
+`bin/verify-model.sh:128-160` reads the safetensors header and uses
+`os.path.getsize` only for the <1 MB pointer test at `:130`. The loop sums
+`offs[1]-offs[0]` into `payload` at `:157-160` and never compares
+`8 + hlen + max(offs[1])` against the actual size. No content hashing anywhere
+(grepped `bin/` for `shasum|sha256|md5|checksum`: one hit, `bench.sh:150`, an
+output fingerprint).
+
+A shard truncated by a full disk or a killed pull — but over 1 MB and with an
+intact header — passes `verify PASS` and the manifest tensor-count check, because
+the counts come from the header rather than the bytes. The user meets it as a
+load failure or garbage output. The comparison is two lines.
+
+### D2 — three of four "is the model here?" checks look at one shard
+
+`bin/models.sh:95-100` returns inside the first loop iteration; `start.sh:82-87`
+and `bin/env.sh:128-135` `break` after the first shard. Only `serve.sh:189-196`
+and `doctor.sh:221-229` iterate all of them.
+
+A multi-shard download interrupted after shard 1 therefore reports "already
+here" in `start.sh`, is accepted by `models.sh use`, and the download step is
+skipped — so the user is caught two steps later by `verify-model.sh` instead of
+simply having the download resumed.
+
+### D3 — doctor never exercises a tool call, and never the streamed path
+
+`bin/doctor.sh:323-331` sends `max_tokens: 8`, content `"hi"`, and checks only
+that curl exited 0. Every check can pass on a build — the 2-bit at
+`catalog.sh:44`, or any off-catalog model `models.sh:56-60` accepts — that
+cannot emit a parseable tool call. That is the one capability Claude Code
+requires. The user discovers it as mysterious agent failures against an
+all-green report.
+
+**Streaming is the path that matters.** In ds4, tool-call recovery is a ladder,
+and tier 2 is explicitly disabled for streaming requests (`ds4_server.c:11941`
+and again at `:12037`, guarded on `!j->req.stream`). Three separate SSE state
+machines exist — OpenAI (`:6469`), Responses (`:7188`), Anthropic (`:8098`).
+Streamed and non-streamed assembly genuinely differ, so both must be tested.
+
+**Shape.** Two rows behind the existing `PROBE` variable (`doctor.sh:69`): one
+`stream:false`, one `stream:true`, each with a trivial tool schema and
+`tool_choice: {"type":"any"}` — without forcing the choice, a FAIL conflates
+*"the model declined to call a tool"* with *"the server could not parse the
+call"*, which destroys the row's diagnostic value. Measured cost on an already-
+loaded server: ~1–5 s for both.
+
+Four implementation notes that will otherwise cost an afternoon:
+
+- `curl -sN … | grep -q` is SIGPIPE-fragile under doctor's `set -euo pipefail`
+  (`:14`): `grep -q` exits on first match, curl dies 141, pipefail propagates it
+  and the enclosing `if` silently takes the FAIL branch. Capture to a variable
+  and grep that. Use `-sN`, not `-fsSN`.
+- The header array already exists at `:325-326`; this does not depend on `C1`.
+- Qwen3.8 emits reasoning before tool calls — use `max_tokens >= 256` and assert
+  on `stop_reason`, so a truncated-mid-reasoning response reports as truncation
+  rather than as a tool-call failure.
+- A FAIL is a property of the *model*, not the install. Point the row at
+  `./bin/models.sh list`.
+
+Related: export `CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK=1` in
+`claude-local.sh` (verified present in Claude Code 2.1.233) so the harness
+cannot paper over a broken stream by silently retrying non-streamed.
+
+**Do not** add `--no-tool-autocorrect` to the `serve.sh` denylist. It is a debug
+knob a user diagnosing tool failures has every reason to set, and it is narrower
+than it sounds: per its own help it coerces *argument types* on an
+already-parsed call (Python `False` → JSON `false`). It is **not** syntax
+repair, and it is not the analogue of ds4's `try_repair_dsml`. Do not write
+"mlx-serve already repairs tool calls" anywhere.
+
+*(For accuracy about ds4: `try_repair_dsml` at `ds4_server.c:5221` only appends
+missing **closing** tags, refuses when closes exceed opens (`:5273-5277`), and
+its own comment at `:5219-5220` says it "deliberately does not rewrite malformed
+but balanced DSML into assistant text; semantic recovery belongs to the model".
+It is truncation repair, not general repair.)*
+
+### D4 — `stop.sh` cannot stop everything it implies
+
+`bin/stop.sh:53` matches `mlx-serve.*--port ${PORT}`. `bench.sh:132-137` invokes
+mlx-serve with no `--port`, so a bench run holding ~19 GB cannot be stopped by
+the documented stop button. And when a foreign process holds the port,
+`stop.sh:65-67` reports *"nothing running on port 11234"* purely because `pkill`
+found no match — it never consults `lsof`, which `doctor.sh:252` does. The
+stop/start loop the docs recommend gives a contradictory answer to the one
+question the user is asking.
+
+---
+
+## E. Tuning surface the stack owns and does not use
+
+### E1 — `PREFILL_CHUNK` overrides the engine's own memory sizing
+
+`bin/env.sh:251` hardcodes 4096 and `serve.sh:256` passes it always. But
+`mlx-serve` already sizes this from memory, printing
+`Prefill chunk: N tokens (memory-sized down from M; --prefill-chunk overrides)`.
+airgap's constant is a **second and worse-informed source of truth**: Bash cannot
+know the model's per-layer attention-score budget that the flag's own help says
+the engine caps against.
+
+**The fix is subtraction, not addition.** Make `--prefill-chunk` conditional
+(the `_YOURS_*` idiom at `env.sh:74,203-205` is the existing pattern), drop the
+default at `env.sh:251`, and let the engine size it. Do **not** add a
+`HW_PREFILL_CHUNK` to `detect-hardware.sh`; ds4 is not precedent for that (see
+`AGENT.md` § Falsified).
+
+**Six edit sites, not two.** `bin/env.sh:249-250`; `config.env.example:129-131`;
+`docs/07-tuning.md:251` (table row) and `:620` (defaults table);
+`docs/04-memory-safety.md:727-729` ("halves the temporary memory spike … at a
+small cost in speed" — unlabelled arithmetic assuming linear scaling);
+`docs/09-glossary.md:233-236`. The phrase "a small speed cost" appears only in
+`env.sh:250` and `config.env.example:130`, not in `docs/07`.
+
+**This exposes an existing guard gap rather than creating one.**
+`docs/04-memory-safety.md:196-200` narrates a ~1 GB prefill working space into
+its "peak total ~22.8 GB" and says *"this is where MIN_FREE_GB=22 comes from"* —
+but `hw_rebudget` computes 19.1 + 1.0 + 1.5 = 21.6 → 22 with no prefill term.
+The prose has a line item the formula does not. See `A3`.
+
+**First action:** launch once with the flag removed at `LOG_LEVEL=info` and grep
+`~/.mlx-serve/logs/` for `Prefill chunk:`. That banner line has probably never
+printed in this repository's history, because airgap always passes the flag. If
+the engine picks ~4096 on 36 GB anyway, this collapses to a docs-and-measurement
+change with no behaviour delta on the test machine.
+
+### E2 — the prefix cache is tuned by bytes only
+
+`serve.sh:252-253` passes `--prefix-cache-mem` and `--prefix-cache-disk`.
+`mlx-serve` also caps the cache **by entry count** (`--prefix-cache-entries`,
+default 32) and caps SSM checkpoints per entry (`--ssm-checkpoint-max`, default
+32). Grepped airgap for both: zero hits.
+
+So a user with two or three Claude Code projects open silently evicts their own
+cached system prompt and pays full prefill on every switch — with no counter, no
+doc and no setting that names the cause. And `docs/07` §5's advice to raise
+`PREFIX_CACHE_MEM` may buy nothing if the 32-entry cap binds first.
+
+No document converts `PREFIX_CACHE_MEM` into the unit the user thinks in, even
+though the repository owns the constant one section earlier: 1536 MB at
+16 KiB/token (`docs/07-tuning.md:137`) is roughly 98,000 tokens — about four
+Claude Code system prompts.
+
+### E3 — the hot-path speculative-decoding knobs are undocumented
+
+`docs/07` §13 claims to list *"every setting this stack understands"*. Grepped
+`docs/`, `bin/` and `config.env.example` for
+`mtp-depth|mtp-history|pld-draft-len|pld-key-len`: zero hits. Yet:
+
+- `--mtp-history-window` changes MTP behaviour only above 16,384 tokens —
+  airgap's floor is 20,909, so **every airgap turn crosses that threshold**.
+- `--pld-draft-len` (default 5) and `--pld-key-len` (default 3) govern the
+  prompt-lookup win that `docs/08` §7 celebrates for file editing, which is
+  airgap's core workload.
+- `--ssm-checkpoint-stride` is explained in prose at `docs/08:1080-1083` and
+  `docs/09`, but appears in no settings table and no `config.env.example` line —
+  a documented mechanism with no exposed control.
+
+A user who wants more speed is told to use `EXTRA_ARGS` blind rather than being
+pointed at the four flags that move their workload.
+
+### E4 — no control over thinking, and the only real lever is client-side
+
+The server-side flag is inert; that is settled and recorded in `AGENT.md`
+under *Falsified*. **Do not implement `--reasoning-budget` in `serve.sh`.**
+
+What is real:
+
+| | output tokens | wall |
+|:--|--:|--:|
+| thinking on (default) | 1156 | 20.9 s |
+| `thinking: disabled` | 376 | 7.2 s, complete answer |
+
+*MEASURED, n=1, Qwen3.8-9B-mlx-4Bit, M3 Max 36 GB, mlx-serve 26.8.8, temp 0,
+ctx 8192, max_tokens 3000, prompt "What is 17*23? Think step by step."
+Not measured on the 27B. Quality cost not measured on either.*
+
+**Shape.** Entirely client-side: an opt-in knob in `bin/claude-local.sh` mapping
+to `MAX_THINKING_TOKENS`, defaulting to today's behaviour (unset) so nothing
+changes silently. `0` yields `thinking:{type:"disabled"}`; a positive value
+yields `{type:"enabled",budgetTokens:n}` clamped to `max_tokens-1`. Nothing
+server-side moves — no `serve.sh`, no `env.sh`, no `config.env.example`.
+
+State plainly that a *positive* value buys nothing on latency or generated
+tokens (measured: 128 vs 1024 vs unlimited all produced 1156 tokens in ~20.8 s).
+Its only real effect is shrinking the thinking text Claude Code stores and
+replays, which slows input-context growth across a session — a second-order
+saving, not the headline.
+
+The 27B's template defaults to `reasoning_effort: xhigh`, so turning thinking
+off is a large behavioural change. It ships opt-in, labelled, with the quality
+cost stated as unmeasured. `n=1` on one prompt is not a benchmark — this is
+precisely what `B1`'s suite should turn into a real number.
+
+**Do not** claim the knob derives from `CLAUDE_CODE_MAX_OUTPUT_TOKENS` "so the
+two numbers come from one place": `env.sh:35` lists the name in `ENV_KEYS` but
+sets no default; the default lives in `claude-local.sh:121`. `serve.sh` and
+`claude-local.sh` are separate processes.
+
+### E5 — nothing seeds the cache on purpose
+
+`README.md:244` apologises that the first response is slow: ~21,000 tokens of
+system prompt must be prefilled, and the prefix cache absorbs it only from turn
+two. So every *new* session pays it again.
+
+ds4 does not wait for turn two. On a cold request it computes an anchor —
+`ds4_kvstore_chat_anchor_pos` (`ds4_kvstore.c:711-728`) finds the end of the
+stable system/tool scaffolding, before the user's actual task — **splits the
+prefill**, writes that partial state to disk as `reason="cold"`, and only then
+prefills the rest (`ds4_server.c:11411-11470`). Its comment states the intent:
+*"Cold checkpoints maximize reuse across independent agent sessions."*
+
+airgap cannot split a prefill. What it can do is make the first request happen
+before the user's first question, using the genuine article rather than a
+reconstruction: `claude-local.sh:35` already documents `-p` one-shot mode.
+
+**Shape.** `bin/warm.sh` that waits for `server_up` (`env.sh:321`), runs one
+real one-shot with a short output cap, and **prints the `[hot-cache] reused N/M`
+line it produced as evidence** — it must never assert a speed-up it did not
+measure.
+
+**The integration point is `bin/claude-local.sh`, not `start.sh`.** `start.sh`
+deliberately never starts the server (`:10-13`) and ends by telling the user to
+open two windows (`:146-161`) — a warm call there always fails `server_up`.
+`serve.sh` ends in `exec` (`:313`), so nothing can run after it. The only seam
+is `claude-local.sh` between `server_up` (`:70`) and `exec` (`:147`). Two guards
+are mandatory: `warm.sh` must invoke `$CLAUDE_BIN` directly with the same
+exports, or `claude-local.sh` recurses infinitely; and `WARM_ON_START` must
+default to **0** — an opt-in that spends a full ~21k-token prefill, never a
+silent cost on every session start.
+
+**Blocked on evidence.** Whether Claude Code's `-p` mode renders the same
+leading system block as an interactive session, and by how much a warm run
+raises the next turn's `reused` count, cannot be settled from the repository —
+it needs the 27B loaded and two `[hot-cache]` lines compared. Land `C1` first;
+ship `warm.sh` only as a print-the-number tool until that measurement exists.
+Note that Claude Code's system prompt embeds the working directory, so `warm.sh`
+must run from the folder the user will work in.
+
+---
+
+## F. Runtime and roadmap architecture
+
+### F1 — the installed binary already contains the second and third runtimes
+
+`mlx-serve 26.8.8` reports `llama.cpp b10034 · gguf 3 · ds4 unknown` and exposes
+`--engine {auto|ds4|llama}` for `.gguf` inputs, routing by the file's
+`general.architecture` metadata: deepseek4 and ds4-MLA quants to the embedded
+ds4 engine, everything else to llama.cpp. `--ssd-streaming` and `--no-ds4-mtp`
+are ds4-specific flags on the same binary. The model directory's own
+`RUNTIME-REQUIREMENTS.json` already records `llama_cpp_build: b10034` beside
+`mlx_version: 0.32.0`.
+
+`ROADMAP.md` Phase 3 proposes llama.cpp `llama-server` as "the first second
+runtime" and calls it a large piece of work, not scheduled. That is more
+pessimistic than the evidence supports. The genuinely blocking work is a **GGUF
+memory model** and a catalog **`format` column** — and the column is already
+scheduled in Phase 2. It is not a second process to install, start, stop and
+health-check.
+
+Mis-sequencing here delays GGUF support, which is the thing users ask for most.
+
+### F2 — ds4 is not a runtime airgap's median user can reach
+
+Verdict, stated plainly so it is not re-investigated: **not viable below 64 GB,
+and viable at all only as an optional high-end path.**
+
+ds4 compiles in exactly three model shapes — DeepSeek V4 Flash, DeepSeek V4 PRO,
+GLM 5.2 (`ds4.c:486-489`, `:541,579,617`) — all 100B+ MoE, dispatching on two
+architecture strings (`deepseek4`, `glm-dsa`, `ds4.c:5811-5814`), and its
+`AGENT.md:3-4` states it is not a generic GGUF runner. Smallest target: **81 GB
+on disk**, recommended for 96/128 GB machines; the SSD-streaming floor is a
+64 GB MacBook, and streaming is documented as slower and more fragile. airgap's
+tested machine is 36 GB and its entire disk budget is 45 GB.
+
+No amount of Bash changes this — the shapes are compiled constants. Listing ds4
+as a runtime option would be the first entry in the repository that most readers
+cannot use, which fails the hardware-reach test the README's own table is built
+on.
+
+The honest framing: an optional path for 96 GB+ users, reached through the
+existing `--engine ds4` route, documented as such.
+
+### F3 — SSD streaming would require a second memory model
+
+`--ssd-streaming` is the one capability here that reaches *below* airgap's
+current floor: it runs a model larger than RAM. But it inverts the guard.
+
+`hw_rebudget` assumes resident weights (`MIN_FREE_GB` = weights + KV + prefix
+cache). Streaming deliberately runs weights that exceed RAM, with a bounded
+routed-expert cache sized from 80% of the recommended working set minus
+non-routed weights, then capped again after context and KV accounting
+(`ds4.c:39185`, `:55110-55125`). That is a *different budget function for the
+same guard*, which principle (3) forbids unless the two are unified
+deliberately.
+
+Adopting streaming without naming this produces either a guard that refuses
+every streaming configuration (weights alone exceed RAM by design) or one
+switched off for streaming and therefore protecting nothing.
+
+**As a technique it is NOT_TRANSFERABLE** to the MLX path: it is engine-level,
+it requires an MoE, and the default checkpoint has no experts. Do not attempt an
+analogue. *(For the record, the mechanism: on decode the shared expert's matmuls
+are submitted first; while that command buffer executes, a service thread waits
+on a Metal event for the router's selected-id readback and pulls exactly those
+experts' slices from disk. On prefill, the next layer loads during the current
+layer's compute.)*
+
+### F4 — the adapter contract hard-codes an endpoint the second runtime lacks
+
+Phase 3 defines a runtime adapter partly as *"what `/health` and `/v1/models`
+look like"*, and both `env.sh:322` (`server_up`) and `doctor.sh:291,303` call
+`/health` directly. **ds4-server has no health route at all** — it implements
+`/v1/models` (`ds4_server.c:12811`) and `/v1/messages` (`:12831`); grepped
+`ds4_server.c` for `health`: zero hits.
+
+So the abstraction as written needs editing on contact with its second
+implementation. The adapter needs a readiness **hook** — a command the adapter
+supplies — rather than a fixed path, and `doctor.sh` needs one row per adapter
+rather than one hardcoded curl. Cheap now, expensive after two adapters exist.
+
+### F5 — the KV formula is one Qwen3.8 constant with no per-model value
+
+`bin/detect-hardware.sh:176-185` derives `kv_gb = ctx/65536` from 16
+full-attention layers, and its own comments state it over-estimates the 9B and
+is *"WRONG for a dense model"*. `bin/catalog.sh:13-40` has no KV field.
+
+Already named at `ROADMAP.md` Phase 2, and repeated here because it is the
+precondition for the wider catalog: the moment a non-Qwen3.8-hybrid family is
+added, every guard — `MIN_FREE_GB`, the wired-ceiling refusal, the ok/TIGHT/NO
+column in `models.sh list` — under-estimates KV cost while still reading as
+authoritative.
+
+---
+
+## Also considered, and rejected
+
+- **Porting anything from ds4's C, Metal or CUDA.** Never on the table. airgap
+  ships no compiled code by design.
+- **mmap / wired-memory policy as a knob.** MLX and mlx-serve expose none —
+  verified against `mlx_lm/utils.py:282-323` and the complete `mlx-serve --help`.
+  Its value transfers as *one paragraph* in `docs/08` explaining why MLX
+  materialises and wires weights, why wired memory is not swappable, and hence
+  why the wired-ceiling check is a refusal and `iogpu.wired_limit_mb` must not
+  be raised. Do not claim airgap turns anything on.
+- **`dir-steering` (activation steering for verbosity).** Real in ds4, but it
+  operates on the residual stream and has no MLX-side control surface. A
+  distraction relative to `E4`, which reaches the same goal with a request field.
+- **ds4's download-script patterns.** Compared against
+  `bin/download-model.sh` and `bin/models.sh`: resumability, pointer
+  verification, de-duplication and the active-model switch are already present
+  and, in places, stronger. The one idea not already held is refusing when a
+  partial download from a *different* downloader is detected (ds4 checks for an
+  aria2 sidecar beside a curl `.part` and stops rather than corrupting it).
+  Small, and worth doing if the downloader is touched for another reason.

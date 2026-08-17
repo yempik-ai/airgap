@@ -219,6 +219,9 @@ Today: one harness (Claude Code), one model family (Qwen3.8), one runtime (`mlx-
 airgap/
 ├── start.sh                 ← the one command: tools, model, checks
 ├── ROADMAP.md               ← where this is going: any harness, any runtime
+├── AGENT.md                 ← for contributors: the rules, and the facts
+│                              already established so nobody re-derives them
+├── AUDIT.md                 ← the open gap register, with evidence per item
 ├── bin/
 │   ├── catalog.sh           ← the one list of models: names, repos, sizes
 │   ├── detect-hardware.sh   ← reads your Mac, derives every setting

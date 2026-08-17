@@ -5,6 +5,13 @@ items move when evidence says they should. Anything here that is not shipped is
 labelled as such, in the same spirit as the MEASURED / NOT MEASURED convention
 in the docs.
 
+Work items reference ids from [`AUDIT.md`](AUDIT.md), which holds the evidence
+for each — file, line, impact and the shape of the fix. Facts already
+established against the installed binaries, and approaches already tried and
+falsified, are in [`AGENT.md`](AGENT.md). **Read both before implementing
+anything here.** They exist so that no session spends its budget re-discovering
+what the last one already proved.
+
 ## The problem this exists to remove
 
 People who already live in a coding harness — Claude Code today, Pi, Hermes,
@@ -33,6 +40,11 @@ without giving up the three things that make the current version worth using:
 - `mlx-serve` speaks the Anthropic Messages API, the OpenAI chat API and the
   Ollama API on one port. Any harness that speaks one of those three can be
   wired without a translation proxy. That covers the vast majority of harnesses.
+- **`mlx-serve` is three engines, not one.** `mlx-serve --version` reports
+  `llama.cpp b10034 · gguf 3 · ds4 unknown` beside `mlx 0.32.0`, and
+  `--engine {auto|ds4|llama}` routes `.gguf` inputs by their
+  `general.architecture` metadata. The binary `bin/setup.sh` already installs
+  can serve GGUF today. This changes Phase 3 substantially — see `AUDIT.md` F1.
 - The catalog (`bin/catalog.sh`) is already data, not code: key, repository,
   sizes, provenance. Adding a build is one line.
 - The memory model (`bin/detect-hardware.sh`) is already model-agnostic: it takes
@@ -53,6 +65,41 @@ Shipped code, unshipped evidence. Nothing here is a feature.
       correct anything the docs promise that the fresh run does not show.
 - [ ] Run the small-Mac path for real (`HW_FORCE_RAM_GB=16` is arithmetic; a
       16 GB Mac is evidence).
+- [ ] Label the GPU wired ceiling, or replace it with the number MLX reports
+      (`AUDIT.md` A7). It is the figure behind the hardest refusal in the stack
+      and the only one carrying no label at all.
+- [ ] Settle the two stall-timeout unknowns in one experiment (`A5`). It also
+      produces the first real 27B prefill timing, which closes the first item
+      above from a different direction.
+
+## Phase 0.5 — the audit backlog
+
+From the 2026-08-17 audit against `antirez/ds4`. These are small, they are
+independent of every abstraction below, and four of the six make the repository
+able to prove things it currently only asserts. Ordered as in `AUDIT.md`.
+
+- [ ] `A1` — an instance lock in `serve.sh`. The repository enforces "no two
+      model loads" in `bench.sh` and not in the script that loads the model.
+- [ ] `A5` — name the stall timeout. Server and client both expire at 300 s,
+      under two different unnamed defaults.
+- [ ] `C1` — read the cache evidence the server already writes. The single
+      measured cache figure is hand-typed into five documents while the same
+      line is produced on every request into a log nothing opens.
+- [ ] `B1` — `bench.sh` keeps the prefill rate and peak memory it currently
+      parses away. Peak memory is the only empirical check that exists on the
+      memory arithmetic; prefill is the number behind "the first response is
+      slow", which the README still marks never measured.
+- [ ] `D3` — doctor probes a *streamed* tool call. Today every check can pass
+      on a build that cannot emit one, which is the capability Claude Code is
+      entirely built on.
+- [ ] `E1` — stop overriding the engine's own prefill sizing. This one is
+      subtraction: `mlx-serve` already sizes the chunk from memory, and airgap's
+      hardcoded 4096 is a second, worse-informed source of truth.
+
+Deliberately **not** in this list, and recorded in `AGENT.md` so it is not
+proposed again: a server-side reasoning budget. The flag exists, and it was
+measured doing nothing. The real lever is client-side, is an on/off switch
+rather than a budget, and is `AUDIT.md` E4.
 
 ## Phase 1 — any harness: `bin/run.sh <harness>`
 
@@ -90,23 +137,55 @@ the server (that stays `serve.sh`, one window, one job).
   each build needs *on this Mac*, which is the number that matters.
 - A per-model KV-cache constant in the catalog, replacing the single Qwen3.8
   figure that is currently documented as exact-for-this-architecture and
-  conservative-for-the-9B.
+  conservative-for-the-9B. (`AUDIT.md` F5 — this is the precondition for the
+  wider catalog, not a nicety: every guard under-estimates KV cost the moment a
+  non-hybrid family is added, while still reading as authoritative.)
+- The `format` column is also what unblocks GGUF, which Phase 3 no longer has to
+  wait for a second server to deliver. See F1.
 
 ## Phase 3 — any runtime
 
-`mlx-serve` is the right choice today because it keeps the OrcaRouter MTP head
-and speaks the Anthropic dialect natively. Neither is universal: most catalog
-builds ship no MTP head, and llama.cpp's server now speaks `/v1/messages` too.
+**Revised 2026-08-17.** This phase was written on the assumption that a second
+runtime means a second server to install, start, stop and health-check. That is
+not the situation. `mlx-serve` already embeds llama.cpp and antirez's ds4 engine
+and routes `.gguf` inputs between them by file metadata. The blocking work is
+therefore a *memory model* and a *catalog column*, not an integration.
+
+`mlx-serve` is still the right choice today because it keeps the OrcaRouter MTP
+head and speaks the Anthropic dialect natively. Neither is universal: most
+catalog builds ship no MTP head.
 
 - A runtime adapter is the mirror of a harness adapter: how to install it, how
   to start it on a model directory bound to loopback with a context size and a
-  memory ceiling, how to stop it, and what `/health` and `/v1/models` look like.
+  memory ceiling, how to stop it, and **how to know it is ready**.
   `serve.sh` and `stop.sh` become thin over it.
-- First second runtime: llama.cpp `llama-server` for GGUF builds. It brings
-  Intel Macs and Linux into reach for the *guard and wiring* layer, with the
-  memory model rewritten for discrete GPUs where that applies — a large piece of
-  work that must not be hand-waved. **Not shipped, not scheduled**: Apple
-  Silicon stays the only supported platform until that memory model exists.
+- **Correction to the contract above.** It previously said "what `/health` and
+  `/v1/models` look like", and `env.sh`'s `server_up()` and `doctor.sh` both
+  call `/health` directly. ds4-server implements `/v1/models` and
+  `/v1/messages` and has **no health route at all**. So readiness must be a
+  *hook the adapter supplies*, not a fixed path, and `doctor.sh` needs one row
+  per adapter rather than one hardcoded curl. Cheap to fix now, expensive once
+  two adapters exist. (`AUDIT.md` F4.)
+- **GGUF is nearer than this page assumed.** `--engine {auto|ds4|llama}` is
+  already accepted by the installed binary. What is genuinely missing is a GGUF
+  memory model and the catalog `format` column already scheduled in Phase 2.
+  **Not shipped**: Apple Silicon stays the only supported platform until that
+  memory model exists, and a second `llama-server` process is no longer the
+  route to it. (F1.)
+- **ds4 as a runtime: an optional 96 GB+ path, not a tier.** Recorded so it is
+  not re-investigated. ds4 compiles in exactly three model shapes — DeepSeek V4
+  Flash, DeepSeek V4 PRO, GLM 5.2 — all 100B+ MoE, and is explicitly not a
+  generic GGUF runner. Its smallest target is 81 GB on disk against a 36 GB
+  tested machine and a 45 GB disk budget. No airgap user below 64 GB can run any
+  ds4 model, and no amount of Bash creates one: the shapes are compiled
+  constants. Listing it as an ordinary option would be the first catalog entry
+  most readers cannot use. (F2.)
+- **`--ssd-streaming` is the one capability that reaches below the current
+  floor** — it runs a model larger than RAM. It also inverts the guard:
+  `hw_rebudget` assumes resident weights, streaming assumes they exceed RAM with
+  a bounded expert cache instead. That is a second budget function for the same
+  guard, which principle (3) forbids unless the two are unified deliberately.
+  Naming this cost is a precondition for offering the path at all. (F3.)
 - The `--no-mtp`/`--no-pld` refusals become runtime-specific facts, not global
   ones.
 
@@ -146,3 +225,14 @@ harness you actually use, with its `AIRGAP OK` transcript; a catalog line for a
 build you have actually loaded, with `verify-model.sh` output. Claims without the
 transcript are not merged — not out of distrust, but because the whole point of
 this repository is that its numbers are real.
+
+Prose in an issue is the wrong container for the first of those, and it is the
+contribution the project needs most. Once `B1` lands, `bench.sh` should emit one
+CSV per machine, committed to the repository the way ds4 accumulates
+`m4_max.csv` and `m5_max.csv` — so contributed runs can be diffed, plotted and
+used as a regression baseline instead of read once and lost. (`AUDIT.md` B4.)
+
+There is also no checked-in release gate: nothing states what must be re-run
+before a tag, on what hardware, or what counts as a blocker. The MEASURED
+convention is currently enforced by the maintainer's memory, which is the exact
+failure mode the convention exists to prevent. (B5.)

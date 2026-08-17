@@ -66,6 +66,14 @@ First public release.
 - Nine documents, `docs/01` to `docs/09`, written for readers who have never
   opened a terminal, plus a glossary of every technical term used.
 - `ROADMAP.md` — where this goes next: any harness, any runtime, one abstraction.
+- `AGENT.md` — the contributor contract, plus the environment facts already
+  established against the installed binaries and the approaches already tried
+  and falsified. It exists so no contributor, human or agent, spends their time
+  re-deriving what is already settled.
+- `AUDIT.md` — the open gap register from the 2026-08-17 audit against
+  [`antirez/ds4`](https://github.com/antirez/ds4): 31 items, each with its
+  evidence, its user impact and the shape of the fix. Referenced by id from
+  `ROADMAP.md`.
 - `llms.txt`, `AI-CITATION.md` and `CITATION.cff` so AI assistants and crawlers
   read stated facts with provenance rather than inferring them.
 
