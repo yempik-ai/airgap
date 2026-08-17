@@ -412,7 +412,8 @@ The number of parallel processing units in the graphics part of your chip.
 
 **Why you care here.** GPU cores drive speed, not capacity. Two Macs with the
 same amount of memory can run the same model at very different speeds. The test
-machine has 30 (MEASURED). Speed on any other chip is NOT YET MEASURED here.
+machine has 30 (MEASURED). Speed of the 27B is NOT YET MEASURED on any chip,
+including that one.
 
 ### group size
 
@@ -546,8 +547,9 @@ re-read everything to write each new word. KV stands for "keys and values".
 
 **Why you care here.** It grows as you talk, and it lives in the same memory as
 the model. In this model it costs 64 KiB per [token](#token) at full precision,
-which works out to 1 GB for a 65,536-token conversation (MEASURED, derived from
-the model's configuration file).
+which works out to 4 GB for a 65,536-token conversation — 1 GB once this
+repository compresses it to four bits (derived from the model's configuration
+file; see [KV cache quantization](#kv-cache-quantization)).
 
 **Think of it like** notes you take during a long meeting so you do not have to
 replay the recording before every sentence you say. The comparison stops working
@@ -560,9 +562,9 @@ Storing the [KV cache](#kv-cache) in smaller numbers than the model natively
 uses.
 
 **Why you care here.** This repository stores it at four bits instead of
-sixteen, which cuts that 1 GB to 256 MB. The cost is a small loss of precision
-in the model's recall of the older parts of a long conversation. See
-[turbo4](#turbo4).
+sixteen, which cuts that 4 GB to 1 GB at a 65,536-token window. The cost is a
+small loss of precision in the model's recall of the older parts of a long
+conversation. See [turbo4](#turbo4).
 
 ---
 
@@ -649,9 +651,11 @@ recorded by running something on the test machine. NOT YET MEASURED means it was
 not, and no one should treat it as fact.
 
 **Why you care here.** The test machine is an Apple M3 Max with 30 GPU cores,
-36 GB of memory, and macOS 26.5.2. Speed figures for any other Mac are NOT YET
-MEASURED here. A third label, PUBLISHER-REPORTED, marks numbers published by the
-people who made the model and not reproduced here.
+36 GB of memory, and macOS 26.5.2. No speed figure for the 27B has been
+measured on it or anywhere else; the one measured speed is 57 tokens per second
+for the 9B, one short run of `bin/bench.sh`. A third label, PUBLISHER-REPORTED,
+marks numbers published by the people who made the model and not reproduced
+here.
 
 ### memory-bandwidth bound
 
@@ -1112,10 +1116,12 @@ training data, not how the word is pronounced.
 How many [tokens](#token) the model produces each second. The direct measure of
 how fast text appears on your screen.
 
-**Why you care here.** This figure for this 27-billion-parameter model is NOT
-YET MEASURED in this repository. It depends heavily on
-[GPU cores](#gpu-cores), so a figure from one Mac tells you little about
-another.
+**Why you care here.** This figure for the 27-billion-parameter model is NOT
+YET MEASURED in this repository. The one figure on record is 57 tok/s for the
+9B in the catalog, one short greedy run of `bin/bench.sh` on the test machine
+(MEASURED). It depends heavily on [GPU cores](#gpu-cores), so a figure from
+one Mac tells you little about another, and a figure for one model tells you
+nothing about a bigger one.
 
 ### tool call (`tool_use` / `tool_result`)
 

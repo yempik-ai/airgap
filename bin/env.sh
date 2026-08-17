@@ -28,7 +28,7 @@ ROOT="$(cd "$(dirname "$_env_self")/.." && pwd)"
 # because bash 3.2 (the version macOS ships) has no associative arrays.
 # Anything NOT on this list can be set in config.env but cannot be overridden
 # from the command line, so keep every documented setting on it.
-ENV_KEYS="MODEL_REPO MODEL_DIR MODEL_ID HOST PORT CTX_SIZE KV_QUANT NO_VISION \
+ENV_KEYS="MODEL_QUANT MODEL_REPO MODEL_DIR MODEL_ID HOST PORT CTX_SIZE KV_QUANT NO_VISION \
 PREFIX_CACHE_MEM PREFIX_CACHE_DISK MAX_RESIDENT_MODELS MAX_RESIDENT_MEM \
 IDLE_EVICT_SECS PREFILL_CHUNK MIN_FREE_GB MIN_DISK_GB LOG_LEVEL LOG_FILE \
 API_KEY METRICS EXTRA_ARGS DEDUP LEAN_MCP CLAUDE_BIN PYTHON_BIN WITH_VENV \
@@ -62,14 +62,15 @@ unset _k
 
 # --- Step 4: size this Mac ---------------------------------------------------
 # Sets HW_* facts and proposes HW_CTX_SIZE, HW_MIN_FREE_GB, HW_MAX_RESIDENT_MEM
-# and HW_PREFIX_CACHE_MEM. It writes only HW_* names, so it can never overwrite
-# something you set in step 2 or step 3. On the 36 GB test machine it proposes
-# exactly the reference numbers below. On a different Mac it proposes numbers
-# that fit that Mac.
+# and HW_PREFIX_CACHE_MEM for the build it recommends. It writes only HW_*
+# names, so it can never overwrite something you set in step 2 or step 3. On
+# the 36 GB test machine it proposes exactly the reference numbers below. On a
+# different Mac it proposes numbers that fit that Mac.
 #
-# Remember which of the four budget settings you had already chosen, so the
-# re-budget in step 6 leaves your choices alone.
-for _k in CTX_SIZE MIN_FREE_GB MAX_RESIDENT_MEM PREFIX_CACHE_MEM; do
+# Remember which of the three budget settings you had already chosen, so the
+# re-budget in step 6 leaves your choices alone. (CTX_SIZE needs no such note:
+# `: "${CTX_SIZE:=...}"` below already leaves a chosen value untouched.)
+for _k in MIN_FREE_GB MAX_RESIDENT_MEM PREFIX_CACHE_MEM; do
   eval "_YOURS_${_k}=\${${_k}+1}"
 done
 unset _k
@@ -78,12 +79,12 @@ unset _k
 source "$ROOT/bin/detect-hardware.sh"
 hw_recommend
 
-# An impossible machine gets no detected settings at all — HW_CTX_SIZE and the
-# rest are 0, which is not a usable size, and MIN_FREE_GB=0 in particular is
-# this repo's way of switching the memory guard OFF. Fall through to the
-# reference defaults instead. serve.sh, download-model.sh, setup.sh and
-# doctor.sh all refuse on HW_VERDICT, which is the honest place to stop.
-if [ "${HW_VERDICT:-}" != "impossible" ]; then
+# A machine that is not Apple Silicon gets no detected settings at all —
+# HW_CTX_SIZE and the rest are 0, which is not a usable size, and MIN_FREE_GB=0
+# in particular is this repo's way of switching the memory guard OFF. Fall
+# through to the reference defaults instead. serve.sh, download-model.sh and
+# doctor.sh all refuse on HW_APPLE_SILICON, which is the honest place to stop.
+if [ "${HW_APPLE_SILICON:-no}" = "yes" ]; then
   : "${CTX_SIZE:=$HW_CTX_SIZE}"
 fi
 
@@ -93,23 +94,27 @@ fi
 # =============================================================================
 
 # --- Model -------------------------------------------------------------------
-# Which build of the checkpoint to use: 4bit, 5bit or 8bit. All three exist on
-# huggingface.co. Detection picks the largest one this Mac has memory for.
-: "${MODEL_QUANT:=${HW_QUANT_SUFFIX:-5bit}}"
-
-# The HuggingFace repository that bin/download-model.sh clones. download-model.sh
-# checks the name against huggingface.co before it downloads anything, and fails
-# in about two seconds with a copy-paste fix if the name is wrong.
-: "${MODEL_REPO:=chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-${MODEL_QUANT}}"
+# Which model to serve. Left alone, detection picks a build from the catalog in
+# bin/catalog.sh that fits this Mac's memory: the 27B OrcaRouter build at
+# 4-bit, 5-bit or 8-bit from 32 GB upward, and the 9B below that.
+#
+# MODEL_QUANT is the shortcut for "the 27B OrcaRouter build at this many bits":
+# 4bit, 5bit, 6bit or 8bit. Set it and MODEL_REPO follows. Set MODEL_REPO
+# itself to serve anything else, catalog or not.
+if [ -n "${MODEL_QUANT:-}" ]; then
+  : "${MODEL_REPO:=${CATALOG_ORCAROUTER_PREFIX}${MODEL_QUANT}}"
+else
+  : "${MODEL_REPO:=${HW_RECOMMENDED_REPO:-${CATALOG_ORCAROUTER_PREFIX}5bit}}"
+fi
 
 # Where the weights live on this Mac. The folder name follows the repository
 # name, so downloading a different build never puts it in a folder that claims
 # to be a different one. Listed in .gitignore: ~20 GB never goes into git.
 #
 # One exception, and it is the useful one: when the recommended build is not on
-# disk but exactly one other build of this checkpoint is, use the one you
-# actually have. Otherwise a Mac large enough for 8-bit would report "no model"
-# at the 5-bit weights sitting right next to the scripts.
+# disk but exactly one other model is, use the one you actually have. Otherwise
+# a Mac large enough for 8-bit would report "no model" at the 5-bit weights
+# sitting right next to the scripts.
 # Any directory holding a config.json and a real (non-pointer) .safetensors is a
 # usable model, whoever published it — so a 2-bit build, a 9B, or something you
 # fetched by hand is found just as readily as the default. If exactly one is
@@ -130,9 +135,6 @@ if [ -z "${MODEL_DIR:-}" ] && [ ! -d "$ROOT/$(basename "$MODEL_REPO")" ]; then
   done
   if [ "$_n" = "1" ]; then
     MODEL_DIR="$_found"
-    case "$(basename "$_found")" in
-      *-[0-9]bit|*-[0-9]Bit) MODEL_QUANT="$(basename "$_found")"; MODEL_QUANT="${MODEL_QUANT##*-}" ;;
-    esac
   fi
   unset _found _n _d _w
 fi
@@ -142,6 +144,14 @@ fi
 # For a --model directory this is the directory's own name, nothing else.
 # Rename the directory and this name changes with it. Verified.
 : "${MODEL_ID:=$(basename "$MODEL_DIR")}"
+
+# MODEL_QUANT now describes the model really selected: the bit-width of an
+# OrcaRouter build, or empty for anything else. It is informational from here
+# on; nothing below reads it.
+case "$(basename "$MODEL_DIR")" in
+  *OrcaRouter*-[0-9]bit|*OrcaRouter*-[0-9]Bit) MODEL_QUANT="$(basename "$MODEL_DIR")"; MODEL_QUANT="${MODEL_QUANT##*-}" ;;
+  *) MODEL_QUANT="" ;;
+esac
 
 # --- Server ------------------------------------------------------------------
 # 127.0.0.1 means "this Mac only". The server's own default is 0.0.0.0, which
@@ -161,57 +171,47 @@ fi
 : "${CTX_SIZE:=65536}"
 
 # --- Step 6: re-work the memory budget from what is really there -------------
-# Two things are only known now: which build of the weights is actually on disk,
-# and the context size after your own overrides. Both change how much memory the
-# server will take, so the budget is worked out again from them.
+# Two things are only known now: which model is actually selected, and the
+# context size after your own overrides. Both change how much memory the server
+# will take, so the budget is worked out again from them.
 #
 # This is what makes `CTX_SIZE=131072 ./bin/serve.sh` safe: it raises the free
 # memory the guard demands to match the larger conversation, instead of leaving
-# the guard sized for a window you are no longer using.
+# the guard sized for a window you are no longer using. It is also what makes
+# `./bin/models.sh use 9b-4bit` safe on a small Mac: the guard shrinks to the
+# 9B rather than demanding room for a 27B that is not being loaded.
 #
 # Settings you chose yourself are never touched.
-if [ "${HW_VERDICT:-}" != "impossible" ]; then
-  # Weight size in memory, in GB. Taken from the build that is really on disk,
-  # named by the last part of the folder name, so the budget follows the weights
-  # you have rather than the ones this Mac was advised to get. The figures are
-  # text-only: the image-reading part is on disk but is not loaded.
-  # Add up the shards on disk instead and you would over-count by that part.
-  # The three constants describe the 27B OrcaRouter builds and nothing else, so
-  # they are only used for those. Matching on a bare "-4bit" suffix was wrong
-  # twice over: it claimed a 9B at 4-bit weighs the same as a 27B at 4-bit, and
-  # it missed folders spelled "-4Bit", which fell through to the 5-bit figure.
-  # The result was a 4.7 GB model asking for 22 GB of free memory and serve.sh
-  # refusing to start it — exactly backwards for someone who switched to a
-  # smaller build BECAUSE memory was short.
-  #
-  # For anything else, measure the shards actually on disk. That is exact for a
-  # text-only checkpoint and slightly conservative for one carrying a vision
-  # tower, which is the safe direction to be wrong in.
-  case "$(basename "$MODEL_DIR")" in
-    *OrcaRouter*-4bit|*OrcaRouter*-4BIT|*OrcaRouter*-4Bit) _w="$HW_WEIGHTS_GB_4BIT" ;;
-    *OrcaRouter*-5bit|*OrcaRouter*-5BIT|*OrcaRouter*-5Bit) _w="$HW_WEIGHTS_GB_5BIT" ;;
-    *OrcaRouter*-8bit|*OrcaRouter*-8BIT|*OrcaRouter*-8Bit) _w="$HW_WEIGHTS_GB_8BIT" ;;
-    *)
-      _w="$(find "$MODEL_DIR" -maxdepth 1 -name '*.safetensors' -exec stat -f%z {} + 2>/dev/null \
-            | awk '{s+=$1} END { if (s>0) printf "%.1f", s/1073741824 }')"
-      [ -n "$_w" ] || _w="${HW_WEIGHTS_GB:-$HW_WEIGHTS_GB_5BIT}"
-      ;;
-  esac
+if [ "${HW_APPLE_SILICON:-no}" = "yes" ]; then
+  # Weight size in memory, in GB, for the model actually selected. A catalog
+  # build with a known text-only size uses that figure (bin/catalog.sh says
+  # which are measured and which are publisher-reported). Anything else is
+  # measured from the shards on disk, which is exact for a text-only checkpoint
+  # and slightly conservative for one carrying a vision tower — the safe
+  # direction to be wrong in. A model not yet downloaded and not in the
+  # catalog falls back to the recommended build's figure.
+  _w="$(catalog_loaded_gb_for_dir "$(basename "$MODEL_DIR")")"
+  if [ -z "$_w" ]; then
+    # `|| true` because a model that is not downloaded yet makes find fail,
+    # and under pipefail that would end the whole script here, silently.
+    _w="$( { find "$MODEL_DIR" -maxdepth 1 -name '*.safetensors' -exec stat -f%z {} + 2>/dev/null || true; } \
+          | awk '{s+=$1} END { if (s>0) printf "%.1f", s/1073741824 }')"
+  fi
+  [ -n "$_w" ] || _w="$HW_WEIGHTS_GB"
 
   hw_rebudget "$_w" "$CTX_SIZE"
   [ -n "${_YOURS_MIN_FREE_GB:-}" ]      || MIN_FREE_GB="$HW_MIN_FREE_GB"
   [ -n "${_YOURS_MAX_RESIDENT_MEM:-}" ] || MAX_RESIDENT_MEM="$HW_MAX_RESIDENT_MEM"
   [ -n "${_YOURS_PREFIX_CACHE_MEM:-}" ] || PREFIX_CACHE_MEM="$HW_PREFIX_CACHE_MEM"
 
-  # HW_WEIGHTS_GB now names the build in use, not the build recommended, so
+  # HW_WEIGHTS_GB now names the model in use, not the build recommended, so
   # every message that quotes it quotes the truth. The GPU wired-ceiling check
   # is redone for the same reason: it must judge the weights you really have.
   HW_WEIGHTS_GB="$_w"
-  HW_WIRED_OK="$(awk -v w="$_w" -v kv="$HW_KV_GB" -v lim="$HW_WIRED_AUTO_GB" \
-    'BEGIN { print (w + kv <= lim) ? "yes" : "no" }')"
+  HW_WIRED_OK="$(hw_wired_fits "$_w" "$HW_KV_GB")"
   unset _w
 fi
-unset _YOURS_CTX_SIZE _YOURS_MIN_FREE_GB _YOURS_MAX_RESIDENT_MEM _YOURS_PREFIX_CACHE_MEM
+unset _YOURS_MIN_FREE_GB _YOURS_MAX_RESIDENT_MEM _YOURS_PREFIX_CACHE_MEM
 
 # --- Efficiency --------------------------------------------------------------
 # How the running conversation is stored in memory. turbo4 packs it to four

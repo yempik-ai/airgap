@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # bin/download-model.sh — get the weights, correctly.
 #
-# The weights are the model's numbers: about 20 GB of them. They are stored
-# on huggingface.co and downloaded with git, but ordinary git does NOT download
+# The weights are the model's numbers: 4.7 GB to 29 GB of them depending on the
+# build, about 20 GB for the default 5-bit 27B. They are stored on
+# huggingface.co and downloaded with git, but ordinary git does NOT download
 # them. It downloads 135-byte text files that point at them, and it reports
 # success while doing so. This script makes that impossible.
 #
@@ -20,12 +21,15 @@ download-model.sh — download the model's weights with git-lfs.
 
 WHAT IT DOES
   1. Checks git-lfs is installed and switched on.
-  2. Checks the model's address really exists, BEFORE downloading anything.
+  2. Checks the model's address really exists, BEFORE downloading anything,
+     asks huggingface.co how big it is, and refuses if those weights cannot
+     fit under this Mac's GPU memory ceiling — before the download, not after.
   3. Checks you have enough free disk space.
   4. Downloads the weights. This is the long part. Size depends on the build:
      4.7 GB to 29.1 GB; it prints the real figure before it starts.
   5. Reclaims the duplicate copy git-lfs keeps, freeing roughly the model's
-     own size instantly. (MEASURED on the test machine: 20.1 GB reclaimed.)
+     own size. (MEASURED on the test machine: 20.1 GB reclaimed. It checks
+     each file first, so expect a minute or two rather than an instant.)
 
 WHAT IT COSTS
   Disk: about 45 GB free while it runs for the default 5-bit build, about
@@ -85,24 +89,16 @@ if [ "$#" -eq 1 ]; then
   MODEL_ID="$(basename "$MODEL_DIR")"
 fi
 
-# --- Guard 0: can this Mac run what is about to be downloaded? ---------------
-# Stopping here costs two seconds. Stopping after the download costs 20 GB and
-# most of an hour, and the answer is the same either way.
-if [ "${HW_VERDICT:-}" = "impossible" ] && [ "$#" -eq 0 ]; then
-  echo "REFUSING TO DOWNLOAD — this Mac cannot run this model." >&2
+# --- Guard 0: is this an Apple Silicon Mac? ----------------------------------
+# Stopping here costs nothing. Stopping after the download costs 20 GB and most
+# of an hour, and the answer is the same either way. Whether the chosen build
+# FITS this Mac is checked in step 2 below, once huggingface.co has said how
+# big it is.
+if [ "${HW_APPLE_SILICON:-no}" != "yes" ]; then
+  echo "REFUSING TO DOWNLOAD — this is not an Apple Silicon Mac, and MLX runs nowhere else." >&2
   echo "  reason : ${HW_REASON:-unknown}" >&2
-  if [ -n "${HW_ALT_MODEL:-}" ]; then
-    echo "  instead: ${HW_ALT_MODEL}" >&2
-  fi
   echo >&2
-  echo "Nothing is broken and you have done nothing wrong. This check runs BEFORE" >&2
-  echo "the download so you do not spend 20 GB finding out." >&2
-  echo >&2
-  echo "To download one of the smaller models named above instead, pass its" >&2
-  echo "address on huggingface.co, for example:" >&2
-  echo "    ./bin/download-model.sh <ORG>/<NAME>" >&2
-  echo >&2
-  echo "Read docs/01-requirements.md#ram-tiers." >&2
+  echo "Nothing is broken and you have done nothing wrong. Read docs/01-requirements.md." >&2
   exit 1
 fi
 
@@ -131,15 +127,51 @@ fi
 lfs_ver="$(git lfs version 2>/dev/null | awk '{print $1}' | sed 's|^git-lfs/||')"
 printf '[1/5] %-22s ok (%s)\n' "git-lfs" "$lfs_ver"
 
-# --- 2. Does the model actually exist? --------------------------------------
-# Two seconds here saves a 20 GB download into a wrong or misspelled name.
+# --- 2. Does the model actually exist, and can this Mac load it? ------------
+# Two seconds here saves a 20 GB download into a wrong or misspelled name, or
+# into a Mac that could never load it.
 printf '[2/5] %-22s checking huggingface.co\n' "resolving repo"
 if ! curl -fsS --max-time 15 "https://huggingface.co/api/models/${MODEL_REPO}" >/dev/null 2>&1; then
   die "repo not found on huggingface.co: ${MODEL_REPO}" \
       "open https://huggingface.co and copy the exact <org>/<repo> id, then:" \
       "MODEL_REPO=<org>/<repo> ./bin/download-model.sh"
 fi
-printf '[2/5] %-22s ok — huggingface.co/%s\n' "resolving repo" "$MODEL_REPO"
+
+# Ask huggingface.co how big THIS repo actually is. The catalog spans 4.7 GB to
+# 29.1 GB, so a hardcoded "about 20 GB" is wrong for most of them.
+# json, not awk: the API reports both "size" and a nested "lfs.size" per file,
+# so a naive text scan counts every weight twice.
+repo_gb="$(curl -fsS --max-time 15 "https://huggingface.co/api/models/${MODEL_REPO}?blobs=true" 2>/dev/null \
+  | python3 -c '
+import json,sys
+try:
+    d = json.load(sys.stdin)
+    n = sum(s.get("size") or 0 for s in d.get("siblings", [])
+            if s.get("rfilename","").endswith(".safetensors"))
+    print(f"{n/2**30:.1f}" if n else "")
+except Exception:
+    print("")
+' 2>/dev/null || true)"
+printf '[2/5] %-22s ok — huggingface.co/%s%s\n' "resolving repo" "$MODEL_REPO" "${repo_gb:+ (${repo_gb} GB of weights)}"
+
+# The one refusal that belongs BEFORE a download: weights that cannot fit under
+# this Mac's GPU wired ceiling can never be loaded here, whatever you close.
+# The download size is used as the weight size, which is conservative for a
+# checkpoint carrying a vision tower (the tower is on disk but never loaded).
+if [ -n "$repo_gb" ]; then
+  fit_gb="$(catalog_loaded_gb_for_dir "$(basename "$MODEL_DIR")")"
+  [ -n "$fit_gb" ] || fit_gb="$repo_gb"
+  hw_rebudget "$fit_gb" "$CTX_SIZE"
+  if [ "$(hw_wired_fits "$fit_gb" "$HW_KV_GB")" = "no" ]; then
+    die "${MODEL_REPO} cannot be loaded on this Mac, so it is not worth downloading." \
+        "weights + conversation : ${fit_gb} + ${HW_KV_GB} GB" \
+        "GPU wired ceiling      : ${HW_WIRED_AUTO_GB} GB (the value Apple picks for ${HW_RAM_GB} GB of memory)" \
+        "./bin/serve.sh would refuse to start it, for the reason docs/04-memory-safety.md#wired-limit gives." \
+        "Pick a build that fits: ./bin/models.sh list" \
+        "(To fetch it anyway, for a different Mac, clone it by hand:" \
+        " GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/${MODEL_REPO} && cd $(basename "$MODEL_REPO") && git lfs pull)"
+  fi
+fi
 
 # --- 3. Clone the file list, not the files ----------------------------------
 # GIT_LFS_SKIP_SMUDGE=1 makes the clone fast and small: it fetches the pointer
@@ -158,21 +190,6 @@ else
 fi
 
 # --- 4. The actual weights ---------------------------------------------------
-# Ask huggingface.co how big THIS repo actually is. The catalog spans 4.7 GB to
-# 29.1 GB, so a hardcoded "about 20 GB" is wrong for most of them.
-# json, not awk: the API reports both "size" and a nested "lfs.size" per file,
-# so a naive text scan counts every weight twice.
-repo_gb="$(curl -fsS --max-time 15 "https://huggingface.co/api/models/${MODEL_REPO}?blobs=true" 2>/dev/null \
-  | python3 -c '
-import json,sys
-try:
-    d = json.load(sys.stdin)
-    n = sum(s.get("size") or 0 for s in d.get("siblings", [])
-            if s.get("rfilename","").endswith(".safetensors"))
-    print(f"{n/2**30:.1f}" if n else "")
-except Exception:
-    print("")
-' 2>/dev/null)"
 if [ -n "$repo_gb" ]; then
   printf '[4/5] %-22s about %s GB — this is the long part\n' "git lfs pull" "$repo_gb"
 else
@@ -205,10 +222,12 @@ printf '[4/5] %-22s ok — no pointer files left\n' "git lfs pull"
 # --- 5. Reclaim the duplicate ------------------------------------------------
 # git-lfs keeps a second copy of every large file under .git/lfs. `git lfs
 # dedup` replaces one with a reference to the other. On an APFS disk (every
-# modern Mac) this is instant and loses no data.
+# modern Mac) no data is copied and none is lost; it does read each file once
+# to check it first, so it takes a minute or two on 20 GB, not an instant.
 if [ "$DEDUP" != "1" ]; then
   printf '[5/5] %-22s skipped (DEDUP=0) — the model folder stays about twice its final size\n' "git lfs dedup"
 else
+  echo "      checking each file, then sharing its blocks — a minute or two on 20 GB"
   before="$(free_disk_gb)"
   ( cd "$MODEL_DIR" && git lfs dedup >/dev/null 2>&1 ) || true
   after="$(free_disk_gb)"

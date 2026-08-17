@@ -73,7 +73,7 @@ airgap doctor
 ── environment ──────────────────────────────
 PASS  macos             26.5.2 (arm64)
 PASS  apple silicon     Apple M3 Max, 30 GPU cores
-PASS  ram tier          36 GB total — workable, recommends 5-bit at 65536 tokens
+PASS  ram tier          36 GB total — workable, default build 27b-5bit at 65536 tokens
 PASS  gpu ceiling       weights + conversation (19.1 + 1.00 GB) fit under Apple's 27.0 GB ceiling
 PASS  memory            36 GB total, 24.3 GB available (need 22)
 PASS  wired limit       iogpu.wired_limit_mb=0 (auto, about 27.0 GB) — recommended
@@ -85,7 +85,7 @@ PASS  git-lfs enabled   switched on for your account
 PASS  mlx-serve         26.8.8
 PASS  claude code       2.1.233
 ─────────────────────────────────────────────
-19 pass, 0 warn, 0 fail, 1 skipped
+20 pass, 0 warn, 0 fail, 1 skipped
 doctor: OK — next: ./bin/serve.sh
 ```
 
@@ -466,7 +466,7 @@ Your version number may be higher.
 ```
 REFUSING TO START — not enough free memory.
   available : 10.5 GB
-  required  : 22 GB (weights ~19.1 GB + cache + headroom)
+  required  : 22 GB (weights ~19.1 GB + conversation + prefix cache)
 
 Free some memory, then retry. Biggest wins, in order:
     2.7 GB  com.apple.Virtualization.VirtualMachine
@@ -547,8 +547,8 @@ Output trimmed — the full banner is five more lines.
 
 Do not set `MIN_FREE_GB=0` to get past the check. That check protects the Mac you
 are typing on. If your Mac genuinely cannot free 22 GB, the correct answer is a
-smaller model, not a disabled guard. See
-[04 — memory safety](04-memory-safety.md) for the smaller-model options.
+smaller build, not a disabled guard: `./bin/models.sh list` marks the ones that
+fit, and [04 — memory safety](04-memory-safety.md) explains the trade.
 
 ### How to know it is fixed
 
@@ -715,7 +715,8 @@ You should see something like this:
 claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 context  65536 tokens declared to the harness, 8192 max output
 mcp      strict (LEAN_MCP=1) — MCP servers off, saves ~17k prompt tokens per turn
-note     a one-line "unrecognized_model" warning at startup is EXPECTED and cosmetic
+note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
+         "claude.ai connectors are disabled" — that is this script keeping it local
 ```
 
 If you see `error: no server at`, go to [entry 6](#no-server).
@@ -1200,15 +1201,19 @@ responds normally again.
 
 ### What you see
 
-Three lines when the server starts:
+A few lines when the server starts:
 
 ```
-warning  iogpu.wired_limit_mb=30720 is above 28 GB on a 36 GB machine.
-         GPU-wired memory cannot be swapped, so this lets MLX squeeze
-         macOS. This config does not need it: sudo sysctl iogpu.wired_limit_mb=0
+warning  iogpu.wired_limit_mb=30720 — that is over 80% of this Mac's 36 GB.
+         Memory reserved this way cannot be swapped out, so this lets the model
+         squeeze macOS itself, which is how a Mac stops responding to clicks.
+         To put it back:
+         sudo sysctl iogpu.wired_limit_mb=0    (it also resets when you restart)
 ```
 
-Or the same line from `./bin/doctor.sh`, marked `WARN`.
+A hand-set value below that 80% line gets a milder two-line version of the same
+warning. `./bin/doctor.sh` reports the same thing on its `wired limit` line,
+marked `WARN` (or `FAIL` above 80%).
 
 ### What it means
 
@@ -1436,7 +1441,7 @@ repository makes, and it is the only one.
 ### What you see
 
 ```
-FAIL  apple silicon     MLX requires Apple Silicon. This reports: Intel(R) Core(TM) i9
+FAIL  apple silicon     this Mac reports Intel(R) Core(TM) i9  -> docs/01-requirements.md#apple-silicon
 ```
 
 Or the server fails to install or start with an architecture error.
@@ -1478,7 +1483,7 @@ Anything beginning with `Apple M` works. Anything beginning with `Intel` does no
 
 ```
 error: only 22 GB free, need 45 GB
-       git-lfs keeps a second copy under .git/lfs until step 5 dedups it.
+       git-lfs keeps a second copy under .git/lfs until step 5 reclaims it,
 ```
 
 Your number will differ.
@@ -1489,8 +1494,10 @@ The model is about 20 GB on disk. During the download, the tool that fetches lar
 keeps a second copy of everything, so the folder is about 40 GB while it works.
 The download script asks for 45 GB up front so it cannot run out partway.
 
-After the download, a step called dedup reclaims the duplicate. That step is
-instant on modern Macs and loses no data. The folder ends up around 20 GB.
+After the download, a step called dedup reclaims the duplicate. That step copies
+no data and loses none — it checks each file first, so it takes a minute or two
+on modern Macs. The disk ends up with about 20 GB more free than it had at the
+peak.
 
 This is a **FIX THIS** problem.
 
@@ -1616,30 +1623,46 @@ version of the server does not publish whether the head is loaded. Use
 Or, from `./bin/verify-model.sh`:
 
 ```
-verify FAIL: no mtp.* tensors found — this checkpoint has no MTP head
+verify FAIL: the publisher's manifest lists an MTP head (15 tensors) and none was found -- download is incomplete
+```
+
+Or, also from `./bin/verify-model.sh`, this line — which is **not** a failure
+and needs nothing done:
+
+```
+MTP head absent  -- this checkpoint ships none. It runs; the MTP speed-up
+         described in the docs does not apply to it. Not a failure.
 ```
 
 ### What it means
 
-This model ships with an extra part that lets it guess several tokens ahead and
-verify them in one pass. That part is called a **multi-token prediction (MTP)**
-head (see [Glossary](09-glossary.md#multi-token-prediction-mtp)). It makes the
-model faster without changing a single character of the output.
+The OrcaRouter 27B builds ship with an extra part that lets the model guess
+several tokens ahead and verify them in one pass. That part is called a
+**multi-token prediction (MTP)** head (see
+[Glossary](09-glossary.md#multi-token-prediction-mtp)). It makes the model faster
+without changing a single character of the output.
 
-Two things cause this message.
+Three things cause these messages, and only two of them are problems.
 
-**First: the download is incomplete.** The extra part lives in the model files. If
-they are still pointer files, it is not there. MEASURED in this repository: the
-complete checkpoint contains 2,207 pieces of data in total, of which 29 belong to
+**First: the checkpoint simply has no MTP head.** The 9B, the 2-bit and AEON
+27B builds and the stock `mlx-community` 27B builds ship none — checked against
+each repository's weight index. For those, `verify-model.sh` prints `MTP head
+absent` and passes, and `doctor.sh` prints `PASS mtp_loaded false — expected`.
+Nothing is wrong; the speed feature does not apply to them.
+
+**Second: the download is incomplete.** For an OrcaRouter build the extra part
+lives in the model files, and the publisher's manifest says so. If the files are
+still pointer files, it is not there. MEASURED in this repository: the complete
+5-bit checkpoint contains 2,207 pieces of data in total, of which 29 belong to
 this feature.
 
-**Second: the wrong server program.** The widely used library `mlx-lm` **deletes**
+**Third: the wrong server program.** The widely used library `mlx-lm` **deletes**
 this part of the model while loading it. That is not a bug report; it is a visible
 line of its source code, and the change that would add an option to keep it is
 still an open proposal. This is the specific reason this project uses `mlx-serve`
 rather than `mlx-lm`.
 
-This is a **FIX THIS** problem.
+The second and third are **FIX THIS** problems.
 
 ### What to do
 
@@ -1657,8 +1680,10 @@ MTP head PRESENT — the reason this stack runs mlx-serve, not stock mlx-lm
 verify PASS
 ```
 
-Output trimmed. If the MTP count is 0 or the command names a pointer file, go to
-[entry 1](#lfs-pointers).
+Output trimmed. If the command names a pointer file, or reports that the
+manifest lists an MTP head that was not found, go to
+[entry 1](#lfs-pointers). If it says `MTP head absent` and passes, your
+checkpoint ships none, and there is nothing to fix.
 
 **Step 2.** Confirm you are running the right server program.
 
@@ -1812,11 +1837,12 @@ it says `nothing running on port 11234.`, nothing was running, which is also fin
 - It will not make the model as capable as a large hosted model. A
   27-billion-parameter model at 5-bit is materially weaker at long chains of tool
   use. Short, well-scoped tasks are where it earns its keep.
-- It will not make the model fit on a Mac with less than 32 GB of memory. See
-  [04 — memory safety](04-memory-safety.md) for the smaller models that do fit.
-- It will not tell you how fast the model runs on your Mac. No speed figure has
-  been measured on any machine other than the test machine (Apple M3 Max, 30 GPU
-  cores, 36 GB unified memory, macOS 26.5.2).
+- It will not make the 27B fit on a Mac with less than 32 GB of memory. See
+  [04 — memory safety](04-memory-safety.md) for the smaller build that does fit.
+- It will not tell you how fast the 27B runs on your Mac. No speed figure for it
+  has been measured on any machine, including the test machine (Apple M3 Max, 30
+  GPU cores, 36 GB unified memory, macOS 26.5.2). `./bin/bench.sh` measures
+  yours.
 
 ---
 

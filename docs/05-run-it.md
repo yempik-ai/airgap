@@ -145,7 +145,7 @@ context  65536 tokens, kv-quant turbo4
 budget   weights<=21GB, prefix 1536MB, idle-evict 900s
 log      ~/.mlx-serve/logs/mlx-serve-11234.log
 
-Loading about 19.1 GB. The first load takes about a minute.
+Loading about 19.1 GB of weights. The first load can take a minute.
 Leave this window open. Press Ctrl-C to stop, or run ./bin/stop.sh elsewhere.
 Next: open another window and run ./bin/claude-local.sh
 ```
@@ -155,8 +155,8 @@ it is listening.
 
 Six of those values differ on your Mac: the two memory figures, the path (it
 contains your account name), the context size, the two budget figures, and the
-folder name if you have the 4-bit or 8-bit build. The `endpoint` line is the same
-on every Mac, because `127.0.0.1` means "this Mac" everywhere.
+folder name if you have a different build. The `endpoint` line is the same on
+every Mac, because `127.0.0.1` means "this Mac" everywhere.
 
 **Leave this window open and alone.** The server runs in it. Closing the window
 stops the server.
@@ -227,11 +227,12 @@ You should see these four lines before Claude Code's own screen appears:
 claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 context  65536 tokens declared to the harness, 8192 max output
 mcp      strict (LEAN_MCP=1) — MCP servers off, saves ~17k prompt tokens per turn
-note     a one-line "unrecognized_model" warning at startup is EXPECTED and cosmetic
+note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
+         "claude.ai connectors are disabled" — that is this script keeping it local
 ```
 
-The model name and the context number differ if you have the 4-bit or 8-bit
-build, or a different context size. The address is the same on every Mac.
+The model name and the context number differ if you have a different build, or
+a different context size. The address is the same on every Mac.
 
 That third line mentions **MCP**, which stands for Model Context Protocol
 ([Glossary](09-glossary.md#model-context-protocol-mcp)). MCP servers are optional
@@ -275,16 +276,19 @@ none of those.
 
 Once through, you reach the normal Claude Code input prompt.
 
-### 4b. The one warning you will see — EXPECTED
+### 4b. The two lines you will see — EXPECTED
 
 Somewhere in Claude Code's startup you will see a one-line warning mentioning
-`unrecognized_model`.
+`unrecognized_model`, and possibly one saying *claude.ai connectors are disabled
+because ANTHROPIC_API_KEY or another auth source is set*.
 
-**That is EXPECTED. It is cosmetic. Nothing is broken.**
+**Both are EXPECTED. They are cosmetic. Nothing is broken.**
 
-It happens because Claude Code keeps a list of model names it knows about, and
-the name of a model that exists only on your Mac is not on it. Claude Code says
-so once and then works normally.
+The first happens because Claude Code keeps a list of model names it knows
+about, and the name of a model that exists only on your Mac is not on it. Claude
+Code says so once and then works normally. The second is Claude Code noticing
+the placeholder token the wrapper gives it — the thing that keeps it from
+signing in to claude.ai — and it costs you nothing this setup uses.
 
 This one string produces more confused questions than anything else in this
 setup, which is why it is named here before you meet it. Full entry:
@@ -396,12 +400,13 @@ understanding because they are the reason this works at all.
 
 ### 7a. It points *every* model setting at your Mac, not just the main one
 
-Claude Code does not use one model. It uses a main one for your questions and a
+Claude Code does not use one model. It uses a main one for your questions, a
 smaller, faster one in the background for housekeeping — naming a conversation,
-summarizing, and so on. There are seven separate settings that name a model, and
-different versions of Claude Code read different ones.
+summarizing, and so on — one for subagents, and a couple of classifiers. There
+are nine separate settings that name a model in the 2.1.233 binary, plus the
+`--model` flag, and different versions of Claude Code read different ones.
 
-The script sets all seven to your local model. If it set only the main one, the
+The script sets all of them to your local model. If it set only the main one, the
 background work would quietly reach for the real Anthropic service, and you would
 have a setup that is local except when it is not.
 
@@ -575,8 +580,10 @@ conversations degrade. Give it one job at a time and start fresh often. The full
 honest description is in
 [01 — requirements](01-requirements.md#6-what-you-get-and-what-you-do-not).
 
-No tokens-per-second figure has been measured for this model on any machine, so
-this repository does not print one.
+No tokens-per-second figure has been measured for the 27B on any machine, so
+this repository does not print one. `./bin/bench.sh` measures your own; the one
+figure on record is 57 tokens per second for the 9B on the test machine, one
+short greedy run, which says nothing about the 27B.
 
 ---
 

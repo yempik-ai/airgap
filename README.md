@@ -37,17 +37,18 @@ The usual answer is a local model, and the usual result is a weekend lost to it.
 
 `./bin/doctor.sh` prints your row and refuses to go further if the answer is no.
 
-| Memory | Verdict | Build | Context | Free RAM needed |
+| Memory | Verdict for the 27B | Default build | Context | Free RAM needed |
 |:--|:--|:--|--:|--:|
-| 8 / 16 / 18 GB | ✕ Does not fit | run Qwen3-4B / 8B / 14B instead | — | — |
-| 24 GB | ⚠ Not recommended | 4-bit · 16.3 GB | 16,384 | 18 GB |
-| 32 GB | ⚠ Tight | 4-bit · 16.3 GB | 32,768 | 19 GB |
-| **36 GB** | **✓ Workable — the tested machine** | **5-bit · 19.1 GB** | **65,536** | **22 GB** |
-| 48 GB | ✓ Comfortable | 5-bit · 19.1 GB | 131,072 | 26 GB |
-| 64 GB | ✓ Comfortable | 8-bit · 27.7 GB | 131,072 | 36 GB |
-| 96 GB+ | ✓ Comfortable | 8-bit · 27.7 GB | 262,144 | 40 GB |
+| 8 GB | ✕ Does not fit | `9b-4bit` · 4.7 GB — needs 6 GB free, which an 8 GB Mac rarely has | 32,768 | 6 GB |
+| 16 / 18 GB | ✕ Does not fit | `9b-4bit` · 4.7 GB (a 9B, safety training intact) | 32,768 | 6 GB |
+| 24 GB | ⚠ Not recommended | `9b-4bit` · 4.7 GB — `27b-4bit-aeon` (14.1 GB) fits under the GPU ceiling if you close everything | 32,768 | 8 GB |
+| 32 GB | ⚠ Tight | `27b-4bit` · 16.3 GB | 32,768 | 19 GB |
+| **36 GB** | **✓ Workable — the tested machine** | **`27b-5bit` · 19.1 GB** | **65,536** | **22 GB** |
+| 48 GB | ✓ Comfortable | `27b-5bit` · 19.1 GB | 131,072 | 26 GB |
+| 64 GB | ✓ Comfortable | `27b-8bit` · 27.7 GB | 131,072 | 36 GB |
+| 96 GB+ | ✓ Comfortable | `27b-8bit` · 27.7 GB | 262,144 | 40 GB |
 
-Apple Silicon only — Intel Macs, Windows and Linux cannot run this. Budget **45 GB of disk** while downloading, 20 GB after.
+Every row is what `bin/detect-hardware.sh` prints for that memory size (`HW_FORCE_RAM_GB=64 ./bin/detect-hardware.sh` reproduces any of them). Only the 36 GB row describes a machine anything was measured on. Apple Silicon only — Intel Macs, Windows and Linux cannot run this. Budget **45 GB of disk** while downloading the 27B, 20 GB after; the 9B needs a quarter of that.
 
 ---
 
@@ -61,7 +62,7 @@ git clone https://github.com/yempik-ai/airgap.git airgap && cd airgap
 ./start.sh
 ```
 
-**`./start.sh` is the only command you need to remember.** It installs the tools, downloads the model (asking first — it is 20 GB), proves the weights are real files, runs 21 health checks, and stops with a plain-English fix the moment anything needs you. Safe to run again at any time: finished steps are skipped.
+**`./start.sh` is the only command you need to remember.** It installs the tools, downloads the build that fits your Mac (asking first — it is 20 GB for the 27B), proves the weights are real files, runs 21 health checks, and stops with a plain-English fix the moment anything needs you. Safe to run again at any time: finished steps are skipped.
 
 **Then two commands, in two Terminal windows:**
 
@@ -82,7 +83,7 @@ Free memory before starting the server — it refuses to start below the thresho
 | # | Command | What it does |
 |:--|:--|:--|
 | 1 | `./bin/setup.sh` | installs git-lfs + mlx-serve; checks Homebrew and Claude Code |
-| 2 | `./bin/download-model.sh` | the 20 GB — resumable, pointer-verified, de-duplicated |
+| 2 | `./bin/download-model.sh` | the weights — size-checked against your Mac first, resumable, pointer-verified, de-duplicated |
 | 3 | `./bin/verify-model.sh` | proves the weights are real, not 135-byte placeholders |
 | 4 | `./bin/doctor.sh` | 21 checks, PASS/FAIL with a fix each. Changes nothing |
 | 5 | `./bin/serve.sh` | starts the server. Leave the window open |
@@ -92,19 +93,21 @@ Free memory before starting the server — it refuses to start below the thresho
 
 ### Too big? Pick a smaller build
 
-The 27B at 5-bit is the *tested* build, not the only one. You do not have to go hunting on Hugging Face — `./bin/models.sh list` shows every known Qwen3.8 MLX build with its real download size and whether it fits **your** Mac.
+The 27B at 5-bit is the *tested* build, not the only one. You do not have to go hunting on Hugging Face — `./bin/models.sh list` shows every build in the catalog with its real download size and the free memory **your** Mac needs for it: the same figure `serve.sh` enforces, computed on the spot, not a number typed into a table.
 
-| key | download | needs free | |
-|:--|--:|--:|:--|
-| `9b-4bit` | 4.7 GB | 8 GB | smallest — but **stock**, safety training intact |
-| `27b-2bit` | 7.8 GB | 11 GB | smallest abliterated. 2-bit costs real quality |
-| `27b-4bit-aeon` | 14.1 GB | 18 GB | a different abliteration lineage (AEON) |
-| `27b-4bit` | 16.9 GB | 21 GB | the sensible choice on a 32 GB Mac |
-| **`27b-5bit`** | **20.0 GB** | **23 GB** | **the tested build — every measured number here came from it** |
-| `27b-6bit` | 23.0 GB | 26 GB | only with memory to spare |
-| `27b-8bit` | 29.1 GB | 32 GB | wants a 48 GB Mac |
+| key | download | MTP head | |
+|:--|--:|:--|:--|
+| `9b-4bit` | 4.7 GB | no | smallest. A community distillation of Qwen3.8 into the Qwen3.5-9B architecture — **not an official Qwen release**, safety training intact. The default under 32 GB |
+| `27b-2bit` | 7.8 GB | no | smallest abliterated 27B. 2-bit costs real quality |
+| `27b-4bit-aeon` | 14.1 GB | no | a different abliteration lineage (AEON); fits under a 24 GB Mac's GPU ceiling |
+| `27b-4bit-stock` | 15.0 GB | no | the stock `mlx-community` 27B, safety training intact |
+| `27b-4bit` | 16.9 GB | yes | OrcaRouter — the default on a 32 GB Mac |
+| **`27b-5bit`** | **20.0 GB** | **yes** | **the tested build — every measured 27B number here came from it** |
+| `27b-6bit` | 23.0 GB | yes | only with memory to spare |
+| `27b-8bit` | 29.1 GB | yes | OrcaRouter — the default from 64 GB |
+| `27b-8bit-stock` | 27.5 GB | no | the stock `mlx-community` 27B at 8-bit |
 
-Sizes are the real `.safetensors` totals read from Hugging Face, not estimates. Switching takes three commands and keeps both models on disk:
+Sizes are the real `.safetensors` totals read from Hugging Face, not estimates; the MTP column was checked against each repository's weight index. The whole list is one file, [`bin/catalog.sh`](bin/catalog.sh), and every script reads it from there. Switching takes three commands and keeps both models on disk:
 
 ```bash
 ./bin/stop.sh
@@ -164,9 +167,10 @@ Three things make this model unusually good on a laptop:
 | …with `--strict-mcp-config`, the default here | **20,909 tokens** |
 | Prefix cache reuse on turn 2 | 16,384 / 20,906 |
 | Weights on disk, 5-bit, text-only (vision skipped) | 19.1 GB |
-| Tokens per second | **not measured** |
+| Tokens per second, **the 27B** | **not measured** |
+| Tokens per second, the 9B (`9b-4bit`, 60 greedy tokens, `bin/bench.sh`) | 57 tok/s decode, mlx-serve's own figure |
 
-No speed figure has been benchmarked, on this machine or any other. `./bin/bench.sh` produces a real one. Anything unmeasured is labelled unmeasured, here and throughout the docs.
+The 27B has no speed figure, on this machine or any other. The 9B figure is one short run of `./bin/bench.sh` on the test machine (M3 Max, 30 GPU cores) and says nothing about the 27B. Anything unmeasured is labelled unmeasured, here and throughout the docs.
 
 ### What has and has not been run here
 
@@ -176,14 +180,15 @@ Being precise about this matters more than looking finished.
 |:--|:--|
 | Checkpoint integrity, architecture, MTP head present in the bytes | ✓ `bin/verify-model.sh` |
 | **Every script, actually run** — `start`, `setup`, `download-model`, `models`, `verify-model`, `doctor`, `serve`, `claude-local`, `stop` | ✓ all of them |
-| **Claude Code answering from a local model, end to end** | ✓ `pull → use → serve → claude-local` returned `AIRGAP OK` |
+| **Claude Code answering from a local model, end to end** | ✓ `serve → doctor → claude-local -p` returned `AIRGAP OK` on the 9B |
 | Anthropic `/v1/messages`, tool calling, prefix-cache reuse | ✓ verified |
-| `doctor.sh` against a live server, including the `mtp_loaded` probe | ✓ correctly reported WARN on a checkpoint with no MTP head |
+| `doctor.sh` against a live server, including the `mtp_loaded` probe | ✓ 24 checks, all PASS on the 9B (which ships no MTP head, and doctor says so) |
+| `bench.sh`, exact-match check and decode speed | ✓ on the 9B: identical output, 57 tok/s |
 | **The 27B itself, loaded and served** | **✕ not yet** — the end-to-end runs used the 9B (4.7 GB) and Qwen3.5-0.8B |
-| **`mtp_loaded: true` on this checkpoint** | **✕ not yet confirmed** — see below |
-| Tokens per second, prefill rate | ✕ never measured |
+| **`mtp_loaded: true` on the 27B checkpoint** | **✕ not yet confirmed** — see below |
+| Tokens per second on the 27B, prefill rate | ✕ never measured |
 
-The end-to-end runs above used **`Qwen3.8-9B` at 4-bit** and **Qwen3.5-0.8B** — both the same `qwen3_5` architecture family as the 27B, so they exercise the same code path at a size that fits alongside a working day. What has not been run is the 27B itself.
+The end-to-end runs above used **`9b-4bit`** (a community distillation into the Qwen3.5-9B architecture) and **Qwen3.5-0.8B** — both the same `qwen3_5` architecture family as the 27B, so they exercise the same code path at a size that fits alongside a working day. What has not been run is the 27B itself.
 
 **The MTP caveat, stated plainly.** `mlx-serve` documents its native Qwen MTP head as auto-loading *"when the model dir ships `mtp/weights.safetensors`"*. **This checkpoint ships no such file** — its 29 MTP tensors are embedded in the main shards as `language_model.mtp.*`. The publisher reports MTP working on this exact checkpoint under mlx-serve 26.8.7, which is good evidence, but it is their measurement and has not been reproduced here.
 
@@ -202,12 +207,20 @@ The end-to-end runs above used **`Qwen3.8-9B` at 4-bit** and **Qwen3.5-0.8B** �
 
 ---
 
+## Where this is going
+
+Today: one harness (Claude Code), one model family (Qwen3.8), one runtime (`mlx-serve`), on Apple Silicon. The point of the scripts is that none of that should require you to learn MLX first — and the next steps make the harness, the catalog and the runtime each a pluggable adapter behind one command, so the harness you already use is the one that gets pointed at your Mac. The plan, in phases and with its non-goals, is in [`ROADMAP.md`](ROADMAP.md).
+
+---
+
 ## Repo layout
 
 ```text
 airgap/
 ├── start.sh                 ← the one command: tools, model, checks
+├── ROADMAP.md               ← where this is going: any harness, any runtime
 ├── bin/
+│   ├── catalog.sh           ← the one list of models: names, repos, sizes
 │   ├── detect-hardware.sh   ← reads your Mac, derives every setting
 │   ├── doctor.sh            ← 21 checks, a fix per failure
 │   ├── setup.sh             ← installs the tooling
@@ -217,7 +230,7 @@ airgap/
 │   ├── claude-local.sh      ← Claude Code, pinned to loopback
 │   ├── stop.sh              ← hands the memory straight back
 │   ├── verify-model.sh      ← integrity check
-│   └── bench.sh             ← speculative decoding, on versus off
+│   └── bench.sh             ← speculative decoding on versus off, tokens/s
 ├── docs/                    ← 01 → 09, in reading order
 └── config.env.example       ← every setting, with its default
 ```
@@ -245,7 +258,7 @@ That is workable for research on a machine you control, which is what this is. I
 
 ### Can I run a smaller version of Qwen3.8?
 
-Yes. `./bin/models.sh list` shows seven MLX builds from 4.7 GB to 29.1 GB and marks which fit your Mac. The smallest **abliterated** option is a 2-bit 27B at 7.8 GB; the smallest overall is a stock 9B at 4.7 GB. `./bin/models.sh pull <key>` downloads one and `use <key>` switches to it — no hunting on Hugging Face, and both models stay on disk so switching back is instant.
+Yes. `./bin/models.sh list` shows nine MLX builds from 4.7 GB to 29.1 GB and marks which fit your Mac. The smallest **abliterated** option is a 2-bit 27B at 7.8 GB; the smallest overall is a 9B at 4.7 GB — a community distillation of Qwen3.8 into the Qwen3.5-9B architecture, safety training intact, since Qwen itself published no 9B. On a Mac under 32 GB the scripts default to that 9B. `./bin/models.sh pull <key>` downloads one and `use <key>` switches to it — no hunting on Hugging Face, and both models stay on disk so switching back is instant.
 
 ### Can I run Qwen3.8 on a Mac?
 
@@ -253,11 +266,11 @@ Yes. Qwen3.8-27B runs on Apple Silicon Macs through **MLX**, Apple's array frame
 
 ### How much RAM do I need to run Qwen3.8-27B locally?
 
-The weights are **16.3 GB at 4-bit, 19.1 GB at 5-bit, 27.7 GB at 8-bit**, and all of it must fit in memory alongside macOS. In practice: 32 GB is tight, 36 GB works, 48 GB is comfortable. Under 24 GB, run a smaller model instead — Qwen3-14B, 8B or 4B. See [the table above](#will-it-run-on-your-mac).
+The weights are **16.3 GB at 4-bit, 19.1 GB at 5-bit, 27.7 GB at 8-bit**, and all of it must fit in memory alongside macOS. In practice: 32 GB is tight, 36 GB works, 48 GB is comfortable. Under 32 GB the scripts default to the 9B in the catalog instead. See [the table above](#will-it-run-on-your-mac).
 
 ### Is there an uncensored version of Qwen3.8?
 
-Yes. This repository is built around **`chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit`**, a native MLX build of the abliterated Qwen3.8-27B. GGUF builds live at `orcarouter/Qwen3.8-27B-Uncensored-GGUF`. The stock, unmodified builds are at `mlx-community/Qwen3.8-27B-*` if you would rather keep the safety training.
+Yes. This repository is built around **`chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit`**, a native MLX build of the abliterated Qwen3.8-27B. GGUF builds live at `orcarouter/Qwen3.8-27B-Uncensored-GGUF`. The stock, unmodified builds are at `mlx-community/Qwen3.8-27B-*` if you would rather keep the safety training — `./bin/models.sh use 27b-4bit-stock` selects one.
 
 ### What does "abliterated" mean?
 
@@ -273,7 +286,7 @@ Because `qwen3_5` is the **architecture family**, not the model version. Qwen3.8
 
 ### Why MLX instead of Ollama, LM Studio, llama.cpp or vLLM?
 
-MLX is built for Apple's unified memory, so a 20 GB model is directly addressable with no host-to-GPU copies. **vLLM** cannot read MLX-quantized tensors and its PagedAttention and continuous batching optimize throughput across many users, while a single local user is bound by latency. **Ollama, LM Studio and llama.cpp** all run GGUF well, but on this checkpoint they do not use its built-in MTP speculative-decoding head, which the publisher measured at roughly 1.5×.
+MLX is built for Apple's unified memory, so a 20 GB model is directly addressable with no host-to-GPU copies. **vLLM** cannot read MLX-quantized tensors and its PagedAttention and continuous batching optimize throughput across many users, while a single local user is bound by latency. **Ollama, LM Studio and llama.cpp** all run GGUF well, but on this checkpoint they do not use its built-in MTP speculative-decoding head, which the publisher measured at roughly 1.5×. Whether that matters to you is a fair question — [`ROADMAP.md`](ROADMAP.md) is about making the runtime a choice rather than a given.
 
 ### Which Macs does this work on — M1, M2, M3, M4?
 
@@ -294,13 +307,13 @@ No, and it is worth being clear about that. A 27B model at 5-bit is materially w
 - Repository: [github.com/yempik-ai/airgap](https://github.com/yempik-ai/airgap)
 - Yempik: [yempik.com](https://www.yempik.com)
 - Companion projects: [`code-os`](https://github.com/yempik-ai/code-os) · [`cowork-os`](https://github.com/yempik-ai/cowork-os)
-- Changelog: [`CHANGELOG.md`](CHANGELOG.md)
+- Changelog: [`CHANGELOG.md`](CHANGELOG.md) · roadmap: [`ROADMAP.md`](ROADMAP.md)
 - AI citation notes: [`AI-CITATION.md`](AI-CITATION.md) · citation metadata: [`CITATION.cff`](CITATION.cff) · [`llms.txt`](llms.txt)
 - Model weights (not included here): [`chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit`](https://huggingface.co/chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit) · [`mlx-serve`](https://github.com/ddalcu/mlx-serve)
 
 ### Canonical summary for search and AI readers
 
-`airgap` is an open-source guide and script kit, created by Yempik and maintained by Simone Bova, for running the **Qwen3.8-27B** language model entirely offline on an **Apple Silicon Mac** (M1, M2, M3, M4) in **MLX** format, and using it as the local backend for **Claude Code**. It ships a catalog of seven MLX builds from 4.7 GB to 29.1 GB, selectable with one command, and supports the **uncensored** build of Qwen3.8-27B — variously described as *abliterated*, *decensored*, *liberated*, *unaligned* or *refusal-removed*, all names for the same technique of orthogonalizing the refusal direction out of the residual stream — as well as the stock `mlx-community` builds at 4-bit, 5-bit and 8-bit quantization. It exists because confidential engineering work — client code under NDA, unreleased products, security reviews — cannot be sent to a hosted model API. The kit uses `mlx-serve`, which speaks the Anthropic Messages API natively so that no translation proxy is required, and which preserves the checkpoint's built-in multi-token-prediction speculative-decoding head that stock `mlx-lm` discards on load. Its scripts detect the host Mac's memory and derive their own context window, memory floor and cache budgets; they refuse to start rather than let the machine swap, and refuse any configuration that would expose the model beyond loopback. The documentation is written for readers who have never used a terminal and covers hardware requirements, installation, memory safety on Apple's unified-memory architecture, troubleshooting, and a first-principles explanation of hybrid linear attention, quantization and speculative decoding. No model weights are distributed in this repository.
+`airgap` is an open-source guide and script kit, created by Yempik and maintained by Simone Bova, for running the **Qwen3.8-27B** language model entirely offline on an **Apple Silicon Mac** (M1, M2, M3, M4) in **MLX** format, and using it as the local backend for **Claude Code**. It ships a catalog of nine MLX builds from 4.7 GB to 29.1 GB, selectable with one command, and supports the **uncensored** build of Qwen3.8-27B — variously described as *abliterated*, *decensored*, *liberated*, *unaligned* or *refusal-removed*, all names for the same technique of orthogonalizing the refusal direction out of the residual stream — as well as the stock `mlx-community` builds at 4-bit and 8-bit quantization. It exists because confidential engineering work — client code under NDA, unreleased products, security reviews — cannot be sent to a hosted model API. The kit uses `mlx-serve`, which speaks the Anthropic Messages API natively so that no translation proxy is required, and which preserves the checkpoint's built-in multi-token-prediction speculative-decoding head that stock `mlx-lm` discards on load. Its scripts detect the host Mac's memory and derive their own context window, memory floor and cache budgets; they refuse to start rather than let the machine swap, and refuse any configuration that would expose the model beyond loopback. The documentation is written for readers who have never used a terminal and covers hardware requirements, installation, memory safety on Apple's unified-memory architecture, troubleshooting, and a first-principles explanation of hybrid linear attention, quantization and speculative decoding. No model weights are distributed in this repository.
 
 ---
 

@@ -13,31 +13,11 @@ set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]:-$0}")/env.sh"
 
-# =============================================================================
-# The catalog.
-#
-#   key | huggingface repo | download GB | free RAM GB | abliterated | note
-#
-# Download GB is the real total of the .safetensors files, read from
-# huggingface.co in August 2026, not an estimate. Free RAM is that figure plus
-# roughly 3 GB for the conversation, the caches and the load itself; it is the
-# number ./bin/serve.sh will insist on before it starts.
-#
-# "abliterated: yes" means the publisher removed the model's refusal behaviour.
-# "no" means it is the stock model with its safety training intact. Both are
-# listed because the honest answer to "which should I use" depends on why you
-# came here, and a smaller stock model beats a 2-bit abliterated one at most
-# ordinary work.
-# =============================================================================
-CATALOG='
-9b-4bit|keXjos/Qwen3.8-9B-mlx-4Bit|4.7|8|no|Smallest. Stock Qwen3.8-9B, safety training intact. Best if you only want to see the stack work.
-27b-2bit|EgorKodin/Qwen3.8-27B-ABLITERATED-2bit-MLX-TextOnly|7.8|11|yes|Smallest abliterated. 2-bit costs real quality — try it before trusting it. Text only.
-27b-4bit-aeon|choppedgarlic/Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-4bit-MLX|14.1|18|yes|A different abliteration lineage (AEON) at 4-bit. Smaller than OrcaRouter 4-bit.
-27b-4bit|chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-4bit|16.9|21|yes|OrcaRouter 4-bit. The sensible choice on a 32 GB Mac.
-27b-5bit|chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit|20.0|23|yes|OrcaRouter 5-bit. THE TESTED BUILD — every measured number in these docs came from it.
-27b-6bit|chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-6bit|23.0|26|yes|OrcaRouter 6-bit. Worth it only if you have memory to spare.
-27b-8bit|chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-8bit|29.1|32|yes|OrcaRouter 8-bit. Needs a 48 GB Mac to be comfortable.
-'
+# The catalog itself lives in bin/catalog.sh (one list, shared with
+# bin/detect-hardware.sh and bin/env.sh). The free memory each build needs is
+# not stored anywhere: it is computed below for THIS Mac by hw_rebudget, the
+# same function bin/serve.sh uses to decide whether to start, so the number
+# `list` prints is the number `serve.sh` will insist on.
 
 usage() {
   cat <<'EOF'
@@ -45,12 +25,14 @@ models.sh — choose which model to run.
 
 WHAT IT DOES
   Keeps a short list of Qwen3.8 builds in MLX format that are known to exist,
-  with their real download size and the free memory each one needs. You do not
+  with their real download size and the free memory each one needs on YOUR
+  Mac — the same figure ./bin/serve.sh enforces before it starts. You do not
   have to go and find them on huggingface.co yourself.
 
 WHAT IT COSTS
   list, use, which  nothing. They read, and write one line of settings.
   pull              a download, between 4.7 GB and 29.1 GB. Nothing is deleted.
+                    (The sizes are in bin/catalog.sh, read from huggingface.co.)
 
 USAGE (run from the repo root)
   ./bin/models.sh list           show the catalog, marked up for YOUR Mac
@@ -80,8 +62,9 @@ A MODEL NOT ON THE LIST
 WHAT YOU SHOULD SEE
   `list` prints one row per model. The marks mean:
       ->  selected right now        ok    fits this Mac
-      *   downloaded already        TIGHT close to the limit
-                                    NO    not enough memory on this Mac
+      *   downloaded already        TIGHT close everything else first
+                                    NO    serve.sh would refuse: the weights do
+                                          not fit under this Mac's GPU ceiling
 
 READ NEXT
   docs/03-get-the-model.md
@@ -90,20 +73,12 @@ EOF
 
 # --- helpers -----------------------------------------------------------------
 
-# Print the catalog line for a key, or nothing.
-cat_line() {
-  printf '%s\n' "$CATALOG" | while IFS='|' read -r k rest; do
-    [ -z "$k" ] && continue
-    if [ "$k" = "$1" ]; then printf '%s|%s\n' "$k" "$rest"; return 0; fi
-  done
-}
-
 # Resolve a key OR a raw <org>/<repo> into a repo id.
 resolve_repo() {
   case "$1" in
     */*) printf '%s\n' "$1"; return 0 ;;
   esac
-  line="$(cat_line "$1")"
+  line="$(catalog_line "$1")"
   if [ -z "$line" ]; then
     echo "models.sh: '$1' is not in the catalog." >&2
     echo "           Run './bin/models.sh list' to see the keys," >&2
@@ -130,24 +105,22 @@ is_downloaded() {
 cmd_list() {
   ram="${HW_RAM_GB:-0}"
   echo "Qwen3.8 for Apple Silicon, in MLX format. Abliterated unless marked [stock]."
-  echo "Your Mac has ${ram} GB of memory, so:"
-  echo "     ok = comfortable      TIGHT = close everything first      NO = will not fit"
+  echo "Your Mac has ${ram} GB of memory. \"needs\" is the free memory ./bin/serve.sh will"
+  echo "insist on for that build at a ${CTX_SIZE}-token window, worked out for this Mac:"
+  echo "     ok = comfortable      TIGHT = close everything first      NO = will not fit under the GPU ceiling"
   echo
 
-  printf '%s\n' "$CATALOG" | while IFS='|' read -r k repo gb need abl note; do
+  printf '%s\n' "$CATALOG" | while IFS='|' read -r k repo gb loaded abl note; do
     [ -z "$k" ] && continue
 
     mark="   "
     is_downloaded "$repo" && mark="  *"
     [ "$(basename "$MODEL_DIR")" = "$(basename "$repo")" ] && mark=" ->"
 
-    # A model should leave roughly a third of memory to macOS. Below 65% of RAM
-    # it is comfortable; up to 85% it works only with everything else closed.
-    if [ "$ram" = "0" ]; then fit="?"
-    elif awk -v n="$need" -v r="$ram" 'BEGIN{exit !(n <= r * 0.65)}'; then fit="ok"
-    elif awk -v n="$need" -v r="$ram" 'BEGIN{exit !(n <= r * 0.85)}'; then fit="TIGHT"
-    else fit="NO"
-    fi
+    # The same arithmetic serve.sh enforces, for this build on this Mac.
+    [ -n "$loaded" ] || loaded="$gb"
+    hw_fit_mark "$loaded" "$CTX_SIZE"
+    fit="$HW_FIT_MARK"; need="$HW_MIN_FREE_GB"
 
     tag=""; [ "$abl" = "no" ] && tag="  [stock]"
     printf '%s %-14s %5s GB   needs %2s GB free   %-5s%s\n' \
@@ -187,17 +160,22 @@ cmd_use() {
 
   # Replace any existing MODEL_REPO line, then append ours. Keeps the rest of
   # config.env untouched, so your other settings survive a model switch.
+  # MODEL_DIR and MODEL_QUANT lines are dropped too: either one would override
+  # the selection and make `use` a silent no-op.
+  dropped=""
+  if grep -q '^[[:space:]]*MODEL_DIR=' "$cfg" 2>/dev/null;   then dropped="${dropped} MODEL_DIR"; fi
+  if grep -q '^[[:space:]]*MODEL_QUANT=' "$cfg" 2>/dev/null; then dropped="${dropped} MODEL_QUANT"; fi
   tmp="$(mktemp)"
-  grep -v '^[[:space:]]*MODEL_REPO=' "$cfg" > "$tmp" 2>/dev/null || true
+  grep -v -e '^[[:space:]]*MODEL_REPO=' -e '^[[:space:]]*MODEL_DIR=' -e '^[[:space:]]*MODEL_QUANT=' "$cfg" > "$tmp" 2>/dev/null || true
   printf 'MODEL_REPO=%s\n' "$repo" >> "$tmp"
   mv "$tmp" "$cfg"
 
   echo "selected $(basename "$repo")"
   echo "  repo   $repo"
   echo "  folder $dir"
-  echo "  saved  config.env"
+  echo "  saved  config.env${dropped:+ (removed the${dropped} line(s), which would have overridden this)}"
   echo
-  if curl -fsS --max-time 2 "$BASE_URL/health" >/dev/null 2>&1; then
+  if server_up; then
     echo "The server is still running the OLD model. To switch:"
     echo "    ./bin/stop.sh && ./bin/serve.sh"
   else
@@ -212,7 +190,7 @@ cmd_which() {
   if is_downloaded "$MODEL_REPO"; then
     echo "state     downloaded"
   else
-    echo "state     NOT downloaded — ./bin/models.sh pull $(basename "$MODEL_REPO")"
+    echo "state     NOT downloaded — ./bin/models.sh pull $MODEL_REPO"
   fi
 }
 

@@ -7,9 +7,10 @@
 # plain-English fix the moment something needs you. Safe to run again at any
 # time: every step checks whether it is already done and skips it if so.
 #
-# It deliberately does NOT start the server. The server holds ~19 GB and has to
-# stay in its own window, so the last thing this script does is tell you the two
-# commands to run and in which window.
+# It deliberately does NOT start the server. The server holds the weights (about
+# 19 GB for the default 27B) and has to stay in its own window, so the last
+# thing this script does is tell you the two commands to run and in which
+# window.
 
 set -euo pipefail
 
@@ -22,7 +23,8 @@ start.sh — get from a fresh clone to ready-to-run.
 
 WHAT IT DOES, in order
   1. setup            installs git-lfs and mlx-serve, checks Homebrew and Claude Code
-  2. download         the model, if you do not have one yet (about 20 GB)
+  2. download         the model, if you do not have one yet (about 20 GB for
+                      the default 27B build; less on a Mac that gets a smaller one)
   3. verify           proves the weights are real files and not placeholders
   4. doctor           checks the whole setup and prints PASS/FAIL per item
   Then it tells you the two commands that actually run it.
@@ -90,7 +92,8 @@ if [ "$have_weights" = "1" ]; then
 else
   echo "No model on disk yet."
   echo "About to download: $MODEL_REPO"
-  echo "Size: about 20 GB. It resumes if interrupted, so this is safe to stop."
+  echo "Picked for this ${HW_RAM_GB} GB Mac. ./bin/download-model.sh prints the exact size first;"
+  echo "the download resumes if interrupted, so this is safe to stop. Other builds: ./bin/models.sh list"
   echo
   if [ "$ASSUME_YES" != "1" ] && [ -t 0 ]; then
     printf 'Download it now? [y/N] '

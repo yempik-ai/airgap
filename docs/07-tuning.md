@@ -82,8 +82,8 @@ repository folder. Run the `cd` command above first.
 ./bin/detect-hardware.sh
 ```
 
-You should see a report ending in five recommended settings. Every line is
-specific to your Mac. The output is described in
+You should see a report ending in five recommended settings — the build it
+picks for you, and the four memory numbers. Every line is specific to your Mac. The output is described in
 [01 — requirements](01-requirements.md#4-let-your-mac-answer-for-itself).
 
 ---
@@ -141,10 +141,11 @@ memory for the cache, in GiB = context size in tokens / 65,536
 ```
 
 65,536 tokens therefore costs exactly 1.00 GiB. This formula is **exact for this
-architecture and wrong for any other model**. Every smaller model named as a
-fallback in [01 — requirements](01-requirements.md#ram-tiers) is an ordinary
-dense model where all forty-odd layers hold a growing cache, so its per-token
-cost is several times higher. Do not carry this formula across.
+architecture**. The 9B in the catalog has the same layer pattern with half as
+many layers, so for it the formula over-estimates by two, which is the safe
+direction for a memory guard and why the scripts use the one formula for both.
+For an ordinary dense model, where every layer holds a growing cache, it is
+wrong by a factor of several. Do not carry it across to one.
 
 </details>
 
@@ -250,7 +251,8 @@ Every one of these can go in `config.env` or in front of a command.
 | `PREFILL_CHUNK` | 4096 | How much text is read at a time on the first pass | Your Mac spikes while reading a long file. |
 | `NO_VISION` | 1 | Skips loading the image-reading part | Only to feed the model pictures. |
 | `LEAN_MCP` | 1 | Starts Claude Code with optional tool servers off | Section 6. |
-| `MODEL_QUANT` | worked out from your memory | Which build: `4bit`, `5bit`, `8bit` | Section 8. |
+| `MODEL_QUANT` | worked out from your memory | Which OrcaRouter build: `4bit`, `5bit`, `6bit`, `8bit` | Section 8. |
+| `MODEL_REPO` | worked out from your memory | Which model, by its huggingface.co address — any build, catalog or not | Section 8, or `./bin/models.sh use`. |
 | `METRICS` | 1 | Publishes speed and cache counters | Leave it on. Section 10. |
 | `EXTRA_ARGS` | empty | Passed to the server exactly as typed, last | A setting this repository has not named. Section 11. |
 
@@ -365,38 +367,46 @@ You should see `idle-evict 0s` on the banner's `budget` line.
 
 ## 8. Moving to a different build of the model
 
-The publisher offers three sizes of the same checkpoint. Fewer bits means a
-smaller file and slightly lower quality; this is **quantization**
-([Glossary](09-glossary.md#quantization)).
+The publisher offers the same checkpoint at 4, 5, 6 and 8 bits, and the catalog
+in `bin/catalog.sh` adds a 9B, a 2-bit and an AEON 27B, and the stock
+`mlx-community` 27B. Fewer bits means a smaller file and slightly lower
+quality; this is **quantization** ([Glossary](09-glossary.md#quantization)).
 
 | Build | Weights in memory, text only | Suits |
 |---|---|---|
-| 4-bit | about 16.3 GB | 24 and 32 GB Macs |
-| 5-bit | about 19.1 GB (MEASURED) | 36 and 48 GB Macs — the tested build |
-| 8-bit | about 27.7 GB | 64 GB Macs and larger |
+| `27b-4bit` | about 16.3 GB | 32 GB Macs |
+| `27b-5bit` | about 19.1 GB (MEASURED) | 36 and 48 GB Macs — the tested build |
+| `27b-6bit` | about 23 GB (download size; not known separately) | 48 GB Macs with memory to spare |
+| `27b-8bit` | about 27.7 GB | 64 GB Macs and larger |
+| `9b-4bit` | about 4.7 GB (MEASURED) | anything under 32 GB, and everyday work next to a browser |
 
-Only the 5-bit figure was measured on the test machine. The other two were
-computed from the file sizes the publisher lists on huggingface.co, and are
-PUBLISHER-REPORTED.
+Only the 5-bit and 9B figures were measured on the test machine. The 4-bit and
+8-bit figures were computed from the file sizes the publisher lists on
+huggingface.co, and are PUBLISHER-REPORTED. `./bin/models.sh list` prints every
+build with the free memory it needs on your Mac.
 
 If you have 64 GB or more and downloaded 5-bit first, 8-bit is a real quality
-improvement and worth the second download. To get it, put a line reading
-`MODEL_QUANT=8bit` in your `config.env` (remove the `#` in front of it), then:
+improvement and worth the second download. The short way is three commands:
 
 ```
-./bin/download-model.sh
+./bin/stop.sh
+./bin/models.sh pull 27b-8bit
+./bin/models.sh use  27b-8bit
 ```
 
-You should see a `repo` line ending in `-8bit` and a `target` line naming a new
-folder ending in `-8bit`.
+`use` writes a `MODEL_REPO` line into `config.env` and removes any `MODEL_DIR`
+or `MODEL_QUANT` line that would override it. The long way is to put
+`MODEL_QUANT=8bit` in `config.env` yourself (remove the `#` in front of it) and
+run `./bin/download-model.sh`; you should see a `repo` line ending in `-8bit`
+and a `target` line naming a new folder ending in `-8bit`.
 
 Each build lives in its own folder, named after itself, so the name the server
-answers to always describes what is really inside. Both builds can sit on disk at
-once if you have the space; the settings decide which one runs.
+answers to always describes what is really inside. Several builds can sit on
+disk at once if you have the space; the settings decide which one runs.
 
 **If you do not see that.** If `repo` still ends in `-5bit`, the `#` is still in
 front of your `MODEL_QUANT` line, or you have a `MODEL_REPO` line further up the
-file overriding it.
+file overriding it — `MODEL_REPO` always wins over `MODEL_QUANT`.
 
 ---
 
@@ -413,9 +423,9 @@ The claim worth checking is not that it is faster. It is that the answer is
 `./bin/bench.sh` runs the model twice with the randomness switched off, once with
 the feature on and once with it off, and compares a fingerprint of each answer.
 
-**WHAT THIS CHANGES ON YOUR MAC.** It loads about 19.1 GB into memory, twice, one
-after the other. It uses the same free-memory rule `./bin/serve.sh` does and
-refuses to start below it.
+**WHAT THIS CHANGES ON YOUR MAC.** It loads the selected model's weights into
+memory — about 19.1 GB for the 5-bit 27B — twice, one after the other. It uses
+the same free-memory rule `./bin/serve.sh` does and refuses to start below it.
 
 **IS IT REVERSIBLE.** There is nothing to reverse. It reads the model and prints
 numbers. Press Control-C to stop it at any point.
@@ -440,35 +450,41 @@ showing the memory before and after. Then:
 ./bin/bench.sh
 ```
 
-You should see something like this:
+You should see something like this — this is a real run, MEASURED on the test
+machine, of the 9B rather than the 27B:
 
 ```
-memory   24.3 GB available (need 22 GB) — ok
+memory   18.0 GB available (need 11 GB) — ok
+model:  Qwen3.8-9B-mlx-4Bit (~4.7 GB)
 prompt: Explain why speculative decoding produces output identical to standard...
-tokens: 200, temp 0.0 (greedy — required for an exact-match comparison)
-This loads about 20 GB twice. Expect a couple of minutes with no output.
+tokens: 60, temp 0.0 (greedy — required for an exact-match comparison)
+This loads the model twice. Expect a wait with no output while it reads the disk.
 
 ── spec-on ─────────────────────────────────
-  wall clock : 6.81s (includes ~20GB model load)
-  output sha : 65966537xxxxxxxx
-── spec-off ────────────────────────────────
-  wall clock : 10.15s (includes ~20GB model load)
-  output sha : 65966537xxxxxxxx
+  generated  : 60 tokens
+  speed      : 57.114 tokens/s (mlx-serve's own figure, decode only)
+  output sha : 3cb28ef32b0af61d
+── spec-off ─────────────────────────────────
+  generated  : 60 tokens
+  speed      : 56.302 tokens/s (mlx-serve's own figure, decode only)
+  output sha : 3cb28ef32b0af61d
 
 ── result ──────────────────────────────────
   outputs IDENTICAL  <- speculative decoding is exact, as expected
-  speedup ~ 1.49x (load time dilutes this; the decode-only gain is larger)
+  speed-up ~ 1.01x  (57.114 tokens/s with the speed features on, 56.302 off)
 ```
 
-**The two times in that example are the model publisher's published figures, not
-this repository's.** They are PUBLISHER-REPORTED and have NOT YET been reproduced
-on the test machine. They are shown here only so you know the shape of the output.
-Your own two times will differ, and the interesting line is the last-but-one:
-`outputs IDENTICAL`.
+Read that run honestly: the 9B ships no MTP head, and this prompt gives prompt
+lookup nothing to copy, so the two speeds are the same within noise — which is
+exactly what the two identical fingerprints and a ratio of 1.0 say. It is a
+57-tokens-per-second figure for the 9B on an M3 Max, one short run, and nothing
+more. On an OrcaRouter 27B, where the head exists, the publisher's own figures
+are 6.81 seconds against 10.15 seconds for the same answer — PUBLISHER-REPORTED,
+NOT YET reproduced on the test machine. The interesting line is always the
+last-but-one: `outputs IDENTICAL`.
 
-Both times include reading 20 GB off disk, which makes the difference look
-smaller than it is. The gain during the actual writing is larger, and this
-repository has not measured it.
+The speeds are the ones mlx-serve prints after each run: decode only, so reading
+the model off the disk does not blur them.
 
 **If you do not see that.**
 
@@ -477,7 +493,8 @@ repository has not measured it.
 - `REFUSING TO START — not enough free memory.` — **STOP.** Close what it lists,
   then run it again.
 - `outputs DIFFER` — that is unexpected with the randomness off. Do not trust the
-  timings. See [06 — troubleshooting](06-troubleshooting.md#mtp-missing).
+  speeds; the two answers are kept in a temporary folder the script names. See
+  [06 — troubleshooting](06-troubleshooting.md#mtp-missing).
 
 To measure a longer answer, put the token count in front:
 
@@ -573,8 +590,8 @@ carries the same list with a longer explanation each.
 
 | Name | Default |
 |---|---|
-| `MODEL_QUANT` | worked out from your memory: `4bit`, `5bit` or `8bit` |
-| `MODEL_REPO` | `chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-<MODEL_QUANT>` |
+| `MODEL_QUANT` | the OrcaRouter build: `4bit`, `5bit`, `6bit` or `8bit`; empty for any other model |
+| `MODEL_REPO` | the catalog build `bin/detect-hardware.sh` picks for your memory — `chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-<MODEL_QUANT>` from 32 GB up, `keXjos/Qwen3.8-9B-mlx-4Bit` below |
 | `MODEL_DIR` | the repository folder, plus the name of `MODEL_REPO` |
 | `MODEL_ID` | the last part of `MODEL_DIR` — the name the server answers to |
 
@@ -641,9 +658,9 @@ After changing a setting, the proof is in the server's own banner:
 ./bin/doctor.sh
 ```
 
-You should see `doctor: OK` on the last line, and the `context declared` line
-showing the context size you chose. `./bin/serve.sh`'s banner shows `context`,
-`budget` and `log` for the settings actually in use.
+You should see `doctor: OK` on the last line, and the `context` line showing the
+context size you chose. `./bin/serve.sh`'s banner shows `context`, `budget` and
+`log` for the settings actually in use.
 
 **If you do not see that.** A setting that appears not to have taken effect is
 almost always priority: something further up the table in Section 1 is winning.
@@ -673,9 +690,10 @@ gives it more room, not more ability; raising `KV_QUANT` reduces one specific
 kind of degradation, not all of them. The honest description of the ceiling is in
 [01 — requirements](01-requirements.md#6-what-you-get-and-what-you-do-not).
 
-No tokens-per-second figure has been measured for this model on any machine, so
-this page does not print one. `./bin/bench.sh` measures a comparison on your own
-Mac, which is the only speed number worth having.
+No tokens-per-second figure has been measured for the 27B on any machine, so
+this page does not print one for it. `./bin/bench.sh` measures a comparison on
+your own Mac, which is the only speed number worth having; the 9B run above is
+what that looks like.
 
 ---
 

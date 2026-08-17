@@ -117,7 +117,8 @@ read the line labeled **Memory**.
 
 The conclusion to draw from this table: **36 GB is the machine this was tested
 on, 48 GB and above is comfortable, 32 GB works with a smaller build of the
-model, and below 32 GB you should run a different and smaller model instead.**
+model, and below 32 GB the scripts default to a smaller model — a 9B — from the
+same catalog.**
 
 Two words in the table are worth knowing before you read it.
 
@@ -133,39 +134,44 @@ Two words in the table are worth knowing before you read it.
   ([Glossary](09-glossary.md#quantization)) and Section 6 explains it. Fewer bits
   means a smaller file and slightly lower quality.
 
-| Your memory | Verdict for a 27B model | Which build | Context window | Free memory the server asks for |
+| Your memory | Verdict for the 27B | The build the scripts pick | Context window | Free memory the server asks for |
 |---|---|---|---|---|
-| 8 GB | Does not fit | none — run Qwen3-4B instead (about 2.3 GB) | — | — |
-| 16 GB | Does not fit | none — run Qwen3-8B instead (about 4.5 GB) | — | — |
-| 18 GB | Does not fit | none — run Qwen3-14B instead (about 8 GB) | — | — |
-| 24 GB | Not recommended | 4-bit, about 16.3 GB | 16,384 | 18 GB |
-| 32 GB | Tight | 4-bit, about 16.3 GB | 32,768 | 19 GB |
-| 36 GB | Workable — the tested machine | 5-bit, about 19.1 GB | 65,536 | 22 GB |
-| 48 GB | Comfortable | 5-bit, about 19.1 GB | 131,072 | 26 GB |
-| 64 GB | Comfortable | 8-bit, about 27.7 GB | 131,072 | 36 GB |
-| 96 GB or more | Comfortable | 8-bit, about 27.7 GB | 262,144 | 40 GB |
+| 8 GB | Does not fit | `9b-4bit`, about 4.7 GB — needs 6 GB free, which an 8 GB Mac rarely has | 32,768 | 6 GB |
+| 16 GB | Does not fit | `9b-4bit`, about 4.7 GB | 32,768 | 6 GB |
+| 18 GB | Does not fit | `9b-4bit`, about 4.7 GB | 32,768 | 6 GB |
+| 24 GB | Not recommended | `9b-4bit`, about 4.7 GB (`27b-4bit-aeon`, 14.1 GB, fits under the ceiling if you close everything) | 32,768 | 8 GB |
+| 32 GB | Tight | `27b-4bit`, about 16.3 GB | 32,768 | 19 GB |
+| 36 GB | Workable — the tested machine | `27b-5bit`, about 19.1 GB | 65,536 | 22 GB |
+| 48 GB | Comfortable | `27b-5bit`, about 19.1 GB | 131,072 | 26 GB |
+| 64 GB | Comfortable | `27b-8bit`, about 27.7 GB | 131,072 | 36 GB |
+| 96 GB or more | Comfortable | `27b-8bit`, about 27.7 GB | 262,144 | 40 GB |
 | Intel Mac, Windows, Linux | Not supported | — | — | — |
 
 Every number in that table comes out of `bin/detect-hardware.sh`, which you can
 run yourself. The last column is the setting named `MIN_FREE_GB`: the amount of
-memory that must be free before `./bin/serve.sh` will agree to start.
+memory that must be free before `./bin/serve.sh` will agree to start. The build
+names are keys in `./bin/models.sh list`, which shows every option with the
+free memory it needs on your Mac.
 
 ### What each verdict actually means
 
-**Does not fit.** The weights alone are larger than everything your Mac has.
-There is no setting that changes this and no flag to force it. This repository
-refuses to download the model on these machines, before the 20 GB rather than
-after it. The smaller models named in the table are genuinely useful — a
-Qwen3-8B on a 16 GB Mac will handle single-file edits well — they are just not
-what these documents cover.
+**Does not fit.** The 27B's weights alone are larger than the memory Apple lets
+the graphics part lock on your Mac. There is no setting that changes this and no
+flag to force it. This repository refuses to download a 27B on these machines,
+before the 20 GB rather than after it. Instead the scripts default to `9b-4bit`:
+a 9-billion-parameter model — a community distillation of Qwen3.8 into the
+Qwen3.5-9B architecture, with its safety training intact — that is genuinely
+useful for single-file edits, and small enough to leave your Mac usable. Every
+page in these documents applies to it; only the memory numbers are smaller.
 
-**Not recommended (24 GB).** Even the smallest build of this model, at about
-16.3 GB, does not fit under the memory ceiling Apple reserves for the graphics
-part on a 24 GB Mac, which is about 16 GB. `./bin/serve.sh` refuses to start
-here, and the refusal is deliberate: the only way past it is to raise a macOS
+**Not recommended (24 GB).** Even the smallest OrcaRouter build of this model,
+at about 16.3 GB, does not fit under the memory ceiling Apple reserves for the
+graphics part on a 24 GB Mac, which is about 16 GB. `./bin/serve.sh` refuses to
+load it, and the refusal is deliberate: the only way past it is to raise a macOS
 setting that can make a Mac stop responding entirely. Section 8 of
-[04 — memory safety](04-memory-safety.md#wired-limit) explains why. Run
-Qwen3-14B instead.
+[04 — memory safety](04-memory-safety.md#wired-limit) explains why. The scripts
+default to `9b-4bit` here; `27b-4bit-aeon` (14.1 GB) is the one 27B that fits
+under the ceiling, and it needs everything else closed.
 
 **Tight (32 GB).** The 4-bit build runs. You will close your browser and Docker
 Desktop first, most times. The setting that hands memory back to macOS between
@@ -188,9 +194,12 @@ verdicts from that table and behave very differently. Only the 36 GB row
 describes a machine anything was measured on. Every other row is arithmetic, and
 is NOT YET MEASURED.
 
-**Second: no speed figure exists at all.** This repository has not measured
-tokens per second for this model on any machine, so it does not print one.
-Anyone who quotes you a speed figure should tell you which Mac produced it.
+**Second: no speed figure exists for the 27B at all.** This repository has not
+measured tokens per second for the 27B on any machine, so it does not print one.
+The one figure it has is for the 9B: `./bin/bench.sh` on the test machine
+produced 57 tokens per second, decode only, on one short greedy run — which says
+nothing about the 27B. Anyone who quotes you a speed figure should tell you
+which Mac and which model produced it.
 
 ---
 
@@ -240,7 +249,7 @@ wired ceiling  27.0 GB  (auto — GPU-wired memory cannot be swapped)
 verdict        workable  --  The reference configuration. Fits, but you must close memory-hungry apps first.
 
 recommended settings for this Mac:
-  quant             5-bit  (~19.1 GB of weights, text-only)
+  build             27b-5bit  (chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit, ~19.1 GB of weights, text-only)
   CTX_SIZE          65536   (KV cache 1.00 GB at turbo4)
   MIN_FREE_GB       22
   MAX_RESIDENT_MEM  21GB
@@ -248,7 +257,7 @@ recommended settings for this Mac:
 
 These are predictions about whether the model FITS. They say nothing
 about how fast it will feel. Speed follows GPU cores, not memory, and
-no speed figure has been measured on any machine but the test machine.
+no speed figure has been measured on any machine, including the test machine.
 ```
 
 Every line will differ on your Mac except the last three, which are the same
@@ -257,9 +266,11 @@ in Section 3 that applies to you.
 
 Two extra blocks may appear, and both are worth reading if they do:
 
-- A block beginning `WARNING  weights + KV cache` means the model does not fit
-  under Apple's graphics memory ceiling on your Mac. `./bin/serve.sh` will refuse
-  to start. This is the 24 GB row.
+- A block beginning `WARNING  weights + KV cache` means the recommended build
+  does not fit under Apple's graphics memory ceiling on your Mac, and
+  `./bin/serve.sh` would refuse to start it. With the default choices this does
+  not happen: the scripts pick a build that fits. You see it if you forced a
+  27B onto a small Mac with `MODEL_QUANT`.
 - A block beginning `NOTE     only N GB is available right now` means the model
   fits in principle but not at this moment, because other apps are using the
   memory. It lists what to close. This is normal and Section 4c is about it.
@@ -302,7 +313,7 @@ Nothing is charged, but four real resources are spent.
 |---|---|---|
 | Money | Zero | No account, no key, no card, no usage fee, ever. |
 | Disk, while downloading | About 45 GB free | The download tool keeps a second copy of every file while it works. |
-| Disk, afterwards | About 20 GB | One step at the end reclaims the duplicate. Instant, and nothing is lost. |
+| Disk, afterwards | About 20 GB | One step at the end reclaims the duplicate. It checks each file first, so a minute or two, and nothing is lost. |
 | Memory, while running | The last column of the table in Section 3 | 22 GB on a 36 GB Mac. The server refuses to start below it. |
 | Your attention | 20 to 40 minutes | Spread over pages 02 to 05. |
 | Waiting, once | However long 20 GB takes on your connection | On a 100 Mbit connection, roughly half an hour. Nobody has to watch it. |
@@ -406,8 +417,8 @@ only read your Mac's settings.
 ## What this page will not do
 
 It cannot tell you how fast the model will feel on your Mac. That depends on
-graphics cores, and no speed figure has been measured on any machine other than
-the test machine. It also cannot promise the model is good enough for your work.
+graphics cores, and no speed figure for the 27B has been measured on any
+machine. It also cannot promise the model is good enough for your work.
 Section 6 is the honest description; the only real test is to try it.
 
 ---
@@ -417,10 +428,12 @@ Section 6 is the honest description; the only real test is to try it.
 **If your Mac has an Apple chip and 32 GB of memory or more:** continue to
 [02 — install](02-install.md).
 
-**If your Mac has an Apple chip and less than 32 GB:** stop here. Do not download
-20 GB. Pick the smaller model named for your row in the Section 3 table. These
-documents do not cover those models, and the scripts here will refuse to download
-this one on your machine, by design.
+**If your Mac has an Apple chip and less than 32 GB:** continue to
+[02 — install](02-install.md) as well. The scripts will not download the 27B on
+your machine, by design; they pick the 9B named in your row of the Section 3
+table, which is 4.7 GB rather than 20, and every page from here on applies to it
+with smaller numbers. Expect it to be less capable than the 27B; expect it to
+leave your Mac usable.
 
 **If your Mac has an Intel chip:** stop here. There is no version of this that
 runs on your Mac.

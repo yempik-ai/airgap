@@ -47,9 +47,11 @@ SETTINGS
 
 WHAT YOU SHOULD SEE
   Four lines starting with "claude", then Claude Code's normal startup, then
-  one line about an "unrecognized_model". That line is EXPECTED. It is not an
-  error and nothing is wrong. Claude Code has simply never heard of a model
-  name that only exists on your Mac.
+  one line about an "unrecognized_model", and possibly one saying claude.ai
+  connectors are disabled because an auth source is set. Both are EXPECTED.
+  Neither is an error and nothing is wrong. Claude Code has simply never heard
+  of a model name that only exists on your Mac, and the "auth source" is the
+  placeholder token this script sets so nothing reaches claude.ai.
 
 IF IT SAYS THERE IS NO SERVER
   Open another window, go to the repo root, and run ./bin/serve.sh.
@@ -76,15 +78,21 @@ if ! server_up; then
 fi
 
 # Point every model setting at your Mac. Claude Code chooses a small, fast model
-# on its own for background work such as naming a conversation. All of these
-# names are set because different versions of Claude Code read different ones.
+# on its own for background work such as naming a conversation, and other
+# models for subagents, the auto-mode classifier and its background classifier.
+# Every name below exists in the Claude Code 2.1.233 binary; they are all set
+# because different versions read different ones, and one left pointing at
+# Anthropic would quietly reach for the internet.
 export ANTHROPIC_BASE_URL="$BASE_URL"
 export ANTHROPIC_MODEL="$MODEL_ID"
 export ANTHROPIC_DEFAULT_OPUS_MODEL="$MODEL_ID"
 export ANTHROPIC_DEFAULT_SONNET_MODEL="$MODEL_ID"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="$MODEL_ID"
+export ANTHROPIC_DEFAULT_FABLE_MODEL="$MODEL_ID"
 export ANTHROPIC_SMALL_FAST_MODEL="$MODEL_ID"
 export CLAUDE_CODE_SUBAGENT_MODEL="$MODEL_ID"
+export CLAUDE_CODE_AUTO_MODE_MODEL="$MODEL_ID"
+export CLAUDE_CODE_BG_CLASSIFIER_MODEL="$MODEL_ID"
 
 # The server accepts anything here unless you set API_KEY, but Claude Code
 # insists on being given something.
@@ -99,11 +107,14 @@ fi
 export ANTHROPIC_API_KEY=""
 
 # Keep the session quiet and local: no usage reporting, no crash reporting, no
-# update check in the middle of your work.
+# update check, no marketplace auto-install and no background tasks in the
+# middle of your work. Every one of these names exists in the 2.1.233 binary.
 export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
 export DISABLE_TELEMETRY=1
 export DISABLE_ERROR_REPORTING=1
 export DISABLE_AUTOUPDATER=1
+export CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL=1
+export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
 
 # A 27B model is much weaker than Sonnet or Opus at long chains of tool use.
 # Keeping the answer budget modest stops it talking past a tool call.
@@ -127,7 +138,8 @@ fi
 echo "claude   -> $BASE_URL   model $MODEL_ID"
 echo "context  $CTX_SIZE tokens declared to the harness, $CLAUDE_CODE_MAX_OUTPUT_TOKENS max output"
 echo "mcp      $mcp_line"
-echo "note     a one-line \"unrecognized_model\" warning at startup is EXPECTED and cosmetic"
+echo "note     an \"unrecognized_model\" line at startup is EXPECTED and cosmetic; so is"
+echo "         \"claude.ai connectors are disabled\" — that is this script keeping it local"
 echo
 
 # ${extra[@]+"${extra[@]}"} rather than "${extra[@]}": under `set -u`, bash 3.2

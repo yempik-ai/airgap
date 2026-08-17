@@ -38,8 +38,8 @@ you have set it to stay awake; otherwise leave the screen on.
 **What you need first.**
 
 - An Apple Silicon Mac (an M1, M2, M3, M4 or newer chip). Step 2 checks this.
-- 36 GB of memory or more for the model this guide uses. Step 3 checks this and
-  gives you smaller options if your Mac has less.
+- 36 GB of memory or more for the model this guide uses. Step 3 checks this,
+  and on a smaller Mac the scripts pick a smaller build from the same catalog.
 - About 45 GB of free disk space. Step 3 checks this.
 - An internet connection for the downloads.
 - You have read [`01-requirements.md`](01-requirements.md). That document is the
@@ -236,19 +236,21 @@ recommendation instead of a workaround.
 
 | Your memory | Verdict for the 27B model | What to do |
 |---|---|---|
-| 8 GB | Does not fit | Use a much smaller model. See [`01-requirements.md`](01-requirements.md). |
-| 16 GB | Does not fit | Use a much smaller model. Do not start the 20 GB download. |
-| 18 GB | Does not fit | Use a smaller model. The extra 2 GB changes nothing here. |
-| 24 GB | Not recommended | Even the 4-bit build lands at your Mac's graphics memory ceiling. `./bin/serve.sh` refuses to start here. Choose a smaller model. |
+| 8 GB | Does not fit | Continue, with modest hopes. The scripts pick the 9B (`9b-4bit`, 4.7 GB); it needs 6 GB free, which an 8 GB Mac rarely has. |
+| 16 GB | Does not fit | Continue. The scripts pick the 9B (`9b-4bit`, 4.7 GB) instead of the 20 GB download. |
+| 18 GB | Does not fit | Continue. Same as 16 GB; the extra 2 GB changes nothing here. |
+| 24 GB | Not recommended | Continue. Even the 4-bit 27B lands at your Mac's graphics memory ceiling and `./bin/serve.sh` refuses to load it, so the scripts pick the 9B. `27b-4bit-aeon` (14.1 GB) is the one 27B that fits, with everything else closed. |
 | 32 GB | Tight | Continue. The scripts download the smaller 4-bit build for you automatically. Expect to close your browser. |
 | 36 GB | Workable — this is the tested setup | Continue. The scripts download the 5-bit build. Close memory-hungry apps before each run. |
 | 48 GB | Comfortable | Continue. 5-bit build, and a larger context window also fits. |
 | 64 GB and above | Comfortable | Continue. The scripts download the higher-quality 8-bit build for you. |
 
 **You do not choose the build yourself.** `bin/detect-hardware.sh` reads your
-Mac's memory and picks one of the three the publisher offers — 4-bit, 5-bit or
-8-bit — and `./bin/download-model.sh` downloads that one into a folder named
-after it. To override the choice, put a `MODEL_QUANT` line in `config.env`; see
+Mac's memory and picks a build from the catalog in `bin/catalog.sh` — the 27B
+at 4-bit, 5-bit or 8-bit from 32 GB up, the 9B below that — and
+`./bin/download-model.sh` downloads that one into a folder named after it. To
+choose differently, `./bin/models.sh list` shows every build with the free
+memory it needs on your Mac, and `./bin/models.sh use <key>` selects one; see
 [`07-tuning.md`](07-tuning.md#8-moving-to-a-different-build-of-the-model).
 
 The test machine used for every measured number in this repository is an Apple
@@ -260,9 +262,10 @@ Every row except the 36 GB row is arithmetic from the model sizes, not a
 measurement. Those rows are labeled NOT YET MEASURED. They predict whether the
 model **fits**. They say nothing about how fast it will feel.
 
-**If your row says the model does not fit:** stop here. Read
-[`01-requirements.md`](01-requirements.md) and pick a smaller model. Stopping now
-saves you a 20 GB download that cannot be used.
+**If your row says the 27B does not fit:** you can still continue. The scripts
+will not download the 27B on your Mac; they download the 9B named in your row,
+and everything below applies to it with smaller numbers. Where this page says
+"about 19.1 GB", read "about 4.7 GB".
 
 ### 3c. Print your free disk space
 
@@ -286,9 +289,9 @@ images are the usual quick wins.
 
 Why 45 GB and not 20 GB: the download tool keeps a second copy of every file
 while it works, so partway through, 20 GB of model occupies about 40 GB of disk.
-The last step of step 10 reclaims that second copy instantly, and prints the free
-disk it measured before and after on your own Mac. The before-and-after pair has
-NOT YET been measured on the test machine, so this page does not quote one.
+The last step of step 10 reclaims that second copy — a minute or two, because it
+checks each file first — and prints the free disk it measured before and after
+on your own Mac. On the test machine it reclaimed 20.1 GB (MEASURED).
 
 ---
 
@@ -383,15 +386,15 @@ ls ~/dev/local-llms/airgap/bin
 You should see something like this:
 
 ```
-bench.sh		doctor.sh		serve.sh
-claude-local.sh		download-model.sh	setup.sh
-detect-hardware.sh	env.sh			stop.sh
-			verify-model.sh
+bench.sh		detect-hardware.sh	env.sh			serve.sh		stop.sh
+catalog.sh		doctor.sh		models.sh		setup.sh		verify-model.sh
+claude-local.sh		download-model.sh
 ```
 
-The column layout changes with your Terminal window width. The ten file names do
-not change. `detect-hardware.sh` is the one that reads your Mac's size and works
-out the memory settings the other scripts use.
+The column layout changes with your Terminal window width. The twelve file
+names do not change. `detect-hardware.sh` is the one that reads your Mac's size
+and works out the memory settings the other scripts use; `catalog.sh` is the
+list of models it chooses from.
 
 **If you do not see that.** If it prints `No such file or directory`, the clone
 in step 4c did not finish. Run step 4c again.
@@ -926,7 +929,7 @@ airgap — setup
 [3/5] mlx-serve       ok (26.8.8)
 [4/5] claude code     ok (2.1.233)
 [5/5] python venv     skipped (set WITH_VENV=1 to build it)
-setup complete — next: ./bin/doctor.sh
+setup complete — next: ./bin/download-model.sh   (or just ./start.sh, which does the rest)
 ```
 
 The version numbers are yours and will differ. **Step 2 prints twice on purpose.**
@@ -968,7 +971,8 @@ is 19.1 GB instead of about 54 GB.
 >   fills it with model files. It changes nothing outside that folder and nothing
 >   in your system settings. It does not ask for a password.
 > - **Peak disk use:** about 40 GB while it runs, dropping to about 20 GB at the
->   end (MEASURED on the test machine). That is why step 3 asked for 45 GB free.
+>   end (MEASURED on the test machine: 20.1 GB reclaimed by the last step). That
+>   is why step 3 asked for 45 GB free.
 > - **Is it reversible:** yes, completely. Deleting the folder removes every
 >   byte. The command is in "How to undo everything" at the end of this page.
 > - **If it goes wrong:** it stops with an error and leaves a partly finished
@@ -998,29 +1002,37 @@ disk     460.0 GB free (need 45 GB)
 
 [1/5] git-lfs                ok (3.7.1)
 [2/5] resolving repo         checking huggingface.co
-[2/5] resolving repo         ok — huggingface.co/chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+[2/5] resolving repo         ok — huggingface.co/chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit (20.0 GB of weights)
 [3/5] cloning metadata       GIT_LFS_SKIP_SMUDGE=1 (pointers now, weights next)
-[4/5] git lfs pull           about 20 GB — this is the long part
+[4/5] git lfs pull           about 20.0 GB — this is the long part
       Press Ctrl-C to stop. Running this command again resumes it.
 [4/5] git lfs pull           ok — no pointer files left
-[5/5] git lfs dedup          reclaimed 19.4 GB (460.0 GB free before, 479.4 GB after)
+      checking each file, then sharing its blocks — a minute or two on 20 GB
+[5/5] git lfs dedup          reclaimed 20.1 GB (462.5 GB free before, 482.6 GB after)
 
 download complete — next: ./bin/verify-model.sh
 ```
 
 Your account name in the `target` path, your three disk numbers, and your git-lfs
-version will differ. If your Mac was recommended the 4-bit or 8-bit build, the
-repository and folder names end in `-4bit` or `-8bit` instead. The gap between the
-first `[4/5]` line and the second is where the waiting happens, and it can be an
-hour or more; git-lfs shows its own progress display there.
+version will differ. If your Mac was recommended a different build, the
+repository, folder name and size on the `[2/5]` and `[4/5]` lines describe that
+build instead — `keXjos/Qwen3.8-9B-mlx-4Bit` and 4.7 GB on a Mac under 32 GB.
+The gap between the first `[4/5]` line and the second is where the waiting
+happens, and it can be an hour or more; git-lfs shows its own progress display
+there.
 
-**If you do not see that.** Four named failures, with their fixes:
+**If you do not see that.** Five named failures, with their fixes:
 
 1. `error: git-lfs not installed. Run ./bin/setup.sh first.` You skipped step 6.
    Go back and install git-lfs.
 
 2. `error: only 31 GB free, need 45 GB` — free disk space and run the command
    again. Nothing was downloaded.
+
+   `error: <repo> cannot be loaded on this Mac, so it is not worth downloading.`
+   — the build you asked for cannot fit under your Mac's graphics memory
+   ceiling, and the script stopped before spending the download on it. Nothing
+   was downloaded. `./bin/models.sh list` shows the builds that do fit.
 
 3. `error: repo not found on huggingface.co: <name>` — the model's address has
    changed. Open `https://huggingface.co` in your browser, search for the model
@@ -1177,6 +1189,9 @@ Nothing in this output changes between machines, as long as you downloaded the
 5-bit build. It describes the files, not your Mac. Those tensor counts were
 MEASURED on the test machine, and the `manifest matches` line means they were
 compared against the publisher's own list of what should be there and agreed.
+On a Mac that got the 9B the numbers are smaller — 32 layers, 927 tensors,
+4.7 GB — the `MTP head` line reads `absent`, which for that checkpoint is
+correct and not a failure, and there is no manifest to compare against.
 
 Two figures for the same model appear across these documents and both are
 correct: **19.1 GB** is what gets loaded into memory, and **20 GB** is what the
@@ -1209,9 +1224,11 @@ guide.
 - `verify FAIL: expected 2207 tensors, found 1904 — download is incomplete` — the
   download stopped partway. Run `./bin/download-model.sh` again from the repo
   folder.
-- `verify FAIL: no mtp.* tensors found` — you have a different checkpoint than
-  this guide expects. It may still run, but the speed advantage described above
-  will not apply.
+- `verify FAIL: the publisher's manifest lists an MTP head (15 tensors) and none
+  was found` — the download stopped partway. Run `./bin/download-model.sh` again.
+  (A checkpoint that ships no MTP head at all, like the 9B, prints
+  `MTP head absent` and still passes; only a head that *should* be there and is
+  missing fails.)
 
 ### One honest note about this model
 
@@ -1254,7 +1271,7 @@ airgap doctor
 ── environment ──────────────────────────────
 PASS  macos             26.5.2 (arm64)
 PASS  apple silicon     Apple M3 Max, 30 GPU cores
-PASS  ram tier          36 GB total — workable, recommends 5-bit at 65536 tokens
+PASS  ram tier          36 GB total — workable, default build 27b-5bit at 65536 tokens
 PASS  gpu ceiling       weights + conversation (19.1 + 1.00 GB) fit under Apple's 27.0 GB ceiling
 PASS  memory            36 GB total, 24.3 GB available (need 22)
 PASS  wired limit       iogpu.wired_limit_mb=0 (auto, about 27.0 GB) — recommended
@@ -1267,7 +1284,7 @@ PASS  mlx-serve         26.8.8
 PASS  claude code       2.1.233
 ── model ────────────────────────────────────
 PASS  model dir         ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
-PASS  weights           5 shards, no pointers, 20.0 GB on disk (19.1 GB is loaded)
+PASS  weights           5 shards, no pointers, 20.0 GB on disk (about 19.1 GB is loaded)
 PASS  model id          Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 ── server ───────────────────────────────────
 PASS  bind setting      HOST=127.0.0.1 — serve.sh will listen on this Mac only
@@ -1275,18 +1292,18 @@ SKIP  server            not running — start ./bin/serve.sh
 ── claude code wiring ───────────────────────
 PASS  ANTHROPIC_API_KEY not set in this shell
 PASS  base url          claude-local.sh will point at http://127.0.0.1:11234
-PASS  context declared  CLAUDE_CODE_MAX_CONTEXT_TOKENS follows CTX_SIZE (65536)
+PASS  context           CTX_SIZE=65536 declared to server and Claude Code, within the model's 262144
 PASS  mcp mode          strict (LEAN_MCP=1) — saves about 17,000 prompt tokens per turn
 ─────────────────────────────────────────────
-19 pass, 0 warn, 0 fail, 1 skipped
+20 pass, 0 warn, 0 fail, 1 skipped
 doctor: OK — next: ./bin/serve.sh
 ```
 
 Your macOS version, chip name, memory numbers, disk number, tool versions and
 folder path will all differ. So will the `ram tier` line, which is the row of the
 table in [`01-requirements.md`](01-requirements.md#ram-tiers) that describes your
-Mac, and the two numbers on the `context declared` and `gpu ceiling` lines, which
-are worked out from your Mac's memory size.
+Mac, and the numbers on the `context` and `gpu ceiling` lines, which are worked
+out from your Mac's memory size and the model you have.
 
 **How to read this output.** The `SKIP server` line is EXPECTED right now. The
 server section can only be checked while the server is running, and you have not
@@ -1525,7 +1542,7 @@ After those six lines the script prints three more:
 
 ```
 
-Loading about 19.1 GB. The first load takes about a minute.
+Loading about 19.1 GB of weights. The first load can take a minute.
 Leave this window open. Press Ctrl-C to stop, or run ./bin/stop.sh elsewhere.
 Next: open another window and run ./bin/claude-local.sh
 ```
@@ -1636,13 +1653,14 @@ You should see something like this before Claude Code's own screen appears:
 claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 context  65536 tokens declared to the harness, 8192 max output
 mcp      strict (LEAN_MCP=1) — MCP servers off, saves ~17k prompt tokens per turn
-note     a one-line "unrecognized_model" warning at startup is EXPECTED and cosmetic
+note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
+         "claude.ai connectors are disabled" — that is this script keeping it local
 ```
 
 Two values in that banner differ on your Mac: the model name changes if you have
-the 4-bit or 8-bit build, and the context number is worked out from your Mac's
-memory size. The address is the same everywhere, because `127.0.0.1` means "this
-Mac" on every Mac.
+a different build, and the context number is worked out from your Mac's memory
+size. The address is the same everywhere, because `127.0.0.1` means "this Mac"
+on every Mac.
 
 That third line mentions **MCP**, which is short for Model Context Protocol
 ([Glossary](09-glossary.md#model-context-protocol-mcp)). MCP servers are optional
@@ -1680,7 +1698,7 @@ account, because this setup uses none of those.
 
 After that you reach the normal Claude Code input prompt.
 
-### The warning you are about to see
+### The two lines you are about to see
 
 Claude Code will print a warning containing the words `unrecognized_model`.
 
@@ -1689,18 +1707,26 @@ a list of Anthropic's own model names. Your local model is not on that list, so 
 notes that it does not recognize the name. It then uses it anyway, which is
 exactly what you want.
 
-This warning produces more confused questions than any other single line in this
-setup. You can ignore it every time.
+It may also print a line saying that *claude.ai connectors are disabled because
+`ANTHROPIC_API_KEY` or another auth source is set*. Also EXPECTED: the "auth
+source" is the placeholder token the wrapper script gives Claude Code so that it
+talks to your Mac and never signs in to claude.ai. Nothing is missing that this
+setup uses.
+
+These two lines produce more confused questions than anything else in this
+setup. You can ignore them every time.
 
 ### What the wrapper script did for you
 
 Two things that are not obvious:
 
 1. **It pointed every model slot at your Mac.** Claude Code uses more than one
-   model internally: a main one for your requests, and a smaller faster one for
-   background work like naming a conversation. If only the main slot were
-   redirected, the background work would quietly try to reach Anthropic's servers
-   and fail. The script sets all of them.
+   model internally: a main one for your requests, a smaller faster one for
+   background work like naming a conversation, one for subagents, and a couple of
+   classifiers. If only the main slot were redirected, the background work would
+   quietly try to reach Anthropic's servers and fail. The script sets every model
+   name the Claude Code 2.1.233 binary reads — nine settings, plus the `--model`
+   flag.
 
 2. **It told Claude Code how much text the model can hold.** Claude Code assumes
    200,000 tokens when it does not recognize a model. Your server is set to
@@ -1924,10 +1950,11 @@ Untapped 1 formula (14 files, 28.7KB).
 brew uninstall git-lfs
 ```
 
-**Uninstall Claude Code.** It is a single file in your home folder.
+**Uninstall Claude Code.** The `claude` command is a link in your home folder;
+the program itself lives next to it under `~/.local/share/claude`.
 
 ```bash
-rm -f ~/.local/bin/claude
+rm -f ~/.local/bin/claude && rm -rf ~/.local/share/claude
 ```
 
 This prints nothing. That is success.

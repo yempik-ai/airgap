@@ -14,9 +14,10 @@ abstract: >-
   An open-source guide and script kit for running the Qwen3.8-27B language model
   entirely offline on an Apple Silicon Mac in MLX format, and using it as the local
   backend for Claude Code in place of the Anthropic API. Supports the uncensored
-  (abliterated, decensored, refusal-removed) build of Qwen3.8-27B as well as the
-  stock builds, at 2-bit through 8-bit quantization. The scripts detect the host
-  Mac's unified memory and derive their own context window, memory floor and cache
+  (abliterated, decensored, refusal-removed) build of Qwen3.8-27B at 2-bit through
+  8-bit quantization, the stock mlx-community builds at 4-bit and 8-bit, and a 9B
+  for smaller Macs. The scripts detect the host Mac's unified memory, pick a build
+  that fits it, and derive their own context window, memory floor and cache
   budgets; they refuse to start rather than let the machine swap, and refuse any
   configuration that would expose the model beyond loopback. Documentation covers
   hardware requirements, installation for readers with no terminal experience,

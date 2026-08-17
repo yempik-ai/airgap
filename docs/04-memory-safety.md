@@ -168,8 +168,10 @@ KV cache in GB = context window in tokens / 65536
 
 **This formula is exact for this model and wrong for most others.** A conventional
 model where all 64 layers keep a growing notebook would cost four times as much.
-Do not reuse this formula for the smaller fallback models named in Section 10 —
-they are conventional, and their notebooks are proportionally larger.
+The 9B in the catalog has the same pattern with half as many layers, so for it
+the formula over-estimates by two — the safe direction for a guard, which is why
+the scripts use the one formula for both. Do not reuse it for a conventional
+model, where every layer keeps a growing notebook.
 </details>
 
 **3. Everything else — about 2 to 3 GB.** Working space while the model reads your
@@ -424,26 +426,25 @@ The **Verdict** column answers exactly one question: *how does the 27B model at
 should actually run there, which is sometimes a different build or a different
 model.
 
-| Total memory | Verdict for 27B at 5-bit | Recommended build | Context window | Free memory needed |
+| Total memory | Verdict for 27B at 5-bit | The build the scripts pick | Context window | Free memory needed |
 |---|---|---|---|---|
-| 8 GB | Impossible | Qwen3-4B at 4-bit (~2.3 GB) | see that model's own docs | see that model's own docs |
-| 16 GB | Impossible | Qwen3-8B at 4-bit (~4.5 GB) | see that model's own docs | see that model's own docs |
-| 18 GB | Impossible | Qwen3-14B at 4-bit (~8 GB) | see that model's own docs | see that model's own docs |
-| 24 GB | Not recommended | Qwen3-14B at 4-bit (~8 GB) | see that model's own docs | see that model's own docs |
-| 32 GB | Tight | 27B at 4-bit (~16.3 GB) | 32,768 | 19 GB |
-| **36 GB** | **Workable — the reference** | **27B at 5-bit (~19.1 GB)** | **65,536** | **22 GB** |
-| 48 GB | Comfortable | 27B at 5-bit (~19.1 GB) | 131,072 | 26 GB |
-| 64 GB | Comfortable | 27B at 8-bit (~27.7 GB) | 131,072 | 36 GB |
-| 96 GB | Comfortable | 27B at 8-bit (~27.7 GB) | 262,144 | 40 GB |
-| 128 GB | Comfortable | 27B at 8-bit (~27.7 GB) | 262,144 | 40 GB |
+| 8 GB | Impossible | `9b-4bit` (~4.7 GB) — 6 GB free is more than an 8 GB Mac usually has | 32,768 | 6 GB |
+| 16 GB | Impossible | `9b-4bit` (~4.7 GB) | 32,768 | 6 GB |
+| 18 GB | Impossible | `9b-4bit` (~4.7 GB) | 32,768 | 6 GB |
+| 24 GB | Not recommended | `9b-4bit` (~4.7 GB); `27b-4bit-aeon` (14.1 GB) fits under the ceiling with everything closed | 32,768 | 8 GB |
+| 32 GB | Tight | `27b-4bit` (~16.3 GB) | 32,768 | 19 GB |
+| **36 GB** | **Workable — the reference** | **`27b-5bit` (~19.1 GB)** | **65,536** | **22 GB** |
+| 48 GB | Comfortable | `27b-5bit` (~19.1 GB) | 131,072 | 26 GB |
+| 64 GB | Comfortable | `27b-8bit` (~27.7 GB) | 131,072 | 36 GB |
+| 96 GB | Comfortable | `27b-8bit` (~27.7 GB) | 262,144 | 40 GB |
+| 128 GB | Comfortable | `27b-8bit` (~27.7 GB) | 262,144 | 40 GB |
 
-The **Context window** and **Free memory needed** columns describe the
-**Recommended build** on that row, not the 27B at 5-bit. On the four rows where
-the recommendation is a different and smaller model, those two columns would be
-computed from that model's own architecture, which is nothing like this one's;
-they are left out rather than guessed. Every figure on the 24 GB row and above
-comes out of `bin/detect-hardware.sh`, and you can reproduce any of them with
-`HW_FORCE_RAM_GB=48 ./bin/detect-hardware.sh`.
+The **Context window** and **Free memory needed** columns describe the build in
+the third column on that row, not the 27B at 5-bit. Every figure comes out of
+`bin/detect-hardware.sh`, and you can reproduce any row with
+`HW_FORCE_RAM_GB=48 ./bin/detect-hardware.sh`. The build names are keys in
+`./bin/models.sh list`, which prints the free-memory figure for every build on
+your own Mac.
 
 **Only the 36 GB row is MEASURED.** It is the test machine: Apple M3 Max, 30 GPU
 cores, 36 GB unified memory, macOS 26.5.2. Every other row is arithmetic derived
@@ -456,19 +457,22 @@ repository.
 will feel.** Speed is driven mainly by the number of graphics cores in your chip,
 not by how much memory you have. An entry-level chip with 32 GB and a high-end
 chip with 36 GB get similar answers from this table and behave very differently.
-No speed figure has been measured on any machine other than the test machine.
+No speed figure for the 27B has been measured on any machine.
 
 Reading the rows in words:
 
-- **8 to 18 GB — do not download 20 GB of weights.** The smallest 27B build needs
-  16 GB of memory on its own, which is your entire machine. This is the range
-  where people waste an hour on a download that could never have worked. Use one
-  of the smaller models named in the table; they are genuinely useful.
+- **8 to 18 GB — the scripts will not download 20 GB of weights here.** The
+  smallest 27B build needs 16 GB of memory on its own, which is your entire
+  machine. This is the range where people waste an hour on a download that could
+  never have worked, so `./bin/download-model.sh` refuses a build that cannot fit
+  under the ceiling and the default is the 9B instead. It is genuinely useful,
+  and it leaves the Mac usable.
 - **24 GB — technically borderline, practically no.** The 5-bit build cannot fit
-  under the memory ceiling explained in Section 8. Even the 4-bit build lands
-  exactly *at* that ceiling. Making it run means raising the one setting that can
-  hard-stall a Mac, on the machine with the least room for error. Run the 14B
-  model instead.
+  under the memory ceiling explained in Section 8. Even the 4-bit OrcaRouter
+  build lands exactly *at* that ceiling. Making it run means raising the one
+  setting that can hard-stall a Mac, on the machine with the least room for
+  error. The scripts pick the 9B; `27b-4bit-aeon` at 14.1 GB is the one 27B that
+  fits under the ceiling, with everything else closed.
 - **32 GB — the first machine where a 27B genuinely runs.** The scripts download
   the 4-bit build here and use a 32,768-token window, and you keep a usable Mac.
   The 5-bit build fits on paper with about 1.7 GB to spare, and any browser or
@@ -495,9 +499,11 @@ your Mac, which beats the built-in default in `bin/env.sh`.
 
 **You do not normally need to set the memory numbers at all.** `CTX_SIZE`,
 `MIN_FREE_GB`, `MAX_RESIDENT_MEM` and `PREFIX_CACHE_MEM` are worked out from your
-Mac's own memory size and from the build of the weights you actually have on
-disk. Changing `CTX_SIZE` alone re-works the other three to match it, so you
-cannot accidentally leave the guard sized for a window you are no longer using.
+Mac's own memory size and from the model you actually have selected. Changing
+`CTX_SIZE` alone re-works the other three to match it, so you cannot
+accidentally leave the guard sized for a window you are no longer using; and
+selecting a smaller model with `./bin/models.sh use` shrinks the guard to that
+model rather than demanding room for a 27B that is not being loaded.
 
 **Option A — one run only.** Put the setting in front of the command. It applies
 to that run and nothing else.
@@ -598,9 +604,10 @@ Guides all over the internet tell you to raise `iogpu.wired_limit_mb` so a bigge
 model fits. That advice is popular because it appears to work, and it is wrong for
 this stack for three reasons.
 
-1. **This configuration does not need it.** The peak measured on the test machine
-   is about 23 GB, and the automatic ceiling there is about 27 GB. There is
-   already headroom. Raising the ceiling does not make the model smaller.
+1. **This configuration does not need it.** The peak the arithmetic in Section 3
+   gives for the test machine is about 23 GB, and the automatic ceiling there is
+   about 27 GB. There is already headroom. Raising the ceiling does not make the
+   model smaller.
 2. **What you take, you take from macOS.** Raising the ceiling to 30 GB on a 36 GB
    Mac leaves macOS about 6 GB of memory it can never reclaim. macOS is not a
    background process. The window server, the file system, and every driver live
@@ -650,9 +657,10 @@ The first number is whatever it was before, so yours will differ. If you see
 `sysctl: oid 'iogpu.wired_limit_mb' is read only`, your macOS version does not
 allow the change. Restart the Mac; the reboot resets it.
 
-`bin/serve.sh` checks this value at startup and prints a three-line warning if it
-finds it above 28 GB. That warning does not stop the server. It is there so a
-setting you made months ago cannot quietly cause trouble today.
+`bin/serve.sh` checks this value at startup and prints a warning whenever it is
+not `0` — a sharper one when it is above 80% of your Mac's memory. That warning
+does not stop the server. It is there so a setting you made months ago cannot
+quietly cause trouble today.
 
 ---
 
@@ -689,7 +697,7 @@ programs currently running, so you know what to close.
 ```
 REFUSING TO START — not enough free memory.
   available : 10.5 GB
-  required  : 22 GB (weights ~19.1 GB + cache + headroom)
+  required  : 22 GB (weights ~19.1 GB + conversation + prefix cache)
 
 Free some memory, then retry. Biggest wins, in order:
     2.7 GB  com.apple.Virtualization.VirtualMachine
@@ -878,14 +886,16 @@ Options, best first.
    19.1 GB, so you get nearly 4 GB back. That is the difference between "close
    everything" and "works next to a browser". The answers are slightly worse, and
    the difference is smaller than most people expect. (Weight size NOT YET
-   MEASURED in this repository.)
+   MEASURED in this repository.) `./bin/models.sh pull 27b-4bit` then
+   `./bin/models.sh use 27b-4bit`.
 2. **Lower the context window.** Set `CTX_SIZE=32768`. It saves about 0.5 GB and
    costs nothing else. Small, but free.
-3. **Use a smaller model for everyday work.** This is where most people land. A
-   model in the 8-billion to 14-billion range at 4-bit takes about 4.5 GB to 8 GB
-   and coexists with a normal set of open apps. It will feel far better in an
+3. **Use a smaller model for everyday work.** This is where most people land.
+   The 9B in the catalog (`9b-4bit`, 4.7 GB) coexists with a normal set of open
+   apps and needs about 11 GB free on a 36 GB Mac. It will feel far better in an
    interactive loop than a 27B model that forces you to close your browser. Keep
-   the 27B for the tasks that need it.
+   the 27B for the tasks that need it; both stay on disk and
+   `./bin/models.sh use` switches between them.
 4. **More memory.** Not useful advice today, but for planning: the 27B at 5-bit
    wants 48 GB to be comfortable and 64 GB to be unremarkable.
 
@@ -934,15 +944,15 @@ not, something else on your Mac took the memory in the meantime.
 ## What this will not do
 
 - It will not make a 27B model fit on a 16 GB Mac. No setting on this page
-  changes that.
+  changes that; the 9B in the catalog is what fits there.
 - It will not stop macOS from slowing down when you run a model that takes more
   than half your memory. It only stops the slowdown from becoming a stall.
 - It will not protect you if you raise `iogpu.wired_limit_mb` by hand and then
   load a model that does not fit under the new ceiling. That path is outside every
   guard in this repository, which is why Section 8 recommends against it.
 - It will not tell you how fast the model will run on your Mac. Speed depends on
-  your chip's graphics cores, and no speed figure has been measured on any machine
-  other than the test machine.
+  your chip's graphics cores, and no speed figure for the 27B has been measured
+  on any machine.
 
 ---
 

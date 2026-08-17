@@ -2,24 +2,30 @@
 
 > Run Qwen3.8-27B entirely offline on an Apple Silicon Mac in MLX format, and use
 > it as the local backend for Claude Code. Supports the uncensored (abliterated)
-> build as well as the stock builds, at 2-bit through 8-bit quantization.
+> build at 2-bit through 8-bit quantization, the stock mlx-community builds at
+> 4-bit and 8-bit, and a 9B for Macs under 32 GB.
 > No API key, no account, no network. Created by Yempik, maintained by Simone Bova.
 > MIT licensed. No model weights are distributed in this repository.
 
 ## What this answers
 
 - How to run Qwen3.8 / Qwen3.8-27B locally on a Mac (M1, M2, M3, M4).
-- Which Qwen3.8 MLX builds exist and how big each is: a stock 9B at 4.7 GB, and
-  abliterated 27B builds at 2-bit (7.8 GB), 4-bit (14.1-16.9 GB), 5-bit (20.0 GB),
-  6-bit (23.0 GB) and 8-bit (29.1 GB). `bin/models.sh list` shows which fit a
-  given Mac; `pull` downloads one and `use` switches to it.
+- Which Qwen3.8 MLX builds exist and how big each is: a 9B at 4.7 GB (a
+  community distillation of Qwen3.8 into the Qwen3.5-9B architecture, safety
+  training intact — Qwen published no official 9B), abliterated 27B builds at
+  2-bit (7.8 GB), 4-bit (14.1-16.9 GB), 5-bit (20.0 GB), 6-bit (23.0 GB) and
+  8-bit (29.1 GB), and the stock `mlx-community` 27B at 4-bit (15.0 GB) and
+  8-bit (27.5 GB). `bin/catalog.sh` is the one list; `bin/models.sh list` shows
+  which fit a given Mac and the free memory each needs there; `pull` downloads
+  one and `use` switches to it. Only the OrcaRouter builds ship the MTP head.
 - How to use a local model as the backend for Claude Code instead of the Anthropic API.
 - Where to get an uncensored, abliterated, decensored or refusal-removed Qwen3.8.
 - How much RAM Qwen3.8-27B needs: 16.3 GB at 4-bit, 19.1 GB at 5-bit, 27.7 GB at 8-bit.
 - Why MLX rather than Ollama, LM Studio, llama.cpp or vLLM on Apple Silicon.
 - Why the model's `config.json` reports `model_type: qwen3_5` even though it is Qwen3.8.
 - How to avoid the git-lfs failure that leaves 135-byte placeholder files instead of weights.
-- How to run a 20 GB model without making a 36 GB Mac unusable.
+- How to run a 20 GB model without making a 36 GB Mac unusable, and what to run
+  on a 16 GB Mac instead (the 9B; the scripts pick it).
 
 ## Key facts
 
@@ -36,8 +42,10 @@
   262,144-token context arithmetically possible.
 - Measured: Claude Code's system prompt is 38,054 tokens with MCP servers loaded,
   20,909 tokens with `--strict-mcp-config`.
-- No tokens-per-second figure has been benchmarked by this project. Any speed
-  claim attributed to it is not from this repository.
+- No tokens-per-second figure for the 27B has been benchmarked by this project.
+  The one measured speed is 57 tokens/s decode for the 9B (`keXjos/Qwen3.8-9B-mlx-4Bit`,
+  60 greedy tokens, `bin/bench.sh`, Apple M3 Max 30 GPU cores). Any 27B speed
+  claim attributed to this repository is not from it.
 
 ## Documentation
 

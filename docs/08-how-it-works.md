@@ -867,8 +867,11 @@ that says which piece lives in which of the five weight files. Section 3's byte 
 
 **If you do not see that**, and instead see `mtp tensors: 0`, this checkpoint has
 no built-in guesser. The stack will still run, and generation will be slower.
-`./bin/verify-model.sh` reports this as a failure, because for this specific model
-it means the download is not what it should be.
+For this specific model `./bin/verify-model.sh` reports that as a failure,
+because the publisher's manifest says the head should be there and its absence
+means the download is not what it should be. For a checkpoint that ships no
+head — the 9B in the catalog, the 2-bit, AEON and stock 27B builds — it prints
+`MTP head absent` and passes.
 
 ### What the publisher measured, and what this repository did not
 

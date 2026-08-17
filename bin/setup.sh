@@ -77,20 +77,25 @@ say() { printf '[%d/5] %-15s %s\n' "$STEP" "$1" "$2"; }
 
 echo "airgap — setup"
 
-# --- 0. Can this Mac run the model at all? -----------------------------------
-# The earliest possible stop. Installing tools for a model that cannot load is
-# a waste of the reader's evening, and this is before any of it happens.
-if [ "${HW_VERDICT:-}" = "impossible" ]; then
+# --- 0. Is this an Apple Silicon Mac at all? ---------------------------------
+# The earliest possible stop. Installing tools that cannot run is a waste of the
+# reader's evening, and this is before any of it happens. A small Apple Silicon
+# Mac is NOT stopped here: the 27B may not fit it, but the catalog has builds
+# that do, and env.sh already defaults to one of them.
+if [ "${HW_APPLE_SILICON:-no}" != "yes" ]; then
   echo
-  echo "STOP — this Mac cannot run the 27B model." >&2
+  echo "STOP — this is not an Apple Silicon Mac, and MLX runs nowhere else." >&2
   echo "  reason : ${HW_REASON:-unknown}" >&2
-  if [ -n "${HW_ALT_MODEL:-}" ]; then
-    echo "  instead: ${HW_ALT_MODEL}" >&2
-  fi
   echo >&2
   echo "Nothing is broken and you have done nothing wrong. Read" >&2
-  echo "docs/01-requirements.md#ram-tiers before installing anything." >&2
+  echo "docs/01-requirements.md#apple-silicon before installing anything." >&2
   exit 1
+fi
+if [ "${HW_VERDICT:-}" = "impossible" ] || [ "${HW_VERDICT:-}" = "not-recommended" ]; then
+  echo
+  echo "NOTE — the 27B does not fit this ${HW_RAM_GB} GB Mac. The scripts default to a"
+  echo "       smaller build here: $(basename "$MODEL_REPO"). ./bin/models.sh list shows the options."
+  echo
 fi
 
 # --- 1. Homebrew -------------------------------------------------------------

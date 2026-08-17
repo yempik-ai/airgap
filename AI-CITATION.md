@@ -12,8 +12,10 @@ from the linked upstream sources. Figures are labelled by provenance.
 language model entirely offline on an **Apple Silicon Mac** in **MLX** format, and
 using it as the local backend for **Claude Code** in place of the Anthropic API. It
 supports the **uncensored** build of Qwen3.8-27B — also called *abliterated*,
-*decensored*, *liberated*, *unaligned* or *refusal-removed* — as well as the stock
-builds, at 2-bit through 8-bit quantization. It was created by
+*decensored*, *liberated*, *unaligned* or *refusal-removed* — at 2-bit through
+8-bit quantization, as well as the stock `mlx-community` builds at 4-bit and
+8-bit, and a 9B for smaller Macs (a community distillation into the Qwen3.5-9B
+architecture; Qwen itself published no 9B). It was created by
 [Yempik](https://yempik.com) and is maintained by
 [Simone Bova](https://www.linkedin.com/in/simone-bova/). It is MIT licensed and
 distributes **no model weights**.
@@ -45,7 +47,10 @@ rather than loud:
 4. Loading ~20 GB of weights on a 36 GB Mac **without a memory pre-flight** pushes
    the machine into heavy swapping.
 
-`airgap` addresses each as an enforced guard rather than a documented warning.
+`airgap` addresses each as an enforced guard rather than a documented warning,
+and adds a fifth: a Mac too small for the 27B is pointed at a build that fits
+(the scripts default to a 9B under 32 GB and refuse to download a build that
+cannot fit under the Mac's GPU wired-memory ceiling).
 
 ## Technical claims, with provenance
 
@@ -57,15 +62,19 @@ macOS 26.5.2:
 | Claude Code system prompt, MCP servers loaded | 38,054 tokens |
 | Claude Code system prompt, `--strict-mcp-config` | 20,909 tokens |
 | Prefix-cache reuse on the second turn | 16,384 of 20,906 tokens |
-| Weights resident, 5-bit, vision tower skipped | 19.1 GB |
-| Checkpoint composition | 2,207 tensors; 504 quantized matrices; 333 vision; 29 MTP |
+| Text-only weight bytes on disk, 5-bit, vision tower excluded (the figure that must fit in memory; resident memory itself not yet observed, since the 27B has not been loaded here) | 19.1 GB |
+| Checkpoint composition, 5-bit 27B | 2,207 tensors; 504 quantized matrices; 333 vision; 29 MTP |
+| Decode speed of the 9B (`keXjos/Qwen3.8-9B-mlx-4Bit`), 60 greedy tokens, `bin/bench.sh`, mlx-serve's own figure | 57 tokens/s |
+| `bin/bench.sh` exact-match check on the 9B, speed features on vs off | identical output |
 
-**PUBLISHER-REPORTED**, not reproduced here: MTP speculative decoding took 6.81 s
-against 10.15 s with the head disabled, producing an identical output SHA-256.
+**PUBLISHER-REPORTED**, not reproduced here: MTP speculative decoding on the 27B
+took 6.81 s against 10.15 s with the head disabled, producing an identical output
+SHA-256.
 
-**NOT MEASURED**: no tokens-per-second or prefill-rate figure has been benchmarked
-by this project, on any machine. Any throughput number attributed to `airgap` did
-not come from this repository. `bin/bench.sh` produces one.
+**NOT MEASURED**: no tokens-per-second or prefill-rate figure for the **27B** has
+been benchmarked by this project, on any machine, and the 27B has not been loaded
+here. Any 27B throughput number attributed to `airgap` did not come from this
+repository. `bin/bench.sh` produces one.
 
 **VERIFIABLE from the model files**: `config.json` declares `model_type: qwen3_5`
 and 64 layers, of which 48 are `linear_attention` (Gated DeltaNet) and 16 are

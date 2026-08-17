@@ -2,7 +2,7 @@
 # bin/verify-model.sh — prove the download is complete, and show what is in it.
 #
 # It reads a few hundred kilobytes: the small text description at the front of
-# each weights file, and config.json. It never loads the 20 GB of numbers and
+# each weights file, and config.json. It never loads the weights themselves and
 # it never starts the server. Expect it to finish in under a second.
 #
 # Read docs/03-get-the-model.md for what each line of the output means.
@@ -82,9 +82,12 @@ text = cfg.get("text_config", cfg)
 mtype = cfg.get("model_type", "unknown")
 
 print("model    %s" % os.path.basename(os.path.normpath(d)))
-print("config   model_type = %s   (correct, not a typo -- Qwen3.8-27B is built on" % mtype)
-print("         the qwen3_5 architecture family, the way Llama 3.1/3.2/3.3 all report")
-print('         model_type "llama". Runtimes dispatch on model_type.)')
+if mtype == "qwen3_5":
+    print("config   model_type = qwen3_5   (correct, not a typo -- the Qwen3.8 builds are")
+    print("         built on the qwen3_5 architecture family, the way Llama 3.1/3.2/3.3 all")
+    print('         report model_type "llama". Runtimes dispatch on model_type.)')
+else:
+    print("config   model_type = %s" % mtype)
 
 # --- layer split -------------------------------------------------------------
 # Only the "full_attention" layers keep a growing record of the conversation.
@@ -116,8 +119,11 @@ if not shards:
     sys.exit(1)
 
 total = quant = vision = mtp = 0
-payload = 0
+payload = vis_bytes = 0
 parsed = 0
+
+def is_vision(name):
+    return name.startswith("vision_tower.") or "visual" in name
 
 for p in shards:
     size = os.path.getsize(p)
@@ -143,53 +149,46 @@ for p in shards:
         total += 1
         if name.endswith(".scales"):
             quant += 1
-        if name.startswith("vision_tower.") or "visual" in name:
+        if is_vision(name):
             vision += 1
         if ".mtp." in name or name.startswith("mtp."):
             mtp += 1
         offs = meta.get("data_offsets")
         if offs and len(offs) == 2:
             payload += offs[1] - offs[0]
+            if is_vision(name):
+                vis_bytes += offs[1] - offs[0]
 
 pointer_note = "no git-lfs pointers" if parsed == len(shards) else "SOME FILES UNREADABLE"
 print("shards   %d/%d headers parsed, %s" % (parsed, len(shards), pointer_note))
 print("tensors  %d total | %d quantized | %d vision | %d MTP" % (total, quant, vision, mtp))
 
 # --- the fast-answer head ----------------------------------------------------
-# This checkpoint ships a small extra head that guesses several next tokens at
-# once, so the main model can check a batch instead of producing one at a time.
-# Stock mlx-lm deletes it on load. mlx-serve keeps it. That single fact is why
-# this repo runs mlx-serve.
+# The OrcaRouter checkpoints ship a small extra head that guesses several next
+# tokens at once, so the main model can check a batch instead of producing one
+# at a time. Stock mlx-lm deletes it on load. mlx-serve keeps it. That single
+# fact is why this repo runs mlx-serve.
+#
+# Not every checkpoint has one -- the 9B and most non-OrcaRouter 27B builds do
+# not -- and a checkpoint without one is not broken. It is only a FAILURE when
+# the publisher's manifest says the head should be there and it is not, which
+# means the download is incomplete. That decision is taken in the manifest
+# check below; here the fact is just reported.
 if mtp > 0:
     print("MTP head PRESENT -- the reason this stack runs mlx-serve, not stock mlx-lm")
 else:
-    fail("no mtp.* tensors found -- this checkpoint has no MTP head",
-         "you can still run it, but the speed-up this repo describes will not apply.")
+    print("MTP head absent  -- this checkpoint ships none. It runs; the MTP speed-up")
+    print("         described in the docs does not apply to it. Not a failure.")
 
 # --- size --------------------------------------------------------------------
 # Text-only: the vision part is skipped at run time, so it costs disk but not
 # memory while Claude Code is talking to the model.
-vis_bytes = 0
-for p in shards:
-    if os.path.getsize(p) < 1_000_000:
-        continue
-    try:
-        with open(p, "rb") as f:
-            (hlen,) = struct.unpack("<Q", f.read(8))
-            header = json.loads(f.read(hlen).decode("utf-8"))
-        for name, meta in header.items():
-            if name == "__metadata__":
-                continue
-            if name.startswith("vision_tower.") or "visual" in name:
-                offs = meta.get("data_offsets")
-                if offs and len(offs) == 2:
-                    vis_bytes += offs[1] - offs[0]
-    except Exception:
-        pass
-
 text_gb = (payload - vis_bytes) / 1073741824.0
-print("size     %.1f GB of text-only weights on disk (the vision tower is skipped at" % text_gb)
-print("         run time via --no-vision, so it costs disk but not memory)")
+if vis_bytes:
+    print("size     %.1f GB of text-only weights on disk (the vision tower is skipped at" % text_gb)
+    print("         run time via --no-vision, so it costs disk but not memory)")
+else:
+    print("size     %.1f GB of weights on disk (text-only checkpoint, no vision tower)" % text_gb)
 
 # --- cross-check against the publisher's own manifest ------------------------
 mpath = os.path.join(d, "ARTIFACT-MANIFEST.json")
@@ -199,6 +198,10 @@ if os.path.exists(mpath):
         inv = man.get("tensor_inventory", {})
         exp_total = inv.get("physical")
         exp_quant = inv.get("quantized_logical")
+        exp_mtp = inv.get("mtp_logical")
+        if exp_mtp and mtp == 0:
+            fail("the publisher's manifest lists an MTP head (%d tensors) and none was found -- download is incomplete" % exp_mtp,
+                 "run: cd '%s' && git lfs pull" % d)
         if exp_total is not None and exp_total != total:
             fail("expected %d tensors, found %d -- download is incomplete" % (exp_total, total),
                  "run: cd '%s' && git lfs pull" % d)

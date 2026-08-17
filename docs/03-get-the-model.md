@@ -166,11 +166,12 @@ disk     460.4 GB free (need 45 GB)
 
 [1/5] git-lfs                ok (3.7.1)
 [2/5] resolving repo         checking huggingface.co
-[2/5] resolving repo         ok — huggingface.co/chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+[2/5] resolving repo         ok — huggingface.co/chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit (20.0 GB of weights)
 [3/5] cloning metadata       GIT_LFS_SKIP_SMUDGE=1 (pointers now, weights next)
-[4/5] git lfs pull           about 20 GB — this is the long part
+[4/5] git lfs pull           about 20.0 GB — this is the long part
       Press Ctrl-C to stop. Running this command again resumes it.
 [4/5] git lfs pull           ok — no pointer files left
+      checking each file, then sharing its blocks — a minute or two on 20 GB
 [5/5] git lfs dedup          reclaimed 20.1 GB (462.5 GB free before, 482.6 GB after)
 
 download complete — next: ./bin/verify-model.sh
@@ -178,15 +179,20 @@ download complete — next: ./bin/verify-model.sh
 
 Four things differ on your Mac: the `target` path contains your own account
 name, the three disk figures are your own, the git-lfs version may be newer, and
-the repository name changes if your Mac was recommended the 4-bit or 8-bit build
-(see Section 7). The step numbers and their order never change.
+the repository name and size change if your Mac was recommended a different
+build (see Section 7). The step numbers and their order never change.
 
 Between the `[4/5]` lines there is a long silence with a progress display from
 git-lfs. That is the download. It is normal for it to sit at a high percentage
 for a while at the end.
 
-**If you do not see that.** Four failures are possible here and each names its
+**If you do not see that.** Five failures are possible here and each names its
 own fix.
+
+- `error: <repo> cannot be loaded on this Mac, so it is not worth downloading.`
+  — the build cannot fit under your Mac's graphics memory ceiling, so the script
+  stopped in step 2, before spending the download. `./bin/models.sh list` marks
+  the builds that fit.
 
 - `error: git-lfs not installed. Run ./bin/setup.sh first.` — FIX THIS. You
   skipped Step 3 of this page or a step in [02 — install](02-install.md).
@@ -230,8 +236,10 @@ occupies about 40 GB of disk, and the tool needs some room to work in on top of
 that.
 
 Step 5 of the download fixes this. The command `git lfs dedup` replaces one copy
-with a reference to the other. On the APFS disk that every modern Mac uses, this
-is instant and loses nothing: both names now point at the same blocks.
+with a reference to the other. On the APFS disk that every modern Mac uses, no
+data is copied and nothing is lost: both names now point at the same blocks. It
+does read each file once to check it first, so on 20 GB it takes a minute or two
+rather than an instant.
 
 **How much does it actually reclaim?** The download script measures your free
 disk before and after and prints both numbers, so the figure you see is your
@@ -333,9 +341,12 @@ and `size` lines describe that build instead.
 - `verify FAIL: expected 2207 tensors, found <n> — download is incomplete` —
   FIX THIS by running `./bin/download-model.sh` again. It continues where it
   stopped.
-- `verify FAIL: no mtp.* tensors found` — FIX THIS. You have a different
-  checkpoint from the one these documents describe. Everything still runs, but
-  without the speed feature Section 6d is about.
+- `verify FAIL: the publisher's manifest lists an MTP head (15 tensors) and none
+  was found — download is incomplete` — FIX THIS by running
+  `./bin/download-model.sh` again. A checkpoint that ships no MTP head at all
+  prints `MTP head absent` instead and still passes; that is the 9B, the 2-bit
+  and the AEON and stock 27B builds, and it means the speed feature in Section
+  6d does not apply to them, not that anything is wrong.
   [06 — troubleshooting](06-troubleshooting.md#mtp-missing).
 
 ### What the output is telling you
@@ -477,30 +488,37 @@ already downloaded it, and `->` for the one selected right now. To change build:
 ./bin/serve.sh
 ```
 
-`use` writes one line into `config.env` and changes nothing else, so your other
-settings survive. Both models stay on disk, so switching back is instant and
-costs no download.
+`use` writes one `MODEL_REPO` line into `config.env`, removes any `MODEL_DIR` or
+`MODEL_QUANT` line that would override it, and changes nothing else, so your
+other settings survive. Both models stay on disk, so switching back is instant
+and costs no download.
 
-The catalog covers seven builds, from 4.7 GB to 29.1 GB:
+The catalog covers nine builds, from 4.7 GB to 29.1 GB. It is one file,
+`bin/catalog.sh`, and every script reads it from there:
 
-| Key | Download | Free memory needed | Refusals removed? |
-|---|---|---|---|
-| `9b-4bit` | 4.7 GB | 8 GB | **No** — stock Qwen3.8-9B |
-| `27b-2bit` | 7.8 GB | 11 GB | Yes — smallest abliterated, and 2 bits costs real quality |
-| `27b-4bit-aeon` | 14.1 GB | 18 GB | Yes — a different abliteration (AEON) |
-| `27b-4bit` | 16.9 GB | 21 GB | Yes — sensible on a 32 GB Mac |
-| `27b-5bit` | 20.0 GB | 23 GB | Yes — **the tested build** |
-| `27b-6bit` | 23.0 GB | 26 GB | Yes |
-| `27b-8bit` | 29.1 GB | 32 GB | Yes — wants a 48 GB Mac |
+| Key | Download | Free memory needed on the 36 GB test machine | Refusals removed? | MTP head |
+|---|---|---|---|---|
+| `9b-4bit` | 4.7 GB | 11 GB | **No** — a community distillation of Qwen3.8 into the Qwen3.5-9B architecture, not an official Qwen release | no |
+| `27b-2bit` | 7.8 GB | 14 GB | Yes — smallest abliterated 27B, and 2 bits costs real quality | no |
+| `27b-4bit-aeon` | 14.1 GB | 18 GB | Yes — a different abliteration (AEON) | no |
+| `27b-4bit-stock` | 15.0 GB | 19 GB | **No** — the stock `mlx-community` 27B | no |
+| `27b-4bit` | 16.9 GB | 20 GB | Yes — the default on a 32 GB Mac | yes |
+| `27b-5bit` | 20.0 GB | 22 GB | Yes — **the tested build** | yes |
+| `27b-6bit` | 23.0 GB | 25 GB | Yes | yes |
+| `27b-8bit` | 29.1 GB | 30 GB | Yes — the default from 64 GB | yes |
+| `27b-8bit-stock` | 27.5 GB | 29 GB | **No** — the stock `mlx-community` 27B | no |
 
 Download sizes are the real totals of the weight files, read from
-huggingface.co in August 2026. The free-memory figures are those sizes plus
-roughly 3 GB for the conversation and the caches; they are what
-`./bin/serve.sh` will insist on before it starts.
+huggingface.co in August 2026, and the MTP column was read from each
+repository's weight index. The free-memory column is what `./bin/serve.sh`
+insists on for that build **on the 36 GB test machine at its 65,536-token
+window** — it is computed, not typed, from the loaded weight size, the context
+window and the prefix cache, by the same arithmetic the server guard uses. On
+your Mac the figures differ, and `./bin/models.sh list` prints yours.
 
-Only the 5-bit row has been run on the test machine. The others are listed
-because they exist and their sizes are known, not because they were benchmarked
-here.
+Only the 5-bit row has been run on the test machine, plus the 9B for the
+end-to-end check. The others are listed because they exist and their sizes are
+known, not because they were benchmarked here.
 
 **Any other MLX model works too**, whether or not it is in the list:
 
@@ -513,21 +531,23 @@ The rest of this section explains the same choice made by hand, if you would
 rather see the mechanism than use the command.
 
 **You do not have to choose.** `bin/detect-hardware.sh` reads your Mac's memory
-and picks; `./bin/download-model.sh` then downloads that build into a folder
+and picks a catalog build — the 27B at 4-bit, 5-bit or 8-bit from 32 GB up, the
+9B below that; `./bin/download-model.sh` then downloads that build into a folder
 named after it. The folder name matters, because the name the server answers to
 is the folder's own name — so a folder that says `5bit` always contains the
 5-bit build.
 
-**To choose by hand**, put a line in your settings file. Copy the example file
-first if you have not:
+**To choose an OrcaRouter build by hand**, put a line in your settings file.
+Copy the example file first if you have not:
 
 ```
 cp ~/dev/local-llms/airgap/config.env.example ~/dev/local-llms/airgap/config.env
 ```
 
 This prints nothing. That is success. Then open `config.env` in any text editor
-and change the `MODEL_QUANT` line to one of `4bit`, `5bit` or `8bit`, removing
-the `#` at the start of the line.
+and change the `MODEL_QUANT` line to one of `4bit`, `5bit`, `6bit` or `8bit`,
+removing the `#` at the start of the line. `./bin/models.sh use <key>` does the
+same for any catalog build, and writes the line for you.
 
 **To download a completely different model**, pass its address on the command
 line. Replace `<ORGANIZATION>/<NAME>` with the text at the top of its page on
@@ -539,9 +559,10 @@ huggingface.co. For a worked example, that might be `mlx-community/Qwen3-14B-4bi
 
 The folder is named after the model you asked for, so nothing ends up in a folder
 claiming to be something else. Be aware that these documents describe the 27B
-checkpoint specifically; the memory arithmetic in [07 — tuning](07-tuning.md)
-does not apply to any other model, because it depends on this one's unusual layer
-split.
+checkpoint specifically; the KV-cache arithmetic in [07 — tuning](07-tuning.md)
+is exact for it, an over-estimate for the 9B in the catalog (which has the same
+layer pattern with half as many layers), and wrong for a conventional dense
+model, where every layer grows a cache.
 
 ---
 

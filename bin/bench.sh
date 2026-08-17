@@ -6,11 +6,12 @@
 #   1. with the two speed features on   — the normal setting
 #   2. with both switched off           — one token at a time
 #
-# It reports the time for each AND a short fingerprint of each answer. The two
-# fingerprints should MATCH. Guessing ahead changes how fast tokens come out,
-# never which tokens come out. A mismatch means something is wrong.
+# It reports the tokens-per-second mlx-serve itself measured for each run AND a
+# short fingerprint of each answer. The two fingerprints should MATCH. Guessing
+# ahead changes how fast tokens come out, never which tokens come out. A
+# mismatch means something is wrong.
 #
-# THIS LOADS ABOUT 20 GB, TWICE. Stop the server first.
+# THIS LOADS THE MODEL TWICE. Stop the server first.
 
 set -euo pipefail
 
@@ -27,9 +28,10 @@ BEFORE YOU RUN IT
 
 WHAT IT DOES
   Asks the model the same question twice, with randomness off so the answer is
-  fixed. First with its speed features on, then with them off. Prints how long
-  each took, and a short fingerprint of each answer so you can see they are the
-  same text.
+  fixed. First with its speed features on, then with them off. Prints the
+  tokens per second mlx-serve reports for each — the writing speed only, so
+  loading the model off the disk does not blur it — and a short fingerprint of
+  each answer so you can see they are the same text.
 
 WHAT IT COSTS
   Memory: about 19.1 GB, twice, one after the other. This script loads the
@@ -38,7 +40,8 @@ WHAT IT COSTS
           names the apps to close. Close your browser and Docker Desktop first.
           To see how much is free right now, run from the repo root:
               bash -c 'source bin/env.sh && echo "$(available_gb) GB available"'
-  Time: a couple of minutes. Most of that is reading the model off the disk.
+  Time: a couple of minutes for the 27B. Most of that is reading the model off
+        the disk, twice.
   Nothing leaves your Mac.
 
 IS IT REVERSIBLE
@@ -55,14 +58,14 @@ SETTINGS
 
 WHAT YOU SHOULD SEE AT THE END
   outputs IDENTICAL  <- speculative decoding is exact, as expected
-  and a speed-up figure.
+  and a tokens-per-second figure for each run, with the ratio between them.
 
-  A NOTE ABOUT THE NUMBERS: the times include reading 20 GB off the disk both
-  times, which makes the difference look smaller than it is. The published
-  figures for this checkpoint are 6.81 seconds against 10.15 seconds with the
-  same answer both times. Those are the model publisher's figures. They have
-  NOT been reproduced on the test machine, and no tokens-per-second figure for
-  this model has been measured in this repo.
+  A NOTE ABOUT THE NUMBERS: they are what mlx-serve prints after a run, and
+  they describe your Mac, this model, this prompt and this token count. The
+  publisher's figures for the 27B are 6.81 seconds against 10.15 seconds with
+  the same answer both times. Those are the model publisher's figures. They
+  have NOT been reproduced on the test machine, and no tokens-per-second figure
+  for the 27B has been recorded in this repository.
 
 READ NEXT
   docs/07-tuning.md
@@ -114,31 +117,44 @@ fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# mlx-serve --prompt prints the answer between two lines of "=" signs, then a
+# few lines of its own statistics:
+#     Prompt: 18 tokens, 130.792 tokens-per-sec
+#     Generation: 6 tokens, 51.120 tokens-per-sec
+#     Peak memory: 4.821 GB
+# The answer and the statistics are separated here, on purpose: comparing the
+# whole output would compare two timings and always report a mismatch, and the
+# Generation line is the honest speed figure — decode only, no model loading.
 run() {
   label="$1"; shift
-  out="$TMP/$label.txt"
+  raw="$TMP/$label.raw"
   echo "── $label ─────────────────────────────────"
-  start="$(date +%s)"
   if ! mlx-serve --model "$MODEL_DIR" \
                  --prompt "$PROMPT" \
                  --max-tokens "$TOKENS" \
                  --temp 0.0 \
                  --no-vision \
-                 "$@" > "$out" 2>"$TMP/$label.err"; then
+                 "$@" > "$raw" 2>"$TMP/$label.err"; then
     echo "  FAILED — the last lines of the error output were:"
     tail -20 "$TMP/$label.err" || true
     return 1
   fi
-  end="$(date +%s)"
-  secs=$((end - start))
-  printf '  wall clock : %ss (includes ~20GB model load)\n' "$secs"
-  printf '  output sha : %s\n' "$(shasum -a 256 "$out" | cut -c1-16)"
-  echo "$secs" > "$TMP/$label.secs"
+  # The answer: everything between the first two "==========" lines.
+  awk '/^==========/ { n++; next } n == 1 { print }' "$raw" > "$TMP/$label.txt"
+  # The statistics, as printed by mlx-serve.
+  gen_line="$(grep -m1 '^Generation:' "$raw" || true)"
+  tps="$(printf '%s\n' "$gen_line" | awk '{ for (i = 1; i <= NF; i++) if ($i == "tokens-per-sec") print $(i-1) }')"
+  ntok="$(printf '%s\n' "$gen_line" | awk '{ print $2 }')"
+  printf '  generated  : %s tokens\n' "${ntok:-?}"
+  printf '  speed      : %s tokens/s (mlx-serve\x27s own figure, decode only)\n' "${tps:-not reported}"
+  printf '  output sha : %s\n' "$(shasum -a 256 "$TMP/$label.txt" | cut -c1-16)"
+  echo "${tps:-0}" > "$TMP/$label.tps"
 }
 
+echo "model:  $(basename "$MODEL_DIR") (~${HW_WEIGHTS_GB} GB)"
 echo "prompt: $(echo "$PROMPT" | cut -c1-70)..."
 echo "tokens: $TOKENS, temp 0.0 (greedy — required for an exact-match comparison)"
-echo "This loads about 20 GB twice. Expect a couple of minutes with no output."
+echo "This loads the model twice. Expect a wait with no output while it reads the disk."
 echo
 
 ok=1
@@ -150,18 +166,27 @@ run "spec-off" --no-mtp --no-pld || ok=0
 echo
 echo "── result ──────────────────────────────────"
 if [ "$ok" != "1" ]; then
-  echo "  one of the two runs failed — the timings above are not comparable."
+  echo "  one of the two runs failed — the figures above are not comparable."
   exit 1
 fi
 
 if cmp -s "$TMP/spec-on.txt" "$TMP/spec-off.txt"; then
   echo "  outputs IDENTICAL  <- speculative decoding is exact, as expected"
 else
-  echo "  outputs DIFFER     <- unexpected at temp 0; investigate before trusting timings"
+  echo "  outputs DIFFER     <- unexpected at temp 0; investigate before trusting the speeds"
+  echo "  (the two answers are in $TMP — kept until this window closes)"
+  trap - EXIT
 fi
 
-on="$(cat "$TMP/spec-on.secs")"
-off="$(cat "$TMP/spec-off.secs")"
+on="$(cat "$TMP/spec-on.tps")"
+off="$(cat "$TMP/spec-off.tps")"
 awk -v on="$on" -v off="$off" 'BEGIN {
-  if (on > 0) printf "  speedup ~ %.2fx (load time dilutes this; the decode-only gain is larger)\n", off / on
+  if (on > 0 && off > 0)
+    printf "  speed-up ~ %.2fx  (%s tokens/s with the speed features on, %s off)\n", on / off, on, off
+  else
+    print "  no speed figure: mlx-serve did not print a Generation line for one of the runs"
 }'
+echo
+echo "This measured YOUR Mac, this model, this prompt and ${TOKENS} tokens. It is not a"
+echo "benchmark of anything else. Speed features here means the MTP head (if this"
+echo "checkpoint ships one) and prompt-lookup decoding."

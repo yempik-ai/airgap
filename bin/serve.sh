@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # bin/serve.sh — start the model server on this Mac.
 #
-# THIS IS THE ONLY SCRIPT THAT LOADS THE MODEL. It puts about 19.1 GB into your
-# Mac's memory. Read docs/04-memory-safety.md before the first run.
+# THIS IS THE ONLY SCRIPT THAT LOADS THE MODEL. It puts the weights — about
+# 19.1 GB for the default 5-bit 27B — into your Mac's memory. Read
+# docs/04-memory-safety.md before the first run.
 #
 # It stays in the foreground and keeps printing. Press Ctrl-C to stop it, or run
 # ./bin/stop.sh from another window.
@@ -32,7 +33,7 @@ BEFORE YOU RUN IT
 
 WHAT IT DOES
   Checks seven things, then loads the model and waits for questions:
-    1. this Mac can run the model at all
+    1. this Mac is Apple Silicon (MLX runs nowhere else)
     2. weights plus conversation fit under Apple's GPU memory ceiling
     3. the address it will listen on is this Mac and nothing else
     4. EXTRA_ARGS contains no flag this repo refuses to pass
@@ -41,9 +42,10 @@ WHAT IT DOES
     7. there is enough free memory (it refuses rather than stall your Mac)
 
 WHAT IT COSTS
-  Memory: about 19.1 GB while the 5-bit model is loaded. The 19.1 GB is the
+  Memory: the size of the selected model's weights while it is loaded — about
+          19.1 GB for the 5-bit 27B, 4.7 GB for the 9B. The 19.1 GB is the
           MEASURED size of the weight files; resident memory has not itself
-          been observed, because the model has not been loaded on the test
+          been observed, because the 27B has not been loaded on the test
           machine. It hands that back to macOS after IDLE_EVICT_SECS seconds
           of silence (default 900, so 15 minutes).
   Time:   about a minute for the first load.
@@ -71,8 +73,9 @@ WHAT IT WILL NEVER DO
   It never passes --lan-share or --lan-discover: this model stays on this Mac.
 
 WHAT YOU SHOULD SEE
-  Six lines starting with "memory", then the server's own startup output, then
-  a line telling you it is listening. Leave the window open.
+  A "memory" line, five lines describing the model, endpoint, context, budget
+  and log, then the server's own startup output, then a line telling you it is
+  listening. Leave the window open.
 
 IF IT REFUSES TO START
   Read the message. It names the processes to close, in order of how much they
@@ -87,14 +90,11 @@ case "${1:-}" in
   -h|--help) usage; exit 0 ;;
 esac
 
-# --- Guard 0: can this Mac run it at all? ------------------------------------
-# Stop an 8 GB Mac here rather than after a 20 GB download and a stalled load.
-if [ "${HW_VERDICT:-}" = "impossible" ]; then
-  echo "REFUSING TO START — this Mac cannot run this model." >&2
+# --- Guard 0: is this an Apple Silicon Mac? ----------------------------------
+# MLX runs nowhere else. Stop here rather than at a confusing load error.
+if [ "${HW_APPLE_SILICON:-no}" != "yes" ]; then
+  echo "REFUSING TO START — this is not an Apple Silicon Mac." >&2
   echo "  reason : ${HW_REASON:-unknown}" >&2
-  if [ -n "${HW_ALT_MODEL:-}" ]; then
-    echo "  instead: ${HW_ALT_MODEL}" >&2
-  fi
   echo >&2
   echo "Nothing is broken and you have done nothing wrong. Read docs/01-requirements.md." >&2
   exit 1
@@ -116,9 +116,11 @@ if [ "${HW_WIRED_OK:-yes}" = "no" ]; then
   echo "Raising iogpu.wired_limit_mb would silence this. Do not. That is the one" >&2
   echo "change in this whole setup that can hard-hang a Mac, and it is most" >&2
   echo "tempting on the Macs with the least room for it." >&2
+  echo >&2
+  echo "  instead: a smaller build. ./bin/models.sh list marks the ones that fit," >&2
+  echo "           and ./bin/models.sh use <key> selects one." >&2
   if [ -n "${HW_ALT_MODEL:-}" ]; then
-    echo >&2
-    echo "  instead: ${HW_ALT_MODEL}" >&2
+    echo "           ${HW_ALT_MODEL}" >&2
   fi
   echo >&2
   echo "Read docs/04-memory-safety.md and docs/01-requirements.md#ram-tiers." >&2
@@ -148,7 +150,7 @@ esac
 
 # --- Guard 0d: is EXTRA_ARGS trying to undo one of the guards? --------------
 # EXTRA_ARGS is appended last and can therefore override anything above it.
-# Five flags are refused outright, because the help text above promises this
+# Six flags are refused outright, because the help text above promises this
 # script never passes them and a promise the code does not keep is worthless.
 for _flag in $EXTRA_ARGS; do
   case "$_flag" in
@@ -194,7 +196,7 @@ while IFS= read -r shard; do
 done < <(find "$MODEL_DIR" -name '*.safetensors' 2>/dev/null)
 
 # --- Guard 3: is there enough free memory? -----------------------------------
-# Loading about 19 GB into a Mac that is already tight is how you get a machine
+# Loading the weights into a Mac that is already tight is how you get a machine
 # that stalls, spins its fans, and stops responding to clicks. Refuse instead,
 # and say exactly what to close.
 if [ "${MIN_FREE_GB}" != "0" ]; then
@@ -303,7 +305,7 @@ echo "context  $CTX_SIZE tokens, kv-quant $KV_QUANT"
 echo "budget   weights<=$MAX_RESIDENT_MEM, prefix $PREFIX_CACHE_MEM, idle-evict ${IDLE_EVICT_SECS}s"
 echo "log      $(echo "$LOG_FILE" | sed "s|^$HOME|~|")"
 echo
-echo "Loading about ${HW_WEIGHTS_GB} GB. The first load takes about a minute."
+echo "Loading about ${HW_WEIGHTS_GB} GB of weights. The first load can take a minute."
 echo "Leave this window open. Press Ctrl-C to stop, or run ./bin/stop.sh elsewhere."
 echo "Next: open another window and run ./bin/claude-local.sh"
 echo

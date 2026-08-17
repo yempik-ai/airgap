@@ -109,27 +109,28 @@ else
   row FAIL "macos" "this is $(uname -s), not macOS" "docs/01-requirements.md#apple-silicon"
 fi
 
-if [ "${HW_CHIP:-}" != "${HW_CHIP#Apple M}" ]; then
+if [ "${HW_APPLE_SILICON:-no}" = "yes" ]; then
   row PASS "apple silicon" "${HW_CHIP}${HW_GPU_CORES:+, ${HW_GPU_CORES} GPU cores}"
 else
   row FAIL "apple silicon" "this Mac reports ${HW_CHIP:-unknown}" "docs/01-requirements.md#apple-silicon"
 fi
 
+# The tier is about the 27B: whether it fits, and which build is the default
+# here. It never FAILs on its own — whether the SELECTED model fits is the next
+# two rows, "gpu ceiling" and "memory", which judge the weights really chosen.
 case "${HW_VERDICT:-unknown}" in
   comfortable|workable)
-    row PASS "ram tier" "${HW_RAM_GB} GB total — ${HW_VERDICT}, recommends ${HW_QUANT} at ${CTX_SIZE} tokens" ;;
+    row PASS "ram tier" "${HW_RAM_GB} GB total — ${HW_VERDICT}, default build ${HW_RECOMMENDED_KEY} at ${CTX_SIZE} tokens" ;;
   tight)
-    row WARN "ram tier" "${HW_RAM_GB} GB total — tight. Recommends ${HW_QUANT}, not 5-bit. Close apps before running." ;;
-  not-recommended)
-    row WARN "ram tier" "${HW_RAM_GB} GB total — a 27B model is not recommended here. ${HW_ALT_MODEL}" ;;
-  impossible)
-    row FAIL "ram tier" "${HW_RAM_GB} GB total — this Mac cannot run the 27B model. ${HW_ALT_MODEL}" "docs/01-requirements.md#ram-tiers" ;;
+    row WARN "ram tier" "${HW_RAM_GB} GB total — tight for a 27B. Default build ${HW_RECOMMENDED_KEY}. Close apps before running." ;;
+  not-recommended|impossible)
+    row WARN "ram tier" "${HW_RAM_GB} GB total — the 27B does not fit here; default build ${HW_RECOMMENDED_KEY}. ${HW_ALT_MODEL}" ;;
   *)
     row WARN "ram tier" "could not work out this Mac's memory size" ;;
 esac
 
 if [ "${HW_WIRED_OK:-yes}" = "no" ]; then
-  row FAIL "gpu ceiling" "weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) do not fit under Apple's ${HW_WIRED_AUTO_GB} GB ceiling" "docs/04-memory-safety.md#free-memory"
+  row FAIL "gpu ceiling" "$(basename "$MODEL_DIR"): weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) do not fit under Apple's ${HW_WIRED_AUTO_GB} GB ceiling. Pick a smaller build: ./bin/models.sh list" "docs/04-memory-safety.md#wired-limit"
 else
   row PASS "gpu ceiling" "weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) fit under Apple's ${HW_WIRED_AUTO_GB} GB ceiling"
 fi
@@ -233,7 +234,7 @@ if [ "$model_ok" = "1" ]; then
   elif [ -n "$bad" ]; then
     row FAIL "weights" "$bad" "docs/06-troubleshooting.md#lfs-pointers"
   else
-    row PASS "weights" "${n_shards} shards, no pointers, ${gb} GB on disk (${HW_WEIGHTS_GB} GB is loaded)"
+    row PASS "weights" "${n_shards} shards, no pointers, ${gb} GB on disk (about ${HW_WEIGHTS_GB} GB is loaded)"
   fi
 
   row PASS "model id" "$MODEL_ID"
@@ -301,10 +302,20 @@ if server_up; then
 
   health_json="$(curl -fsS --max-time 5 "$BASE_URL/health" 2>/dev/null || true)"
   probe_src="${health_json}${models_json}"
+  # A checkpoint that ships no MTP head cannot have it loaded, and that is not
+  # a warning about anything. The weight index says whether it ships one.
+  ships_mtp="unknown"
+  if [ -f "$MODEL_DIR/model.safetensors.index.json" ]; then
+    if grep -q '\.mtp\.' "$MODEL_DIR/model.safetensors.index.json" 2>/dev/null; then ships_mtp="yes"; else ships_mtp="no"; fi
+  fi
   if echo "$probe_src" | grep -q '"mtp_loaded"[[:space:]]*:[[:space:]]*true'; then
     row PASS "mtp_loaded" "true"
   elif echo "$probe_src" | grep -q '"mtp_loaded"[[:space:]]*:[[:space:]]*false'; then
-    row WARN "mtp_loaded" "false — the fast-answer head is not in use. See docs/08-how-it-works.md"
+    if [ "$ships_mtp" = "no" ]; then
+      row PASS "mtp_loaded" "false — expected: this checkpoint ships no MTP head"
+    else
+      row WARN "mtp_loaded" "false — the checkpoint ships an MTP head and the server did not load it. See docs/08-how-it-works.md"
+    fi
   else
     row SKIP "mtp_loaded" "this server version does not report it"
   fi
@@ -349,7 +360,25 @@ else
   row WARN "base url" "ANTHROPIC_BASE_URL is already set to ${ANTHROPIC_BASE_URL}; claude-local.sh overrides it"
 fi
 
-row PASS "context declared" "CLAUDE_CODE_MAX_CONTEXT_TOKENS follows CTX_SIZE (${CTX_SIZE})"
+# CTX_SIZE is what the server is asked to hold and what Claude Code is told it
+# may send. It must not exceed what the model itself was built for, which is
+# written in the model's own config.json.
+if [ "$model_ok" = "1" ]; then
+  model_max="$(python3 -c '
+import json,sys
+c = json.load(open(sys.argv[1])); t = c.get("text_config", c)
+print(t.get("max_position_embeddings") or c.get("max_position_embeddings") or "")
+' "$MODEL_DIR/config.json" 2>/dev/null || true)"
+  if [ -z "$model_max" ]; then
+    row WARN "context" "CTX_SIZE=${CTX_SIZE}; the model's config.json does not state its maximum"
+  elif [ "$CTX_SIZE" -le "$model_max" ] 2>/dev/null; then
+    row PASS "context" "CTX_SIZE=${CTX_SIZE} declared to server and Claude Code, within the model's ${model_max}"
+  else
+    row FAIL "context" "CTX_SIZE=${CTX_SIZE} is more than the model's own maximum of ${model_max}" "docs/07-tuning.md#2-the-one-setting-most-people-come-here-for-context-size"
+  fi
+else
+  row SKIP "context" "cannot check against the model until it is downloaded (CTX_SIZE=${CTX_SIZE})"
+fi
 
 if [ "$LEAN_MCP" = "1" ]; then
   row PASS "mcp mode" "strict (LEAN_MCP=1) — saves about 17,000 prompt tokens per turn"
