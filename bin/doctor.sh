@@ -24,7 +24,9 @@ WHAT IT DOES
     environment       your Mac: version, chip, memory, disk
     tools             homebrew, git-lfs, mlx-serve, Claude Code
     model             the folder of weights, and whether they are real files
-    server            whether the server is running, and answering correctly
+    server            whether the server is running, answering correctly, and
+                      whether its prefix cache is doing its job (read from the
+                      server's own log and counters — see docs/07-tuning.md §5)
     claude code       whether Claude Code will be pointed at your Mac
 
   Each line starts with one of four words:
@@ -38,8 +40,8 @@ WHAT IT DOES NOT DO
   never changes a setting. Running it cannot break anything.
 
 WHAT IT COSTS
-  A second or two. No memory. Nothing leaves your Mac, except one short
-  request to your own server if it happens to be running.
+  A second or two. No memory. Nothing leaves your Mac, except a few short
+  requests to your own server if it happens to be running.
 
 USAGE (run from the repo root)
   ./bin/doctor.sh            run every check
@@ -96,6 +98,44 @@ section() {
 
 # Shorten a long path so the line still fits a normal terminal.
 shortpath() { echo "$1" | sed "s|^$HOME|~|"; }
+
+# Every request to our own server goes through here. --api-key gates every
+# endpoint but /health — for non-loopback clients; the server trusts localhost
+# (see AGENT.md) — so the key is added in one place rather than remembered at
+# one call site and forgotten at the others. $1 is the curl time limit; the
+# rest is passed on. Two branches rather than an optional array: an empty
+# array cannot be expanded under `set -u` in the bash 3.2 that macOS ships.
+srv_curl() {
+  _t="$1"; shift
+  if [ -n "$API_KEY" ]; then
+    curl -sS --max-time "$_t" -H "x-api-key: $API_KEY" "$@"
+  else
+    curl -sS --max-time "$_t" "$@"
+  fi
+}
+
+# What the server's own log says about the prefix cache in the CURRENT run.
+# The log is appended across restarts and has no per-line timestamps, so it is
+# scoped to everything after the last "Logging to" banner first — an unscoped
+# read would report a run that ended days ago as current. Prints three lines:
+# the cache state from the startup banner, the "[hot-cache] reused N/M" line
+# with the largest N, and how many such lines the run contains. The largest
+# rather than the latest: doctor's own 8-token probe below is itself a hit on
+# the second run, and the line that evidences the claim is the 20,000-token
+# one, which must not be displaced by it. A missing line prints empty.
+cache_log_evidence() {
+  awk '
+    BEGIN                   { best = -1 }
+    /^Logging to /          { state = ""; hit = ""; hits = 0; best = -1 }
+    /^Hot prefix cache: /   { state = $0; sub(/^Hot prefix cache: /, "", state) }
+    /\[hot-cache\] reused / {
+      hits++
+      n = $0; sub(/^.*\[hot-cache\] reused /, "", n); sub(/\/.*$/, "", n); n += 0
+      if (n >= best) { best = n; hit = $0; sub(/^.*\[hot-cache\] /, "", hit) }
+    }
+    END                     { print state; print hit; print hits }
+  ' "$1"
+}
 
 echo "airgap doctor"
 
@@ -303,7 +343,7 @@ if server_up; then
   check_bind
   row PASS "/health" "up"
 
-  models_json="$(curl -fsS --max-time 5 "$BASE_URL/v1/models" 2>/dev/null || true)"
+  models_json="$(srv_curl 5 -f "$BASE_URL/v1/models" 2>/dev/null || true)"
   if echo "$models_json" | grep -q -- "$MODEL_ID"; then
     row PASS "/v1/models" "advertises $MODEL_ID"
   elif [ -n "$models_json" ]; then
@@ -333,11 +373,60 @@ if server_up; then
     row SKIP "mtp_loaded" "this server version does not report it"
   fi
 
+  # The prefix cache is the repository's central speed claim, and the server
+  # writes the evidence for it on every request. These two rows read that
+  # evidence: first the log, then the counters. Both come BEFORE the probe
+  # below, so doctor's own 8-token question cannot become the "last hit".
+  if [ ! -f "$LOG_FILE" ]; then
+    row SKIP "prefix cache" "no log at $(shortpath "$LOG_FILE") — was the server started by ./bin/serve.sh?"
+  else
+    { read -r cache_state; read -r cache_hit; read -r cache_hits; } <<< "$(cache_log_evidence "$LOG_FILE")"
+    case "$cache_state" in
+      "")
+        row SKIP "prefix cache" "this server version does not report it in the log" ;;
+      ENABLED*)
+        if [ -n "$cache_hit" ]; then
+          row PASS "prefix cache" "log: ${cache_hit} — the biggest of ${cache_hits} hit(s) this run"
+        else
+          row PASS "prefix cache" "log: ${cache_state}; no repeated prompt served yet this run"
+        fi ;;
+      *)
+        row WARN "prefix cache" "the server reports '${cache_state}' — every turn re-reads the whole prompt. See docs/07-tuning.md §5" ;;
+    esac
+  fi
+
+  # A 503 is the server saying metrics are switched off, not a failure.
+  metrics_out="$(srv_curl 5 -w '\n%{http_code}' "$BASE_URL/metrics.json" 2>/dev/null || true)"
+  metrics_code="${metrics_out##*$'\n'}"
+  metrics_json="${metrics_out%$'\n'*}"
+  case "$metrics_code" in
+    200)
+      counters="$(printf '%s' "$metrics_json" | python3 -c '
+import json,sys
+c = json.load(sys.stdin).get("counters", {})
+print(c.get("prefix_cache_hits_total", 0), c.get("prefix_cache_queries_total", 0),
+      c.get("prefix_cache_tokens_total", 0), c.get("prompt_tokens_total", 0))
+' 2>/dev/null || true)"
+      read -r m_hits m_queries m_cached m_prompt <<< "${counters:-}"
+      if [ -z "${m_queries:-}" ]; then
+        row WARN "/metrics.json" "answered, but not in the shape this script knows"
+      elif [ "$m_queries" = "0" ]; then
+        row PASS "/metrics.json" "answering; no requests counted yet this run"
+      else
+        row PASS "/metrics.json" "${m_hits} of ${m_queries} lookups hit the cache; ${m_cached} of ${m_prompt} prompt tokens were reused"
+      fi ;;
+    503)
+      row SKIP "/metrics.json" "switched off (METRICS=0)" ;;
+    ""|000)
+      row WARN "/metrics.json" "the server did not answer this question" ;;
+    *)
+      row WARN "/metrics.json" "the server answered HTTP ${metrics_code}" ;;
+  esac
+
   if [ "$PROBE" = "1" ]; then
     body='{"model":"'"$MODEL_ID"'","max_tokens":8,"messages":[{"role":"user","content":"hi"}]}'
-    hdr=(-H "content-type: application/json" -H "anthropic-version: 2023-06-01")
-    if [ -n "$API_KEY" ]; then hdr+=(-H "x-api-key: $API_KEY"); fi
-    if curl -fsS --max-time 120 "${hdr[@]}" -d "$body" "$BASE_URL/v1/messages" >/dev/null 2>&1; then
+    if srv_curl 120 -f -H "content-type: application/json" -H "anthropic-version: 2023-06-01" \
+         -d "$body" "$BASE_URL/v1/messages" >/dev/null 2>&1; then
       row PASS "/v1/messages" "round trip ok (8 tokens)"
     else
       row FAIL "/v1/messages" "the server did not answer a small test question" "docs/06-troubleshooting.md#no-server"
@@ -352,6 +441,11 @@ elif [ -n "$port_pids" ]; then
 else
   check_bind
   row SKIP "server" "not running — start ./bin/serve.sh"
+  # The cache rows need a live server to say which run they describe, but the
+  # last run's evidence is still on disk, and this is the one place that names it.
+  if [ -f "$LOG_FILE" ]; then
+    row SKIP "prefix cache" "the last run's log is at $(shortpath "$LOG_FILE") — look for [hot-cache] lines"
+  fi
 fi
 
 # =============================================================================

@@ -14,10 +14,11 @@ against the installed binaries, and what has already been tried and found false.
 not a record — [`AUDIT.md`](AUDIT.md) holds the status of every item, and if the
 two ever disagree, `AUDIT.md` is right.*
 
-- **Last landed:** `A1` (model lock) and `A5` (named stall timeout), 2026-08-17.
-- **Next:** `C1` — read the `[hot-cache]` evidence the server already writes.
-  Then `B1`, `D3`, `E1`. The ranked list with efforts is at the top of
-  `AUDIT.md`.
+- **Last landed:** `C1` (doctor reads the `[hot-cache]` log line and the
+  `/metrics.json` counters) with `C2` folded in, 2026-08-17. `A1` and `A5`
+  earlier the same day.
+- **Next:** `B1` — make `bench.sh` keep prefill and peak memory. Then `D3`,
+  `E1`. The ranked list with efforts is at the top of `AUDIT.md`.
 - **Blocked on hardware, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `AUDIT.md` E5 and A5 both stop short
   of a measurement for this reason, and `ROADMAP.md` Phase 0 names it.
@@ -118,17 +119,34 @@ run that ended days ago as current. It rotates at 32 MB.
 **`/metrics.json` exists and its keys are known.** Counters live under a
 `counters` object: `prefix_cache_queries_total`, `prefix_cache_hits_total`,
 `prefix_cache_tokens_total`, `prompt_tokens_total`, `prefill_tokens_total`,
-`generation_tokens_total`, `requests_success_total`, with `gauges` and
-`histograms` siblings. `METRICS` defaults to 1, so the endpoint is already
-being served. It returns **503**, not an error, when metrics are off.
+`generation_tokens_total`, `requests_success_total`, `requests_cancelled_total`,
+with `gauges` and `histograms` siblings. `METRICS` defaults to 1, so the endpoint
+is already being served. It returns **503**, not an error, when metrics are off.
+Semantics, established by sending one 1212-token prompt three times to a fresh
+9B: `queries` counts **every** request including the cold first one (3),
+`hits` the ones that resumed (2), `prefix_cache_tokens_total` the tokens
+resumed (2 × 1181 = 2362), `prompt_tokens_total` all prompt tokens (3 × 1212 =
+3636), `prefill_tokens_total` the tokens actually computed (1212 + 31 + 31 =
+1274). Wall time for the three: 3241, 337, 236 ms — MEASURED, single sample.
 The strings *"Prefix cache hit count"* / *"Prefix cache lookup count"* are
 Prometheus HELP text on the separate text-format endpoint — they are **not**
 JSON keys. Do not grep for them in `/metrics.json`.
 
-**`--api-key` gates `/metrics` and `/v1/models`, but not `/health`.**
-`bin/doctor.sh` builds its auth header only for the `/v1/messages` probe, so
-setting `API_KEY` makes the `/v1/models` row report a false WARN today. See
-`AUDIT.md` C2.
+**`--api-key` gates `/metrics` and `/v1/models`, but not `/health` — and it
+exempts loopback entirely.** The server's own banner says so:
+`API key auth: ENABLED for non-loopback requests (localhost is trusted; /health
+stays open)`, and a server started with `API_KEY=s3cret` answered 200 on
+`/v1/models`, `/metrics.json` and `/v1/messages` from `127.0.0.1` with no key
+and with a wrong key. So under airgap's own settings — `serve.sh` refuses a
+non-loopback `HOST` — the key protects nothing doctor can reach, and there is no
+loopback way to test that a header satisfies it. `bin/doctor.sh` sends the
+header from one helper (`srv_curl`) anyway. See `AUDIT.md` C2.
+
+```
+$ API_KEY=s3cret ./bin/serve.sh          # then, from the same Mac:
+$ curl -sS -o /dev/null -w '%{http_code}\n' -H 'x-api-key: nope' http://127.0.0.1:11234/v1/models
+200
+```
 
 **`mlx-serve` binds its port *before* loading the model.** A second start on the
 same port dies immediately at bind with a named error and never loads weights.

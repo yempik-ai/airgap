@@ -18,7 +18,7 @@ environment facts established along the way. Read that file first — it exists 
 these findings are not researched twice.
 
 Items are referenced by id from [`ROADMAP.md`](ROADMAP.md). All are **OPEN**
-except `A1` and `A5`, marked **DONE** below and shipped in `0.1.0`.
+except `A1`, `A5` and `C1`, marked **DONE** below.
 
 Evidence is cited as `file:line` at the time of the audit. Line numbers drift;
 the greps are given where the reader will need to re-locate something.
@@ -36,7 +36,7 @@ marks *never measured*.
 |:--|:--|:--|:--|
 | ✅ | `A1` instance lock in `serve.sh` — **DONE** | small | high |
 | ✅ | `A5` name the stall timeout — **DONE** | small | medium |
-| 3 | `C1` read the cache evidence already being written | medium | high |
+| ✅ | `C1` read the cache evidence already being written — **DONE** | medium | high |
 | 4 | `B1` make `bench.sh` keep prefill and peak memory | medium | high |
 | 5 | `D3` doctor probes a streamed tool call | medium | high |
 | 6 | `E1` stop overriding the engine's prefill sizing | small | medium |
@@ -68,6 +68,13 @@ all. Everything in §F is roadmap sequencing, not code.
 > is reclaimed and the load proceeds; `doctor.sh` reports PASS / WARN / SKIP
 > correctly in all three states; `stop.sh` clears a stale lock and refuses to
 > touch a live one.
+>
+> *Observed while landing `C1`, not fixed:* `stop.sh` reads the lock the moment
+> `/health` stops answering, but `mlx-serve` closes its port before its process
+> exits, so the check can find the holder still alive and print "the model lock
+> is still held … that is not the server on port N" — then the pid exits and
+> the lock is stale. Harmless (`serve.sh` reclaims it, doctor WARNs on it) but
+> the message is wrong. A short wait on the pid, not the port, would fix it.
 
 `bin/bench.sh:81-86` refuses to run when the port is busy. `bin/serve.sh` has no
 equivalent: it is a bare `exec mlx-serve` at `:313`. Grepped `bin/` and
@@ -353,7 +360,32 @@ are inherent to the model, caused by their `KV_QUANT`, or a regression in a new
 
 ## C. Observability
 
-### C1 — the stack writes its own evidence and nothing reads it
+### C1 — the stack writes its own evidence and nothing reads it — **DONE**
+
+> **Shipped 2026-08-17.** Two rows in `doctor.sh`'s server section, placed
+> *before* the `/v1/messages` probe so doctor's own 8-token question cannot
+> become the evidence. `prefix cache` reads `LOG_FILE`, scoped to everything
+> after the last `^Logging to ` banner, and quotes the `[hot-cache] reused N/M`
+> line with the **largest** N in that run — largest, not latest, because on the
+> second doctor run the probe itself is a 12/13-token hit and would otherwise
+> displace the 20,000-token line the row exists to show. `/metrics.json` reports
+> `hits/queries` and `prefix_cache_tokens_total/prompt_tokens_total`; a 503 is a
+> SKIP (`METRICS=0`), a `000` or empty answer a WARN. When the server is down, a
+> SKIP row names the log path. All server probes now go through one `srv_curl`
+> helper that adds `x-api-key` when `API_KEY` is set (`C2`'s hoist), written as
+> two branches because bash 3.2 cannot expand an empty array under `set -u`.
+> `docs/05` §7d now names the log path and shows the two rows; `docs/06` §12,
+> `docs/07` §5 and §10 point at them; `docs/07` §10's "404 means METRICS=0" was
+> wrong and now says 503.
+>
+> Verified on the reference machine against the 9B, `mlx-serve 26.8.8`: counter
+> semantics established by traffic (three identical 1212-token prompts →
+> `queries=3, hits=2, prefix_cache_tokens=2362, prompt_tokens=3636,
+> prefill_tokens=1274`; wall 3241 → 337 → 236 ms — MEASURED, single sample);
+> run scoping proven on a log holding four runs, whose older run's bigger
+> `23494/23567` hit is correctly excluded; `METRICS=0` → SKIP; server down →
+> SKIP with path; `LOG_FILE` pointing nowhere → SKIP; `PROBE=0` unaffected.
+> The `docs/05` example is pasted from that run.
 
 `METRICS` defaults to 1 and `serve.sh:263-265` passes `--metrics`; `serve.sh:258`
 passes `--log-file`. Neither is ever read. Grepped `/metrics` across `bin/`,
@@ -385,7 +417,19 @@ Also fix `docs/08-how-it-works.md:1100`, which says of the `[hot-cache]` line
 "Where to look for it is covered in 05 — Run it", while `docs/05` §7d
 (`:464-479`) quotes the measurement and never names the log path.
 
-### C2 — doctor's auth header is applied to one probe out of three
+### C2 — doctor's auth header is applied to one probe out of three — **DONE, and narrower than written**
+
+> **Shipped with `C1`, 2026-08-17.** Every doctor probe now goes through
+> `srv_curl`, which adds the header once. But running it showed the premise was
+> too strong: `--api-key` **exempts loopback**. The server's own banner reads
+> `API key auth: ENABLED for non-loopback requests (localhost is trusted;
+> /health stays open)`, and against a server started with `API_KEY=s3cret`,
+> `/v1/models`, `/metrics.json` and `/v1/messages` all answered 200 from
+> `127.0.0.1` with no key and with a wrong key. Since `serve.sh` refuses any
+> non-loopback `HOST` and doctor's `BASE_URL` follows `HOST`, the false WARN
+> below could not actually occur under airgap's own guards. The consolidation
+> stands on its merits — one place, not three — and `AGENT.md`'s `--api-key`
+> fact now carries the loopback qualifier.
 
 `bin/doctor.sh:325-326` builds the `x-api-key` header for the `/v1/messages`
 probe. The `/v1/models` fetch at `:293` has none, and `--api-key` gates

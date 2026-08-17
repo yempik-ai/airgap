@@ -480,6 +480,25 @@ MEASURED on the test machine: on the second turn of a conversation the server's
 own log reported `[hot-cache] reused 16384/20906 tokens`. About four fifths of
 Claude Code's instructions were not re-read at all.
 
+**Where that line lives, and how to see your own.** The server writes it to its
+log file, `~/.mlx-serve/logs/mlx-serve-11234.log` by default (the `log` line of
+the `serve.sh` banner names yours). You do not have to open it: while the
+server is running, `./bin/doctor.sh` reads the current run's log and the
+server's counters for you, and prints two lines in its `server` section:
+
+```
+PASS  prefix cache      log: reused 1181/1212 tokens (matched 1212; entry 3/4) — the biggest of 3 hit(s) this run
+PASS  /metrics.json     3 of 5 lookups hit the cache; 2374 of 3662 prompt tokens were reused
+```
+
+MEASURED on the test machine, after sending the same 1212-token test prompt
+three times to the 9B — your figures will differ, and in a Claude Code session
+the reused count is in the tens of thousands, as above. The first line is the
+biggest single hit in this server run, quoted from the log; the second is the
+running total since the server started. On a fresh server both lines say
+plainly that nothing has been reused yet — the cache pays off from the second
+turn, not the first.
+
 ---
 
 ## 8. Using it on a different project

@@ -284,7 +284,10 @@ not read again. That store is the **prefix cache**
 **The evidence.** MEASURED on the test machine: on the second turn of a
 conversation the server's own log printed
 `[hot-cache] reused 16384/20906 tokens`. About four fifths of Claude Code's
-instructions were not re-read.
+instructions were not re-read. To see the same evidence from your own server,
+run `./bin/doctor.sh` while it is up — its `prefix cache` and `/metrics.json`
+lines are that log line and the server's counters, read for you
+([05 — Run it, §7d](05-run-it.md#7d-the-repeated-instructions-are-remembered-not-re-read)).
 
 There are two tiers. `PREFIX_CACHE_MEM` is the fast one and costs memory;
 `PREFIX_CACHE_DISK` is the slower one on your SSD and costs only disk, but it
@@ -528,10 +531,15 @@ You should see many lines of `name value` pairs. The three worth finding:
   have to be re-read. Section 5 is about this one.
 
 The exact names depend on the server version, which is why they are described
-rather than quoted here.
+rather than quoted here. For the third one you do not need to read the page at
+all: `./bin/doctor.sh` fetches the same counters (from `/metrics.json`, the
+same data as one JSON document) and prints the prefix-cache figures on its
+`/metrics.json` line, next to the biggest hit from the server's own log.
+[05 — Run it, §7d](05-run-it.md#7d-the-repeated-instructions-are-remembered-not-re-read)
+shows the two lines.
 
 **If you do not see that.** `Connection refused` means the server is not running.
-A 404 means `METRICS=0` — put `METRICS=1` back in `config.env`.
+An HTTP 503 means `METRICS=0` — put `METRICS=1` back in `config.env`.
 
 ---
 

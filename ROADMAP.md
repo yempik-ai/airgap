@@ -85,9 +85,11 @@ able to prove things it currently only asserts. Ordered as in `AUDIT.md`.
       under two different unnamed defaults. **Shipped 2026-08-17** — the knob,
       not the measurement: the two mechanism unknowns in `AUDIT.md` A5 remain,
       and so does the 27B prefill timing the experiment would produce.
-- [ ] `C1` — read the cache evidence the server already writes. The single
+- [x] `C1` — read the cache evidence the server already writes. The single
       measured cache figure is hand-typed into five documents while the same
       line is produced on every request into a log nothing opens.
+      **Shipped 2026-08-17** — `doctor.sh` reads the current run's log and
+      `/metrics.json`; `docs/05` §7d names the log path.
 - [ ] `B1` — `bench.sh` keeps the prefill rate and peak memory it currently
       parses away. Peak memory is the only empirical check that exists on the
       memory arithmetic; prefill is the number behind "the first response is

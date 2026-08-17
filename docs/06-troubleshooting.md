@@ -1080,6 +1080,13 @@ round if you are deliberately shortening it.
 The second message in a conversation starts answering noticeably sooner than the
 first one did. That is the prefix cache doing its job.
 
+To see it in numbers rather than by feel, run `./bin/doctor.sh` from another
+window while the server is up. Its `prefix cache` line quotes the biggest cache
+hit of this server run from the server's own log, and its `/metrics.json` line
+gives the running totals. Until the second turn both say plainly that nothing
+has been reused yet, which is expected. [05 — Run it, §7d](05-run-it.md#7d-the-repeated-instructions-are-remembered-not-re-read)
+shows the two lines.
+
 ---
 
 <a id="slow-always"></a>

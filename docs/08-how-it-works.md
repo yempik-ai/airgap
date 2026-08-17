@@ -1097,8 +1097,9 @@ root, as `PREFIX_CACHE_MEM` with a default of `1536MB` and `PREFIX_CACHE_DISK`
 with a default of `10GB`. The second one writes the cache to your SSD, so the work
 survives restarting the server rather than being paid again.
 
-The `[hot-cache]` line above appears in the server's own output when a cache
-resume happens. Where to look for it is covered in [05 — Run it](05-run-it.md).
+The `[hot-cache]` line above appears in the server's own log when a cache
+resume happens. Where the log is, and how `./bin/doctor.sh` reads it for you,
+is covered in [05 — Run it, §7d](05-run-it.md#7d-the-repeated-instructions-are-remembered-not-re-read).
 
 ---
 
