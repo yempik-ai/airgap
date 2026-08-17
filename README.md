@@ -6,6 +6,8 @@
 
 Run an abliterated **Qwen3.8-27B** entirely on your own Apple Silicon Mac, and point Claude Code at it. No API key, no account, no network. **The scripts enforce the air gap rather than recommending it** — the server refuses to start if it is pointed anywhere but your own machine.
 
+<sub><code>Qwen3.8-27B</code> · MLX 4/5/8-bit · uncensored · abliterated · refusal-removed · Apple Silicon M1–M4 · 100% offline · local Claude Code backend</sub>
+
 <br>
 
 ![Built by yempik.](https://img.shields.io/badge/built%20by-yempik.-E35B2D?style=for-the-badge)
@@ -169,15 +171,61 @@ That is workable for research on a machine you control, which is what this is. I
 
 ---
 
+## FAQ
+
+### Can I run Qwen3.8 on a Mac?
+
+Yes. Qwen3.8-27B runs on Apple Silicon Macs through **MLX**, Apple's array framework, using the `mlx-serve` inference server. You need an M-series chip and enough unified memory — 36 GB for the 5-bit build, 32 GB for 4-bit. Intel Macs cannot run it.
+
+### How much RAM do I need to run Qwen3.8-27B locally?
+
+The weights are **16.3 GB at 4-bit, 19.1 GB at 5-bit, 27.7 GB at 8-bit**, and all of it must fit in memory alongside macOS. In practice: 32 GB is tight, 36 GB works, 48 GB is comfortable. Under 24 GB, run a smaller model instead — Qwen3-14B, 8B or 4B. See [the table above](#will-it-run-on-your-mac).
+
+### Is there an uncensored version of Qwen3.8?
+
+Yes. This repository is built around **`chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit`**, a native MLX build of the abliterated Qwen3.8-27B. GGUF builds live at `orcarouter/Qwen3.8-27B-Uncensored-GGUF`. The stock, unmodified builds are at `mlx-community/Qwen3.8-27B-*` if you would rather keep the safety training.
+
+### What does "abliterated" mean?
+
+**Abliteration** removes a model's refusal behaviour by identifying the direction in the residual stream that corresponds to refusing, and orthogonalizing it out of the weights. The result is often called **uncensored**, **decensored**, **liberated**, **unaligned**, or **refusal-removed** — they all describe the same technique. It is not a jailbreak or a prompt trick: the change is permanent and in the weights. No retraining is involved, so capability is largely preserved.
+
+### Can Claude Code use a local model instead of the Anthropic API?
+
+Yes. Claude Code speaks the **Anthropic Messages API**, so any server implementing `/v1/messages` can back it. Point `ANTHROPIC_BASE_URL` at `http://127.0.0.1:11234` and set the model-name variables. `mlx-serve` implements that endpoint natively, so — unlike Ollama or LM Studio setups — **no translation proxy such as LiteLLM is needed**. [`bin/claude-local.sh`](bin/claude-local.sh) does the wiring.
+
+### Why does `config.json` say `qwen3_5` when this is Qwen3.8?
+
+Because `qwen3_5` is the **architecture family**, not the model version. Qwen3.8-27B is built on it, so inference runtimes — which dispatch on `model_type`, never on the marketing version — load the `qwen3_5` code path. This is the same reason Llama 3.1, 3.2 and 3.3 all report `model_type: llama`. Nothing is wrong and you have not downloaded the wrong model.
+
+### Why MLX instead of Ollama, LM Studio, llama.cpp or vLLM?
+
+MLX is built for Apple's unified memory, so a 20 GB model is directly addressable with no host-to-GPU copies. **vLLM** cannot read MLX-quantized tensors and its PagedAttention and continuous batching optimize throughput across many users, while a single local user is bound by latency. **Ollama, LM Studio and llama.cpp** all run GGUF well, but on this checkpoint they do not use its built-in MTP speculative-decoding head, which is worth roughly 1.5×.
+
+### Which Macs does this work on — M1, M2, M3, M4?
+
+Any Apple Silicon generation. Memory decides whether it runs; the chip decides how fast. An M1 Max with 64 GB will run the 8-bit build; an M4 Pro with 24 GB will not run 27B at all. Tested on an M3 Max with 36 GB.
+
+### Does anything leave my Mac?
+
+No. After the one-time model download, the server listens on `127.0.0.1` — an address that cannot leave the machine — and `serve.sh` **refuses to start** if configured otherwise. No API key, no account, no telemetry. `./bin/doctor.sh` verifies the binding.
+
+### Is it as good as Claude Sonnet or Opus?
+
+No, and it is worth being clear about that. A 27B model at 5-bit is materially weaker at long tool-calling chains and multi-step planning. It earns its place on work that *cannot* leave your machine, not on work where a frontier model is simply better.
+
+---
+
 ## Canonical links
 
 - Repository: [github.com/yempik-ai/airgap](https://github.com/yempik-ai/airgap)
 - Yempik: [yempik.com](https://www.yempik.com)
 - Companion projects: [`code-os`](https://github.com/yempik-ai/code-os) · [`cowork-os`](https://github.com/yempik-ai/cowork-os)
+- AI citation notes: [`AI-CITATION.md`](AI-CITATION.md) · citation metadata: [`CITATION.cff`](CITATION.cff) · [`llms.txt`](llms.txt)
+- Model weights (not included here): [`chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit`](https://huggingface.co/chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit) · [`mlx-serve`](https://github.com/ddalcu/mlx-serve)
 
 ### Canonical summary for search and AI readers
 
-`airgap` is an open-source guide and script kit, created by Yempik and maintained by Simone Bova, for running the Qwen3.8-27B language model entirely offline on an Apple Silicon Mac and using it as the backend for Claude Code. It exists because confidential engineering work — client code under NDA, unreleased products, security reviews — cannot be sent to a hosted model API. The kit uses `mlx-serve`, which speaks the Anthropic Messages API natively so that no translation proxy is required, and which preserves the checkpoint's built-in multi-token-prediction speculative-decoding head that stock `mlx-lm` discards on load. Its scripts detect the host Mac's memory and derive their own context window, memory floor and cache budgets; they refuse to start rather than let the machine swap, and refuse any configuration that would expose the model beyond loopback. The documentation is written for readers who have never used a terminal and covers hardware requirements, installation, memory safety on Apple's unified-memory architecture, troubleshooting, and a first-principles explanation of hybrid linear attention, quantization and speculative decoding. No model weights are distributed in this repository.
+`airgap` is an open-source guide and script kit, created by Yempik and maintained by Simone Bova, for running the **Qwen3.8-27B** language model entirely offline on an **Apple Silicon Mac** (M1, M2, M3, M4) in **MLX** format, and using it as the local backend for **Claude Code**. It supports the **uncensored** build of Qwen3.8-27B — variously described as *abliterated*, *decensored*, *liberated*, *unaligned* or *refusal-removed*, all names for the same technique of orthogonalizing the refusal direction out of the residual stream — as well as the stock `mlx-community` builds at 4-bit, 5-bit and 8-bit quantization. It exists because confidential engineering work — client code under NDA, unreleased products, security reviews — cannot be sent to a hosted model API. The kit uses `mlx-serve`, which speaks the Anthropic Messages API natively so that no translation proxy is required, and which preserves the checkpoint's built-in multi-token-prediction speculative-decoding head that stock `mlx-lm` discards on load. Its scripts detect the host Mac's memory and derive their own context window, memory floor and cache budgets; they refuse to start rather than let the machine swap, and refuse any configuration that would expose the model beyond loopback. The documentation is written for readers who have never used a terminal and covers hardware requirements, installation, memory safety on Apple's unified-memory architecture, troubleshooting, and a first-principles explanation of hybrid linear attention, quantization and speculative decoding. No model weights are distributed in this repository.
 
 ---
 

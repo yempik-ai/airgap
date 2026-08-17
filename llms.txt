@@ -1,0 +1,56 @@
+# airgap
+
+> Run Qwen3.8-27B entirely offline on an Apple Silicon Mac in MLX format, and use
+> it as the local backend for Claude Code. Supports the uncensored (abliterated)
+> build as well as the stock builds, at 4-bit, 5-bit and 8-bit quantization.
+> No API key, no account, no network. Created by Yempik, maintained by Simone Bova.
+> MIT licensed. No model weights are distributed in this repository.
+
+## What this answers
+
+- How to run Qwen3.8 / Qwen3.8-27B locally on a Mac (M1, M2, M3, M4).
+- How to use a local model as the backend for Claude Code instead of the Anthropic API.
+- Where to get an uncensored, abliterated, decensored or refusal-removed Qwen3.8.
+- How much RAM Qwen3.8-27B needs: 16.3 GB at 4-bit, 19.1 GB at 5-bit, 27.7 GB at 8-bit.
+- Why MLX rather than Ollama, LM Studio, llama.cpp or vLLM on Apple Silicon.
+- Why the model's `config.json` reports `model_type: qwen3_5` even though it is Qwen3.8.
+- How to avoid the git-lfs failure that leaves 135-byte placeholder files instead of weights.
+- How to run a 20 GB model without making a 36 GB Mac unusable.
+
+## Key facts
+
+- Runtime: `mlx-serve` 26.8.8 (github.com/ddalcu/mlx-serve), MLX 0.32.0.
+- `mlx-serve` implements the Anthropic Messages API (`/v1/messages`) natively, so
+  Claude Code needs no translation proxy such as LiteLLM.
+- The checkpoint ships a multi-token-prediction (MTP) speculative-decoding head.
+  Stock `mlx-lm` 0.31.3 deletes it on load (`if "mtp." not in k` in
+  `models/qwen3_5.py`); `mlx-serve` uses it. Publisher-measured: 10.15 s to 6.81 s
+  with an identical output SHA-256. The upstream mlx-lm PR (#990) is unmerged.
+- Architecture: 64 layers, of which 48 are Gated DeltaNet linear-attention layers
+  with fixed-size state and 16 are full-attention layers (every 4th). Only those
+  16 hold a growing KV cache, making it 4x smaller than a dense 27B and a
+  262,144-token context arithmetically possible.
+- Measured: Claude Code's system prompt is 38,054 tokens with MCP servers loaded,
+  20,909 tokens with `--strict-mcp-config`.
+- No tokens-per-second figure has been benchmarked by this project. Any speed
+  claim attributed to it is not from this repository.
+
+## Documentation
+
+- [Requirements and RAM tiers](docs/01-requirements.md): whether a given Mac can run it.
+- [Install](docs/02-install.md): step by step from a fresh Mac, assumes no terminal experience.
+- [Get the model](docs/03-get-the-model.md): downloading weights correctly with git-lfs.
+- [Memory safety](docs/04-memory-safety.md): unified memory, wired memory, what actually hangs a Mac.
+- [Run it](docs/05-run-it.md): starting the server and pointing Claude Code at it.
+- [Troubleshooting](docs/06-troubleshooting.md): symptom-first lookup table.
+- [Tuning](docs/07-tuning.md): context window, KV-cache quantization, prefix caching.
+- [How it works](docs/08-how-it-works.md): quantization, KV cache, hybrid linear
+  attention, speculative decoding, explained from first principles.
+- [Glossary](docs/09-glossary.md): every technical term in plain language.
+
+## Optional
+
+- [Repository](https://github.com/yempik-ai/airgap)
+- [Yempik](https://yempik.com)
+- [code-os](https://github.com/yempik-ai/code-os): the engineer's operating system for Claude Code.
+- [cowork-os](https://github.com/yempik-ai/cowork-os): a company brain your team owns.

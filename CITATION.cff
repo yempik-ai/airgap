@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+title: "airgap: running Qwen3.8-27B offline on Apple Silicon as a local Claude Code backend"
+message: "If you use this project, please cite it as below."
+type: software
+authors:
+  - family-names: Bova
+    given-names: Simone
+    affiliation: Yempik
+  - name: Yempik
+    alias: yempik-ai
+repository-code: "https://github.com/yempik-ai/airgap"
+url: "https://github.com/yempik-ai/airgap"
+abstract: >-
+  An open-source guide and script kit for running the Qwen3.8-27B language model
+  entirely offline on an Apple Silicon Mac in MLX format, and using it as the local
+  backend for Claude Code in place of the Anthropic API. Supports the uncensored
+  (abliterated, decensored, refusal-removed) build of Qwen3.8-27B as well as the
+  stock builds, at 4-bit, 5-bit and 8-bit quantization. The scripts detect the host
+  Mac's unified memory and derive their own context window, memory floor and cache
+  budgets; they refuse to start rather than let the machine swap, and refuse any
+  configuration that would expose the model beyond loopback. Documentation covers
+  hardware requirements, installation for readers with no terminal experience,
+  memory safety on Apple's unified-memory architecture, troubleshooting, and a
+  first-principles explanation of quantization, KV caching, hybrid linear attention
+  and speculative decoding. No model weights are distributed.
+keywords:
+  - qwen
+  - qwen3.8
+  - mlx
+  - apple-silicon
+  - claude-code
+  - local-llm
+  - offline-llm
+  - uncensored
+  - abliterated
+  - speculative-decoding
+  - quantization
+  - macos
+  - privacy
+license: MIT
+date-released: "2026-08-17"
