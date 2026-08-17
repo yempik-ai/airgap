@@ -8,6 +8,20 @@ Read this before changing anything. It exists so that facts established once are
 not established again: the sections below record what has already been verified
 against the installed binaries, and what has already been tried and found false.
 
+## Where the work stands
+
+*Keep this section to a few lines and update it when work lands. It is a pointer,
+not a record — [`AUDIT.md`](AUDIT.md) holds the status of every item, and if the
+two ever disagree, `AUDIT.md` is right.*
+
+- **Last landed:** `A1` (model lock) and `A5` (named stall timeout), 2026-08-17.
+- **Next:** `C1` — read the `[hot-cache]` evidence the server already writes.
+  Then `B1`, `D3`, `E1`. The ranked list with efforts is at the top of
+  `AUDIT.md`.
+- **Blocked on hardware, not on decisions:** anything needing the 27B loaded.
+  It has never been served on this machine. `AUDIT.md` E5 and A5 both stop short
+  of a measurement for this reason, and `ROADMAP.md` Phase 0 names it.
+
 ## Scope
 
 - Everything shipped is shell plus Markdown. A change that wants C, Python or a
