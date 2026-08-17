@@ -79,9 +79,21 @@ case "${1:-}" in
 esac
 
 # --- Guard: two copies of the model will not fit -----------------------------
+# The port probe stays because its message is the specific one: it names the
+# port and it names serve.sh. The lock below catches everything the port cannot
+# — another bench.sh (which passes no --port at all, so it is invisible here),
+# and a server someone started on a different port.
 if server_up || lsof -nP -iTCP:"$PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then
   echo "error: serve.sh is running on port ${PORT} — stop it first (./bin/stop.sh)." >&2
   echo "       bench.sh loads its own ~20 GB copy; two will not fit." >&2
+  exit 1
+fi
+
+if ! acquire_model_lock "bench.sh"; then
+  echo "error: something else on this Mac is already holding the weights." >&2
+  echo "       holder: pid $(model_lock_pid || echo '?') — $(model_lock_what)" >&2
+  echo "       bench.sh loads its own ~20 GB copy; two will not fit." >&2
+  echo "       stop it first (./bin/stop.sh), then run this again." >&2
   exit 1
 fi
 

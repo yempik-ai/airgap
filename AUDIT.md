@@ -17,7 +17,8 @@ candidates went in; one was falsified outright and is recorded in
 environment facts established along the way. Read that file first — it exists so
 these findings are not researched twice.
 
-Items are referenced by id from [`ROADMAP.md`](ROADMAP.md). All are **OPEN**.
+Items are referenced by id from [`ROADMAP.md`](ROADMAP.md). All are **OPEN**
+except `A1` and `A5`, marked **DONE** below and shipped in `0.1.0`.
 
 Evidence is cited as `file:line` at the time of the audit. Line numbers drift;
 the greps are given where the reader will need to re-locate something.
@@ -33,8 +34,8 @@ marks *never measured*.
 
 | | item | effort | confidence |
 |:--|:--|:--|:--|
-| 1 | `A1` instance lock in `serve.sh` | small | high |
-| 2 | `A5` name the stall timeout | small | medium |
+| ✅ | `A1` instance lock in `serve.sh` — **DONE** | small | high |
+| ✅ | `A5` name the stall timeout — **DONE** | small | medium |
 | 3 | `C1` read the cache evidence already being written | medium | high |
 | 4 | `B1` make `bench.sh` keep prefill and peak memory | medium | high |
 | 5 | `D3` doctor probes a streamed tool call | medium | high |
@@ -48,7 +49,25 @@ all. Everything in §F is roadmap sequencing, not code.
 
 ## A. Guards that do not guard
 
-### A1 — `serve.sh` has no instance lock
+### A1 — `serve.sh` has no instance lock — **DONE**
+
+> **Shipped 2026-08-17.** `LOCK_DIR` (default `~/.airgap/model.lock`), an
+> mkdir-based lock holding the owner's pid. Taken by `serve.sh` (a new guard,
+> ahead of the memory guard) and `bench.sh`, reported by `doctor.sh`, cleared by
+> `stop.sh` only when the holder is gone. A stale lock is reclaimed rather than
+> obeyed. `bench.sh` kept its port probe, as the analysis required.
+>
+> One thing the analysis did not predict, found by running it: `: "${LOCK_DIR:=…}"`
+> substitutes on *empty* as well as unset, so `LOCK_DIR=` silently got the
+> default back and the documented off-switch did not work. It is the one setting
+> in `env.sh` written with `=` rather than `:=`, and the reason is commented
+> there.
+>
+> Verified on the reference machine: refusal fires against a live holder
+> (`serve.sh` and `bench.sh` both exit 1, naming the pid); a lock with a dead pid
+> is reclaimed and the load proceeds; `doctor.sh` reports PASS / WARN / SKIP
+> correctly in all three states; `stop.sh` clears a stale lock and refuses to
+> touch a live one.
 
 `bin/bench.sh:81-86` refuses to run when the port is busy. `bin/serve.sh` has no
 equivalent: it is a bare `exec mlx-serve` at `:313`. Grepped `bin/` and
@@ -122,7 +141,27 @@ Grepped for `max_position_embeddings` across `bin/` and `start.sh`: one hit,
 and fails per-request. This is a guard living in the advisory script — the
 inverse of principle (1).
 
-### A5 — the stall timeout has no name, and both ends expire together
+### A5 — the stall timeout has no name, and both ends expire together — **DONE**
+
+> **Shipped 2026-08-17.** `SERVE_TIMEOUT` (default 300, the server's own
+> default, now named). `serve.sh` passes `--timeout` and prints it;
+> `claude-local.sh` derives the client limit as `SERVE_TIMEOUT + 60`, floored at
+> 300 s because Claude Code cannot go below it, and prints both numbers. Not
+> added to the `serve.sh` denylist, per the analysis. `docs/06` §12 gained the
+> failure case only — the slow-but-working text was already there and was not
+> duplicated. `docs/07`'s two settings tables gained both new settings.
+>
+> `CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS` is deliberately **not** set, and the
+> reason is commented in `claude-local.sh`: whether the server's SSE keepalive
+> frames feed that watchdog is one of the two open unknowns below.
+>
+> Verified on the reference machine: `SERVE_TIMEOUT=300` → client 360 s;
+> `600` → 660 s; `30` → client floored at 300 s while the server keeps 30;
+> `0` → no `--timeout` passed and both banners say so.
+>
+> **Still open:** the two mechanism unknowns at the end of this item, and the
+> 27B prefill timing the experiment would produce. Naming the limit does not
+> measure it.
 
 `mlx-serve --timeout` defaults to **300 s**. Claude Code's
 `CLAUDE_STREAM_IDLE_TIMEOUT_MS` floors at **300000 ms**. The two coincide

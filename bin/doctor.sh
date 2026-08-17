@@ -286,6 +286,19 @@ check_bind() {
   esac
 }
 
+# Only one process on this Mac may hold the weights. A lock still standing after
+# its holder is gone is the one failure mode this adds, so it gets its own row
+# rather than being discovered as a refusal the next time serve.sh is run.
+if [ -z "${LOCK_DIR:-}" ]; then
+  row SKIP "model lock" "switched off (LOCK_DIR is empty)"
+elif [ ! -d "$LOCK_DIR" ]; then
+  row PASS "model lock" "free — nothing is holding the weights"
+elif model_lock_alive; then
+  row PASS "model lock" "held by pid $(model_lock_pid) — $(model_lock_what)"
+else
+  row WARN "model lock" "left behind by pid $(model_lock_pid || echo '?'), which is gone — ./bin/stop.sh clears it"
+fi
+
 if server_up; then
   check_bind
   row PASS "/health" "up"

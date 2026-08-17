@@ -78,10 +78,13 @@ From the 2026-08-17 audit against `antirez/ds4`. These are small, they are
 independent of every abstraction below, and four of the six make the repository
 able to prove things it currently only asserts. Ordered as in `AUDIT.md`.
 
-- [ ] `A1` — an instance lock in `serve.sh`. The repository enforces "no two
+- [x] `A1` — an instance lock in `serve.sh`. The repository enforced "no two
       model loads" in `bench.sh` and not in the script that loads the model.
-- [ ] `A5` — name the stall timeout. Server and client both expire at 300 s,
-      under two different unnamed defaults.
+      **Shipped 2026-08-17.**
+- [x] `A5` — name the stall timeout. Server and client both expired at 300 s,
+      under two different unnamed defaults. **Shipped 2026-08-17** — the knob,
+      not the measurement: the two mechanism unknowns in `AUDIT.md` A5 remain,
+      and so does the 27B prefill timing the experiment would produce.
 - [ ] `C1` — read the cache evidence the server already writes. The single
       measured cache figure is hand-typed into five documents while the same
       line is produced on every request into a log nothing opens.

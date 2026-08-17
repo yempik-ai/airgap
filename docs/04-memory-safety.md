@@ -721,8 +721,35 @@ are also working on. Set `IDLE_EVICT_SECS=0` to keep the model in memory instead
 explicitly rather than derived from the graphics memory ceiling. The budget stays
 where you put it even if that system setting changes.
 
-**4. Only one copy, ever.** `MAX_RESIDENT_MODELS=1`. A second copy would not fit,
-and this makes an accidental second load impossible.
+**4. Only one copy, ever.** This takes two separate mechanisms, because they
+stop two different things.
+
+`MAX_RESIDENT_MODELS=1` stops one server from holding two models at once. It is
+a limit *inside* a single server, so it says nothing at all about a second
+server — that is a different program with its own separate limit.
+
+The second server is the one that actually happens: a `./bin/serve.sh` in a
+Terminal window you forgot was open. Nothing else in this stack catches it. The
+free-memory check in guard 1 is a single reading taken before anything is
+loaded, and guard 2 makes that reading *worse*: after 15 minutes of silence the
+first server has already handed its memory back, so the memory really is free —
+right up until the second server loads and it is not.
+
+So there is a **model lock**. Only one process on this Mac may hold the weights,
+and the second one refuses instead of loading:
+
+```
+REFUSING TO START — something else on this Mac is already holding the weights.
+  holder : pid 41207 — serve.sh, port 11234
+  lock   : /Users/<YOUR_USER_NAME>/.airgap/model.lock
+```
+
+The `holder` line names the process, so you can find the window it is running
+in. `./bin/stop.sh` ends it. `./bin/doctor.sh` reports whether the lock is free,
+held, or left behind by something that crashed — and a lock whose process is
+gone is taken over rather than obeyed, so a crash can never leave this Mac
+unable to start a server. Full entry:
+[06 — troubleshooting](06-troubleshooting.md#model-lock).
 
 **5. Smaller spikes while reading a long prompt.** `PREFILL_CHUNK=4096` processes
 your prompt in smaller pieces. It halves the temporary memory spike compared with
@@ -805,6 +832,7 @@ model    /Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-Or
 endpoint http://127.0.0.1:11234   (Anthropic: http://127.0.0.1:11234/v1/messages)
 context  65536 tokens, kv-quant turbo4
 budget   weights<=21GB, prefix 1536MB, idle-evict 900s
+timeout  300s without a token before a question is given up on
 log      ~/.mlx-serve/logs/mlx-serve-11234.log
 ```
 

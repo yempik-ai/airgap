@@ -30,8 +30,8 @@ ROOT="$(cd "$(dirname "$_env_self")/.." && pwd)"
 # from the command line, so keep every documented setting on it.
 ENV_KEYS="MODEL_QUANT MODEL_REPO MODEL_DIR MODEL_ID HOST PORT CTX_SIZE KV_QUANT NO_VISION \
 PREFIX_CACHE_MEM PREFIX_CACHE_DISK MAX_RESIDENT_MODELS MAX_RESIDENT_MEM \
-IDLE_EVICT_SECS PREFILL_CHUNK MIN_FREE_GB MIN_DISK_GB LOG_LEVEL LOG_FILE \
-API_KEY METRICS EXTRA_ARGS DEDUP LEAN_MCP CLAUDE_BIN PYTHON_BIN WITH_VENV \
+IDLE_EVICT_SECS SERVE_TIMEOUT PREFILL_CHUNK MIN_FREE_GB MIN_DISK_GB LOG_LEVEL LOG_FILE \
+LOCK_DIR API_KEY METRICS EXTRA_ARGS DEDUP LEAN_MCP CLAUDE_BIN PYTHON_BIN WITH_VENV \
 CLAUDE_CODE_MAX_OUTPUT_TOKENS PROBE SKIP_BREW TOKENS PROMPT"
 
 # --- Step 1: remember exactly what the caller set ----------------------------
@@ -246,6 +246,17 @@ unset _YOURS_MIN_FREE_GB _YOURS_MAX_RESIDENT_MEM _YOURS_PREFIX_CACHE_MEM
 # model in memory permanently.
 : "${IDLE_EVICT_SECS:=900}"
 
+# Seconds the server will wait for a question that is producing NOTHING before
+# it gives up on it. A request that keeps generating never times out, however
+# long it runs — this is a stall limit, not a length limit.
+#
+# 300 is the server's own default. It is named here rather than inherited
+# because the failure it produces needs a name: Claude Code's own idle limit is
+# also 300 seconds, so a first turn that stalls trips both ends at once, and an
+# unnamed limit on both sides is indistinguishable from a dead server. Set 0 for
+# no limit. See docs/06-troubleshooting.md#slow-first-response.
+: "${SERVE_TIMEOUT:=300}"
+
 # How much of your text the server reads at a time on the first pass. A smaller
 # number means a smaller temporary memory spike, at a small speed cost.
 : "${PREFILL_CHUNK:=4096}"
@@ -261,6 +272,20 @@ unset _YOURS_MIN_FREE_GB _YOURS_MAX_RESIDENT_MEM _YOURS_PREFIX_CACHE_MEM
 
 : "${LOG_LEVEL:=info}"
 : "${LOG_FILE:=$HOME/.mlx-serve/logs/mlx-serve-$PORT.log}"
+
+# Where the model lock lives. Only one process on this Mac may hold the weights
+# at a time, and this directory is how that is enforced. Not tied to PORT on
+# purpose: the danger is two copies of ~19.1 GB in memory, and memory does not
+# care which port each one is listening on.
+#
+# Set this to an empty string to switch the lock off, the way MIN_FREE_GB=0
+# switches the memory guard off. Both are for people who know why they want it.
+#
+# `=` and not `:=` on purpose, and it is the only setting in this file written
+# that way: `:=` substitutes on empty as well as on unset, so with a colon here
+# `LOCK_DIR= ./bin/serve.sh` would silently get the default back and the guard
+# could not be switched off at all.
+: "${LOCK_DIR=$HOME/.airgap/model.lock}"
 
 # A password for the server. Empty means no password, which is correct when the
 # server only listens on this Mac. Set it if you have a reason to.
@@ -295,8 +320,8 @@ BASE_URL="http://${HOST}:${PORT}"
 export MODEL_QUANT
 export ROOT MODEL_REPO MODEL_DIR MODEL_ID HOST PORT CTX_SIZE KV_QUANT NO_VISION \
        PREFIX_CACHE_MEM PREFIX_CACHE_DISK MAX_RESIDENT_MODELS MAX_RESIDENT_MEM \
-       IDLE_EVICT_SECS PREFILL_CHUNK MIN_FREE_GB MIN_DISK_GB LOG_LEVEL LOG_FILE \
-       API_KEY METRICS EXTRA_ARGS DEDUP LEAN_MCP CLAUDE_BIN PYTHON_BIN WITH_VENV \
+       IDLE_EVICT_SECS SERVE_TIMEOUT PREFILL_CHUNK MIN_FREE_GB MIN_DISK_GB LOG_LEVEL LOG_FILE \
+       LOCK_DIR API_KEY METRICS EXTRA_ARGS DEDUP LEAN_MCP CLAUDE_BIN PYTHON_BIN WITH_VENV \
        BASE_URL
 
 # =============================================================================
@@ -320,6 +345,89 @@ free_disk_gb() {
 # prints nothing.
 server_up() {
   curl -fsS --max-time 2 "$BASE_URL/health" >/dev/null 2>&1
+}
+
+# --- The model lock ----------------------------------------------------------
+# Only one process on this Mac may hold the weights. Every other concurrency
+# check in this repo is scoped to a PORT, and a port cannot see the thing that
+# actually hurts: mlx-serve binds its socket BEFORE it loads, so a second server
+# started on a different port passes every check and then puts a second ~19.1 GB
+# into a 36 GB Mac. bench.sh passes no --port at all, so two bench runs cannot
+# see each other either.
+#
+# mkdir is the mutex. It is atomic on every filesystem macOS mounts, and
+# flock(1) does not exist here. The holder's pid goes inside, so a lock left by
+# a crash can be told apart from a lock held by a live process.
+#
+# Deliberately NOT /tmp/ds4.lock: the mlx-serve binary embeds ds4's own instance
+# lock and that literal path. Two locks fighting over one directory would be
+# worse than no lock at all.
+
+# The pid recorded in the lock, or nothing.
+model_lock_pid() {
+  [ -n "${LOCK_DIR:-}" ] || return 1
+  cat "$LOCK_DIR/pid" 2>/dev/null
+}
+
+# What the holder said it was doing, or a neutral phrase.
+model_lock_what() {
+  [ -n "${LOCK_DIR:-}" ] || return 1
+  cat "$LOCK_DIR/what" 2>/dev/null || echo "a model process"
+}
+
+# Is the recorded holder still running? `kill -0` signals nothing; it only asks.
+model_lock_alive() {
+  _lp="$(model_lock_pid || true)"
+  [ -n "${_lp:-}" ] || return 1
+  kill -0 "$_lp" 2>/dev/null
+}
+
+# Take the lock, or fail. $1 describes the caller, for the refusal message.
+#
+# A lock whose holder is gone is reclaimed rather than obeyed: a SIGKILL during
+# a load must never leave this Mac unable to start a server again. The reclaim
+# is not atomic against a second process reclaiming the same stale lock at the
+# same instant — that is a two-Terminal-windows race measured in microseconds,
+# and the cost of losing it is the memory guard doing its job one step later.
+acquire_model_lock() {
+  [ -n "${LOCK_DIR:-}" ] || return 0
+  mkdir -p "$(dirname "$LOCK_DIR")" 2>/dev/null || true
+
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    model_lock_alive && return 1
+    rm -rf "$LOCK_DIR" 2>/dev/null || true
+    mkdir "$LOCK_DIR" 2>/dev/null || return 1
+  fi
+
+  echo "$$" > "$LOCK_DIR/pid" 2>/dev/null || true
+  printf '%s\n' "${1:-a model process}" > "$LOCK_DIR/what" 2>/dev/null || true
+  LOCK_HELD=1
+
+  # serve.sh ends in `exec`, which keeps this same pid, so the lock stays
+  # correct for the whole life of the server and this trap never fires there.
+  # It matters for every other caller, and for a guard below that exits.
+  trap 'release_model_lock' EXIT INT TERM
+  return 0
+}
+
+# Give the lock back, but only if this process is really the one holding it.
+release_model_lock() {
+  [ "${LOCK_HELD:-0}" = "1" ] || return 0
+  [ -n "${LOCK_DIR:-}" ] || return 0
+  if [ "$(cat "$LOCK_DIR/pid" 2>/dev/null || echo)" = "$$" ]; then
+    rm -rf "$LOCK_DIR" 2>/dev/null || true
+  fi
+  LOCK_HELD=0
+}
+
+# Remove a lock whose holder is gone. Never touches a live one. Returns success
+# only when something was actually cleared, so callers can report it.
+clear_stale_model_lock() {
+  [ -n "${LOCK_DIR:-}" ] || return 1
+  [ -d "$LOCK_DIR" ] || return 1
+  model_lock_alive && return 1
+  rm -rf "$LOCK_DIR" 2>/dev/null || return 1
+  return 0
 }
 
 # If somebody runs this file directly, explain what it is instead of doing

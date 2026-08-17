@@ -1295,7 +1295,7 @@ PASS  base url          claude-local.sh will point at http://127.0.0.1:11234
 PASS  context           CTX_SIZE=65536 declared to server and Claude Code, within the model's 262144
 PASS  mcp mode          strict (LEAN_MCP=1) — saves about 17,000 prompt tokens per turn
 ─────────────────────────────────────────────
-20 pass, 0 warn, 0 fail, 1 skipped
+21 pass, 0 warn, 0 fail, 1 skipped
 doctor: OK — next: ./bin/serve.sh
 ```
 
@@ -1535,10 +1535,11 @@ model    /Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-Or
 endpoint http://127.0.0.1:11234   (Anthropic: http://127.0.0.1:11234/v1/messages)
 context  65536 tokens, kv-quant turbo4
 budget   weights<=21GB, prefix 1536MB, idle-evict 900s
+timeout  300s without a token before a question is given up on
 log      ~/.mlx-serve/logs/mlx-serve-11234.log
 ```
 
-After those six lines the script prints three more:
+After those seven lines the script prints three more:
 
 ```
 
@@ -1652,6 +1653,7 @@ You should see something like this before Claude Code's own screen appears:
 ```
 claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 context  65536 tokens declared to the harness, 8192 max output
+timeout  client gives up after 360s of silence, the server after 300s — so the server reports it
 mcp      strict (LEAN_MCP=1) — MCP servers off, saves ~17k prompt tokens per turn
 note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
          "claude.ai connectors are disabled" — that is this script keeping it local

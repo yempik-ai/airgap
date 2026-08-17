@@ -32,14 +32,15 @@ BEFORE YOU RUN IT
       bash -c 'source bin/env.sh && echo "$(available_gb) GB available"'
 
 WHAT IT DOES
-  Checks seven things, then loads the model and waits for questions:
+  Checks eight things, then loads the model and waits for questions:
     1. this Mac is Apple Silicon (MLX runs nowhere else)
     2. weights plus conversation fit under Apple's GPU memory ceiling
     3. the address it will listen on is this Mac and nothing else
     4. EXTRA_ARGS contains no flag this repo refuses to pass
     5. the model folder exists
     6. the weights are real files, not 135-byte placeholders
-    7. there is enough free memory (it refuses rather than stall your Mac)
+    7. nothing else on this Mac is already holding the weights
+    8. there is enough free memory (it refuses rather than stall your Mac)
 
 WHAT IT COSTS
   Memory: the size of the selected model's weights while it is loaded — about
@@ -73,9 +74,9 @@ WHAT IT WILL NEVER DO
   It never passes --lan-share or --lan-discover: this model stays on this Mac.
 
 WHAT YOU SHOULD SEE
-  A "memory" line, five lines describing the model, endpoint, context, budget
-  and log, then the server's own startup output, then a line telling you it is
-  listening. Leave the window open.
+  A "memory" line, six lines describing the model, endpoint, context, budget,
+  timeout and log, then the server's own startup output, then a line telling
+  you it is listening. Leave the window open.
 
 IF IT REFUSES TO START
   Read the message. It names the processes to close, in order of how much they
@@ -195,7 +196,33 @@ while IFS= read -r shard; do
   fi
 done < <(find "$MODEL_DIR" -name '*.safetensors' 2>/dev/null)
 
-# --- Guard 3: is there enough free memory? -----------------------------------
+# --- Guard 3: is something else already holding the weights? -----------------
+# This comes BEFORE the memory guard on purpose. The memory guard is a snapshot,
+# and a snapshot is blind to a second server that is about to load but has not
+# allocated anything yet — and blinder still after the first server has
+# idle-evicted its weights, which by default it does after 15 minutes, because
+# then the memory really is free right up until it is not.
+#
+# The port cannot cover this: mlx-serve binds its socket before it loads, so a
+# second server on another port passes every other check in this file.
+if ! acquire_model_lock "serve.sh, port $PORT"; then
+  echo "REFUSING TO START — something else on this Mac is already holding the weights." >&2
+  echo "  holder : pid $(model_lock_pid || echo '?') — $(model_lock_what)" >&2
+  echo "  lock   : $LOCK_DIR" >&2
+  echo >&2
+  echo "Loading a second copy would put another ~${HW_WEIGHTS_GB} GB on top of the one" >&2
+  echo "already in memory. That is the stalled Mac every other check here exists" >&2
+  echo "to prevent, and it is reached by simply forgetting a window is open." >&2
+  echo >&2
+  echo "  stop the other one : ./bin/stop.sh" >&2
+  echo "  see what it is     : ps -p \$(cat '$LOCK_DIR/pid')" >&2
+  echo >&2
+  echo "If you are certain nothing is running, ./bin/doctor.sh reports a lock left" >&2
+  echo "behind by a crash and ./bin/stop.sh clears it." >&2
+  exit 1
+fi
+
+# --- Guard 4: is there enough free memory? -----------------------------------
 # Loading the weights into a Mac that is already tight is how you get a machine
 # that stalls, spins its fans, and stops responding to clicks. Refuse instead,
 # and say exactly what to close.
@@ -216,7 +243,7 @@ if [ "${MIN_FREE_GB}" != "0" ]; then
   echo "memory   ${avail} GB available (need ${MIN_FREE_GB} GB) — ok"
 fi
 
-# --- Guard 4: has Apple's GPU memory ceiling been raised? --------------------
+# --- Guard 5: has Apple's GPU memory ceiling been raised? --------------------
 # This is a warning, not a refusal. GPU-wired memory cannot be swapped out, so
 # raising this ceiling is the one change in this whole stack that can leave a
 # Mac unresponsive until you hold the power button. Apple's automatic value is
@@ -270,6 +297,14 @@ if [ "$IDLE_EVICT_SECS" != "0" ]; then
   args+=( --idle-evict-secs "$IDLE_EVICT_SECS" )
 fi
 
+# How long the server waits on a question producing nothing before it gives up.
+# Passed explicitly even though 300 is also the server's own default, so that
+# the number has one name, appears in the banner, and can be raised by someone
+# whose first cold turn on a big context legitimately needs longer.
+if [ "$SERVE_TIMEOUT" != "0" ]; then
+  args+=( --timeout "$SERVE_TIMEOUT" )
+fi
+
 # The image-reading part costs memory and Claude Code sends text.
 if [ "$NO_VISION" = "1" ]; then
   args+=( --no-vision )
@@ -303,6 +338,11 @@ echo "model    $MODEL_DIR"
 echo "endpoint $BASE_URL   (Anthropic: $BASE_URL/v1/messages)"
 echo "context  $CTX_SIZE tokens, kv-quant $KV_QUANT"
 echo "budget   weights<=$MAX_RESIDENT_MEM, prefix $PREFIX_CACHE_MEM, idle-evict ${IDLE_EVICT_SECS}s"
+if [ "$SERVE_TIMEOUT" = "0" ]; then
+  echo "timeout  none — a stalled question is never given up on"
+else
+  echo "timeout  ${SERVE_TIMEOUT}s without a token before a question is given up on"
+fi
 echo "log      $(echo "$LOG_FILE" | sed "s|^$HOME|~|")"
 echo
 echo "Loading about ${HW_WEIGHTS_GB} GB of weights. The first load can take a minute."

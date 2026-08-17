@@ -657,6 +657,20 @@ for the 9B, one short run of `bin/bench.sh`. A third label, PUBLISHER-REPORTED,
 marks numbers published by the people who made the model and not reproduced
 here.
 
+### model lock
+
+A marker one program leaves behind to say "I am using this, wait your turn". The
+next program checks for it, finds it, and stops instead of going ahead.
+
+**Why you care here.** Only one program on your Mac may hold the model, because
+two copies of about 19.1 GB do not fit in 36 GB. A second `./bin/serve.sh`
+refuses and names the one already running, rather than loading and stalling your
+Mac. The marker is a folder at `~/.airgap/model.lock` holding the [process
+id — the number macOS gives every running program — of the program that owns it.
+That number is how a marker left behind by a crash is told apart from one held
+by a program still running, and taken over rather than obeyed.
+`./bin/doctor.sh` reports which of the three it is.
+
 ### memory-bandwidth bound
 
 A situation where the limit on speed is how fast data moves out of memory, not
@@ -995,6 +1009,21 @@ your head. You still approve every word, so the meaning never changes; you save
 only the time spent forming each word. The comparison stops working because a
 wrong guess costs you nothing here, whereas a person would have to be
 interrupted.
+
+### stall timeout
+
+A limit on how long something may produce **nothing** before it is given up on.
+Not a limit on how long it may take in total: work that keeps producing output
+is never cut off, however long it runs.
+
+**Why you care here.** `SERVE_TIMEOUT` (default 300 seconds) is how long the
+server waits on a question that has not yet produced a single word. The turn
+most likely to reach it is the first one after an idle period, which reloads the
+model and then reads about 21,000 tokens of instructions before it can start
+answering — see [prefill](#prefill). Claude Code has a limit of its own, also
+300 seconds, so `bin/claude-local.sh` gives it a minute longer than the server:
+that way the server gives up first, and the side that can say why is the side
+that reports it.
 
 ### SSM checkpoint
 

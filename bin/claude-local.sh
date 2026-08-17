@@ -44,9 +44,12 @@ SETTINGS
                   prompt tokens on every turn, so the default is 1 (off).
   CLAUDE_BIN      the command that starts Claude Code. Default: claude
   CLAUDE_CODE_MAX_OUTPUT_TOKENS   longest single answer. Default: 8192
+  SERVE_TIMEOUT   seconds of silence before a question is given up on. Read
+                  here so the client waits slightly longer than the server and
+                  the server is the side that reports a stall. Default: 300
 
 WHAT YOU SHOULD SEE
-  Four lines starting with "claude", then Claude Code's normal startup, then
+  Five lines starting with "claude", then Claude Code's normal startup, then
   one line about an "unrecognized_model", and possibly one saying claude.ai
   connectors are disabled because an auth source is set. Both are EXPECTED.
   Neither is an error and nothing is wrong. Claude Code has simply never heard
@@ -127,6 +130,30 @@ export CLAUDE_CODE_MAX_OUTPUT_TOKENS
 # "Prompt exceeds maximum context length". Tell it the truth instead.
 export CLAUDE_CODE_MAX_CONTEXT_TOKENS="$CTX_SIZE"
 
+# Both ends of this stack give up on a silent request after 300 seconds, and
+# they do it under two different names nobody set. A first turn on a cold model
+# has to reload ~19.1 GB and then read ~21,000 tokens before it produces a
+# single token, so it is the turn most likely to reach that limit — and when it
+# does, the two limits expire together and the failure looks like a dead server.
+#
+# Give the client a MINUTE MORE than the server, so the server aborts first and
+# the side that can name the reason is the side that reports it.
+#
+# Below 300000 has no effect: Claude Code 2.1.233 resolves this variable through
+# Math.max(value, 300000), so it can only ever raise the limit, never lower it.
+if [ "${SERVE_TIMEOUT:-300}" = "0" ]; then
+  _client_timeout_ms=3600000
+else
+  _client_timeout_ms=$(( (SERVE_TIMEOUT + 60) * 1000 ))
+  [ "$_client_timeout_ms" -ge 300000 ] || _client_timeout_ms=300000
+fi
+export CLAUDE_STREAM_IDLE_TIMEOUT_MS="$_client_timeout_ms"
+export API_TIMEOUT_MS="$_client_timeout_ms"
+# NOT set: CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS. It exists in the 2.1.233 binary
+# and takes precedence over the stream limit when set, but whether the server's
+# SSE keepalive frames feed that watchdog has not been established here. Setting
+# it on a guess would be a number this repo could not explain.
+
 extra=()
 if [ "$LEAN_MCP" = "1" ]; then
   extra+=( --strict-mcp-config )
@@ -137,6 +164,11 @@ fi
 
 echo "claude   -> $BASE_URL   model $MODEL_ID"
 echo "context  $CTX_SIZE tokens declared to the harness, $CLAUDE_CODE_MAX_OUTPUT_TOKENS max output"
+if [ "${SERVE_TIMEOUT:-300}" = "0" ]; then
+  echo "timeout  client gives up after $((_client_timeout_ms / 1000))s of silence; the server never does (SERVE_TIMEOUT=0)"
+else
+  echo "timeout  client gives up after $((_client_timeout_ms / 1000))s of silence, the server after ${SERVE_TIMEOUT}s — so the server reports it"
+fi
 echo "mcp      $mcp_line"
 echo "note     an \"unrecognized_model\" line at startup is EXPECTED and cosmetic; so is"
 echo "         \"claude.ai connectors are disabled\" — that is this script keeping it local"

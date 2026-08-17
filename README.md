@@ -62,7 +62,7 @@ git clone https://github.com/yempik-ai/airgap.git airgap && cd airgap
 ./start.sh
 ```
 
-**`./start.sh` is the only command you need to remember.** It installs the tools, downloads the build that fits your Mac (asking first — it is 20 GB for the 27B), proves the weights are real files, runs 21 health checks, and stops with a plain-English fix the moment anything needs you. Safe to run again at any time: finished steps are skipped.
+**`./start.sh` is the only command you need to remember.** It installs the tools, downloads the build that fits your Mac (asking first — it is 20 GB for the 27B), proves the weights are real files, runs 22 health checks, and stops with a plain-English fix the moment anything needs you. Safe to run again at any time: finished steps are skipped.
 
 **Then two commands, in two Terminal windows:**
 
@@ -85,7 +85,7 @@ Free memory before starting the server — it refuses to start below the thresho
 | 1 | `./bin/setup.sh` | installs git-lfs + mlx-serve; checks Homebrew and Claude Code |
 | 2 | `./bin/download-model.sh` | the weights — size-checked against your Mac first, resumable, pointer-verified, de-duplicated |
 | 3 | `./bin/verify-model.sh` | proves the weights are real, not 135-byte placeholders |
-| 4 | `./bin/doctor.sh` | 21 checks, PASS/FAIL with a fix each. Changes nothing |
+| 4 | `./bin/doctor.sh` | 22 checks, PASS/FAIL with a fix each. Changes nothing |
 | 5 | `./bin/serve.sh` | starts the server. Leave the window open |
 | 6 | `./bin/claude-local.sh` | Claude Code, second window, pointed at you |
 
@@ -182,7 +182,7 @@ Being precise about this matters more than looking finished.
 | **Every script, actually run** — `start`, `setup`, `download-model`, `models`, `verify-model`, `doctor`, `serve`, `claude-local`, `stop` | ✓ all of them |
 | **Claude Code answering from a local model, end to end** | ✓ `serve → doctor → claude-local -p` returned `AIRGAP OK` on the 9B |
 | Anthropic `/v1/messages`, tool calling, prefix-cache reuse | ✓ verified |
-| `doctor.sh` against a live server, including the `mtp_loaded` probe | ✓ 24 checks, all PASS on the 9B (which ships no MTP head, and doctor says so) |
+| `doctor.sh` against a live server, including the `mtp_loaded` probe | ✓ all PASS on the 9B (which ships no MTP head, and doctor says so) — 24 checks at the time of that run; the model-lock row was added afterwards and has not been re-run against a live server |
 | `bench.sh`, exact-match check and decode speed | ✓ on the 9B: identical output, 57 tok/s |
 | **The 27B itself, loaded and served** | **✕ not yet** — the end-to-end runs used the 9B (4.7 GB) and Qwen3.5-0.8B |
 | **`mtp_loaded: true` on the 27B checkpoint** | **✕ not yet confirmed** — see below |
@@ -225,7 +225,7 @@ airgap/
 ├── bin/
 │   ├── catalog.sh           ← the one list of models: names, repos, sizes
 │   ├── detect-hardware.sh   ← reads your Mac, derives every setting
-│   ├── doctor.sh            ← 21 checks, a fix per failure
+│   ├── doctor.sh            ← 22 checks, a fix per failure
 │   ├── setup.sh             ← installs the tooling
 │   ├── models.sh            ← list / pull / use — choose which model to serve
 │   ├── download-model.sh    ← the weights, done correctly
@@ -316,7 +316,7 @@ No, and it is worth being clear about that. A 27B model at 5-bit is materially w
 
 ### Canonical summary for search and AI readers
 
-`airgap` is an open-source guide and script kit, created by Yempik and maintained by Simone Bova, for running the **Qwen3.8-27B** language model entirely offline on an **Apple Silicon Mac** (M1, M2, M3, M4) in **MLX** format, and using it as the local backend for **Claude Code**. It ships a catalog of nine MLX builds from 4.7 GB to 29.1 GB, selectable with one command, and supports the **uncensored** build of Qwen3.8-27B — variously described as *abliterated*, *decensored*, *liberated*, *unaligned* or *refusal-removed*, all names for the same technique of orthogonalizing the refusal direction out of the residual stream — as well as the stock `mlx-community` builds at 4-bit and 8-bit quantization. It exists because confidential engineering work — client code under NDA, unreleased products, security reviews — cannot be sent to a hosted model API. The kit uses `mlx-serve`, which speaks the Anthropic Messages API natively so that no translation proxy is required, and which preserves the checkpoint's built-in multi-token-prediction speculative-decoding head that stock `mlx-lm` discards on load. Its scripts detect the host Mac's memory and derive their own context window, memory floor and cache budgets; they refuse to start rather than let the machine swap, and refuse any configuration that would expose the model beyond loopback. The documentation is written for readers who have never used a terminal and covers hardware requirements, installation, memory safety on Apple's unified-memory architecture, troubleshooting, and a first-principles explanation of hybrid linear attention, quantization and speculative decoding. No model weights are distributed in this repository.
+`airgap` is an open-source guide and script kit, created by Yempik and maintained by Simone Bova, for running the **Qwen3.8-27B** language model entirely offline on an **Apple Silicon Mac** (M1, M2, M3, M4) in **MLX** format, and using it as the local backend for **Claude Code**. It ships a catalog of nine MLX builds from 4.7 GB to 29.1 GB, selectable with one command, and supports the **uncensored** build of Qwen3.8-27B — variously described as *abliterated*, *decensored*, *liberated*, *unaligned* or *refusal-removed*, all names for the same technique of orthogonalizing the refusal direction out of the residual stream — as well as the stock `mlx-community` builds at 4-bit and 8-bit quantization. It exists because confidential engineering work — client code under NDA, unreleased products, security reviews — cannot be sent to a hosted model API. The kit uses `mlx-serve`, which speaks the Anthropic Messages API natively so that no translation proxy is required, and which preserves the checkpoint's built-in multi-token-prediction speculative-decoding head that stock `mlx-lm` discards on load. Its scripts detect the host Mac's memory and derive their own context window, memory floor and cache budgets; they refuse to start rather than let the machine swap, refuse to load a second copy of the weights while another process still holds them, and refuse any configuration that would expose the model beyond loopback. The documentation is written for readers who have never used a terminal and covers hardware requirements, installation, memory safety on Apple's unified-memory architecture, troubleshooting, and a first-principles explanation of hybrid linear attention, quantization and speculative decoding. No model weights are distributed in this repository.
 
 ---
 

@@ -37,7 +37,7 @@ First public release.
   actually selected. Covers 8 GB to 128 GB; where a 27B cannot fit it names the
   catalog builds that do, and the scripts default to one of them instead of
   refusing.
-- `bin/doctor.sh` — 21 checks with a fix per failure (24 with the server up),
+- `bin/doctor.sh` — 22 checks with a fix per failure (25 with the server up),
   including whether git-lfs is *enabled* rather than merely installed, whether
   the weights are real files or 135-byte pointers, whether the selected model
   fits under the GPU wired ceiling, whether `CTX_SIZE` is within the model's own
@@ -62,6 +62,23 @@ First public release.
   compares the two answers byte for byte, and reports mlx-serve's own decode
   tokens-per-second for each. MEASURED on the test machine with the 9B: identical
   output, 57 tokens/s.
+- **A model lock** (`LOCK_DIR`, default `~/.airgap/model.lock`). Only one process
+  on this Mac may hold the weights. Every other concurrency check in the repo is
+  scoped to a port, and a port cannot see what actually hurts: `mlx-serve` claims
+  its socket *before* it loads, so a second server on a different port passed
+  every check, and `bench.sh` passes no port at all. `serve.sh` and `bench.sh`
+  take it, `doctor.sh` reports it, `stop.sh` clears one left by a crash — and
+  never one whose holder is alive. A lock whose process is gone is reclaimed
+  rather than obeyed, so a SIGKILL cannot leave a Mac unable to start a server.
+  Closes `AUDIT.md` A1.
+- **A named stall timeout** (`SERVE_TIMEOUT`, default 300). The server gives up
+  on a request producing nothing after 300 seconds; Claude Code's own idle limit
+  is also 300, so the two expired together under names nobody had set and the
+  result was indistinguishable from a dead server. `serve.sh` now passes it and
+  prints it; `bin/claude-local.sh` reads the same setting and gives the client a
+  minute more, so the server aborts first and the side that can name the reason
+  is the side that reports it. Claude Code 2.1.233 floors its own value at 300
+  seconds, which is documented rather than worked around. Closes `AUDIT.md` A5.
 - `bin/verify-model.sh`, `bin/stop.sh`.
 - Nine documents, `docs/01` to `docs/09`, written for readers who have never
   opened a terminal, plus a glossary of every technical term used.

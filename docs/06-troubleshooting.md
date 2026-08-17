@@ -85,7 +85,7 @@ PASS  git-lfs enabled   switched on for your account
 PASS  mlx-serve         26.8.8
 PASS  claude code       2.1.233
 ─────────────────────────────────────────────
-20 pass, 0 warn, 0 fail, 1 skipped
+21 pass, 0 warn, 0 fail, 1 skipped
 doctor: OK — next: ./bin/serve.sh
 ```
 
@@ -714,6 +714,7 @@ You should see something like this:
 ```
 claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 context  65536 tokens declared to the harness, 8192 max output
+timeout  client gives up after 360s of silence, the server after 300s — so the server reports it
 mcp      strict (LEAN_MCP=1) — MCP servers off, saves ~17k prompt tokens per turn
 note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
          "claude.ai connectors are disabled" — that is this script keeping it local
@@ -1039,6 +1040,40 @@ budget   weights<=21GB, prefix 1536MB, idle-evict 0s
 Output trimmed. `idle-evict 0s` means the model stays in memory. About 19.1 GB
 stays occupied for as long as the server runs. On a 36 GB Mac, expect to keep
 other large apps closed.
+
+### If the pause never ends
+
+Everything above describes a pause that finishes. There is a limit on how long
+it is allowed to take, and this is the turn most likely to reach it: a reload of
+about a minute, then roughly 21,000 tokens of reading, before the first word.
+
+The limit is `SERVE_TIMEOUT`, 300 seconds by default, and it counts only time
+spent producing **nothing**. An answer that keeps arriving is never cut off,
+however long it runs.
+
+When it is reached, the server abandons that one question. The server window
+records it; the session stays usable and the next question is unaffected.
+
+Raise it, for that one run or in `config.env`:
+
+```bash
+SERVE_TIMEOUT=900 ./bin/serve.sh
+```
+
+The server prints the value it is using at startup, so you can check it:
+
+```
+timeout  300s without a token before a question is given up on
+```
+
+`./bin/claude-local.sh` reads the same setting and gives Claude Code a minute
+more than the server, so the server is the side that gives up first and the
+side that can say why. Its own startup line shows both numbers.
+
+Claude Code will not accept less than 300 seconds on its side whatever you set
+— version 2.1.233 raises anything smaller back to 300. So `SERVE_TIMEOUT` below
+240 makes the server the only limit that can fire, which is the sensible way
+round if you are deliberately shortening it.
 
 ### How to know it is working as designed
 
@@ -1831,6 +1866,82 @@ it says `nothing running on port 11234.`, nothing was running, which is also fin
   `brew untap ddalcu/mlx-serve`.
 - **Remove the repository:** delete the whole folder. Nothing outside it is
   modified.
+
+<a id="model-lock"></a>
+## 23. "something else on this Mac is already holding the weights"
+
+### What you see
+
+```
+REFUSING TO START — something else on this Mac is already holding the weights.
+  holder : pid 41207 — serve.sh, port 11234
+  lock   : /Users/you/.airgap/model.lock
+```
+
+### What it means
+
+Only one process on this Mac may hold the model at a time. Something already
+does, and starting a second one would put another ~19.1 GB on top of it.
+
+This is usually the honest answer: a `./bin/serve.sh` in a window you forgot
+about, or a `./bin/bench.sh` still running. The `holder` line names its process
+id and what it said it was.
+
+The check exists because nothing else catches this. The free-memory check is a
+snapshot taken before anything is allocated, and after 15 minutes of silence the
+first server hands its weights back to macOS — so the memory really is free,
+right up until the second server loads and it is not. The port cannot catch it
+either: the server claims its port *before* it loads, so a second one started on
+a different port passes every other check.
+
+### What to do
+
+Stop the other one:
+
+```bash
+./bin/stop.sh
+```
+
+Or look at what it is first:
+
+```bash
+ps -p $(cat ~/.airgap/model.lock/pid)
+```
+
+### If nothing is actually running
+
+A process that was killed outright — a `kill -9`, a crash, a Mac that restarted
+— cannot tidy up after itself, so its lock is left standing.
+
+That is recognised rather than obeyed. `./bin/serve.sh` checks whether the
+recorded process still exists and takes the lock anyway if it does not, so a
+crash never leaves this Mac unable to start a server. You should not see the
+refusal in that case at all.
+
+`./bin/doctor.sh` reports one either way:
+
+```
+PASS  model lock        free — nothing is holding the weights
+WARN  model lock        left behind by pid 41207, which is gone — ./bin/stop.sh clears it
+```
+
+and `./bin/stop.sh` clears a left-behind lock. It never touches one whose holder
+is alive, so it cannot silently make room for the very second copy the lock
+exists to prevent.
+
+### How to know it is working as designed
+
+With the server running in another window, `./bin/doctor.sh` reports the lock as
+held and names that server. Start a second `./bin/serve.sh` and it refuses,
+naming the first one's process id, rather than loading a second copy.
+
+### Turning it off
+
+`LOCK_DIR=` (empty) switches the check off, the way `MIN_FREE_GB=0` switches off
+the memory check. Both are for people who know why they want it. There is no
+good reason to do this on a Mac that cannot hold two copies of the weights.
+
+---
 
 ## What this page will not do
 

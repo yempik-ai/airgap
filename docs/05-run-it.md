@@ -143,6 +143,7 @@ model    /Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-Or
 endpoint http://127.0.0.1:11234   (Anthropic: http://127.0.0.1:11234/v1/messages)
 context  65536 tokens, kv-quant turbo4
 budget   weights<=21GB, prefix 1536MB, idle-evict 900s
+timeout  300s without a token before a question is given up on
 log      ~/.mlx-serve/logs/mlx-serve-11234.log
 
 Loading about 19.1 GB of weights. The first load can take a minute.
@@ -221,11 +222,12 @@ That is one action expressed as two commands, because the script needs to be
 found and the folder it starts in becomes the folder Claude Code works on. To
 work on a different project, see Section 8.
 
-You should see these four lines before Claude Code's own screen appears:
+You should see these five lines before Claude Code's own screen appears:
 
 ```
 claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 context  65536 tokens declared to the harness, 8192 max output
+timeout  client gives up after 360s of silence, the server after 300s — so the server reports it
 mcp      strict (LEAN_MCP=1) — MCP servers off, saves ~17k prompt tokens per turn
 note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
          "claude.ai connectors are disabled" — that is this script keeping it local

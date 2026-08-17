@@ -42,6 +42,10 @@
   262,144-token context arithmetically possible.
 - Measured: Claude Code's system prompt is 38,054 tokens with MCP servers loaded,
   20,909 tokens with `--strict-mcp-config`.
+- The scripts refuse rather than warn: on a non-loopback host, on a build that
+  would not fit under Apple's GPU wired ceiling, below a free-memory floor, and
+  on a second attempt to load the weights while another process already holds
+  them (a lock at `~/.airgap/model.lock`, since two ~19.1 GB copies do not fit).
 - No tokens-per-second figure for the 27B has been benchmarked by this project.
   The one measured speed is 57 tokens/s decode for the 9B (`keXjos/Qwen3.8-9B-mlx-4Bit`,
   60 greedy tokens, `bin/bench.sh`, Apple M3 Max 30 GPU cores). Any 27B speed

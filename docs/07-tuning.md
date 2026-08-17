@@ -248,6 +248,8 @@ Every one of these can go in `config.env` or in front of a command.
 | `PREFIX_CACHE_MEM` | 1536MB | Memory kept for remembering repeated instructions | You have memory to spare. Section 5. |
 | `PREFIX_CACHE_DISK` | 10GB | The same thing on your SSD, so it survives a restart | Disk is short. Costs disk, not memory. |
 | `IDLE_EVICT_SECS` | 900 | Seconds of silence before the memory goes back to macOS | Section 7. |
+| `SERVE_TIMEOUT` | 300 | Seconds a question may produce **nothing** before it is given up on | A cold first turn is being cut off. Not a length limit. |
+| `LOCK_DIR` | `~/.airgap/model.lock` | Where the lock that stops two model loads lives | Almost never. Empty switches the lock off. |
 | `PREFILL_CHUNK` | 4096 | How much text is read at a time on the first pass | Your Mac spikes while reading a long file. |
 | `NO_VISION` | 1 | Skips loading the image-reading part | Only to feed the model pictures. |
 | `LEAN_MCP` | 1 | Starts Claude Code with optional tool servers off | Section 6. |
@@ -617,6 +619,8 @@ carries the same list with a longer explanation each.
 | `PREFIX_CACHE_MEM` | `1536MB` |
 | `PREFIX_CACHE_DISK` | `10GB` |
 | `IDLE_EVICT_SECS` | `900` |
+| `SERVE_TIMEOUT` | `300` |
+| `LOCK_DIR` | `~/.airgap/model.lock` |
 | `PREFILL_CHUNK` | `4096` |
 | `KV_QUANT` | `turbo4` |
 | `NO_VISION` | `1` |

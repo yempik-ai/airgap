@@ -32,7 +32,8 @@ USAGE (run from the repo root)
 
 WHAT YOU SHOULD SEE
   Either "stopped." or "nothing running on port 11234.", and then a line
-  showing memory before and after.
+  showing memory before and after. If a previous run was killed rather than
+  asked to stop, one more line saying its model lock was cleared.
 
 EXIT CODE
   Always 0. There is no failure case: nothing running is a fine outcome.
@@ -64,6 +65,19 @@ if pkill -f "mlx-serve.*--port ${PORT}" 2>/dev/null; then
   echo "stopped."
 else
   echo "nothing running on port ${PORT}."
+fi
+
+# The lock outlives a process that was killed rather than asked to stop, so the
+# stop button is where it gets tidied up. A lock whose holder is still alive is
+# never touched: that is a bench.sh run, or a server on another port, and both
+# are things this script did not stop and must not pretend it did.
+if [ -n "${LOCK_DIR:-}" ] && [ -d "$LOCK_DIR" ]; then
+  if clear_stale_model_lock; then
+    echo "cleared a model lock left behind by a process that is gone."
+  else
+    echo "note: the model lock is still held by pid $(model_lock_pid || echo '?') — $(model_lock_what)"
+    echo "      that is not the server on port ${PORT}. Nothing was stopped for it."
+  fi
 fi
 
 after="$(available_gb)"
