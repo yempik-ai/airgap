@@ -47,7 +47,7 @@ SETTINGS (put them in config.env, or type them in front of the command)
   PYTHON_BIN      which Python to use for that. Default: python3
 
 WHAT YOU SHOULD SEE AT THE END
-  setup complete — next: ./bin/doctor.sh
+  setup complete — next: ./bin/download-model.sh   (or just ./start.sh, which does the rest)
 
 IF A STEP FAILS
   The last line names the step and points at docs/02-install.md.
@@ -194,4 +194,4 @@ else
   fi
 fi
 
-echo "setup complete — next: ./bin/doctor.sh"
+echo "setup complete — next: ./bin/download-model.sh   (or just ./start.sh, which does the rest)"

@@ -55,17 +55,38 @@ Apple Silicon only — Intel Macs, Windows and Linux cannot run this. Budget **4
 git clone https://github.com/yempik-ai/airgap.git airgap && cd airgap
 ```
 
-Then five commands, in order. Nothing downloads or starts until you say so.
+```bash
+./start.sh
+```
+
+**`./start.sh` is the only command you need to remember.** It installs the tools, downloads the model (asking first — it is 20 GB), proves the weights are real files, runs 21 health checks, and stops with a plain-English fix the moment anything needs you. Safe to run again at any time: finished steps are skipped.
+
+**Then two commands, in two Terminal windows:**
+
+```bash
+./bin/serve.sh          # window 1 — the server. Leave it open.
+./bin/claude-local.sh   # window 2 — Claude Code, pointed at your Mac.
+```
+
+`./bin/stop.sh` stops the server and hands the memory straight back.
+
+Free memory before starting the server — it refuses to start below the threshold and names the apps to close. Never used Terminal? [`docs/02-install.md`](docs/02-install.md) assumes nothing at all.
+
+<details>
+<summary><b>Prefer to run the steps yourself?</b></summary>
+
+`start.sh` runs exactly these, in this order, and each one prints the next.
 
 | # | Command | What it does |
 |:--|:--|:--|
 | 1 | `./bin/setup.sh` | installs git-lfs + mlx-serve; checks Homebrew and Claude Code |
-| 2 | `./bin/download-model.sh` | the 20 GB — resumable, pointer-verified |
-| 3 | `./bin/doctor.sh` | 21 checks, PASS/FAIL with a fix each. Changes nothing |
-| 4 | `./bin/serve.sh` | starts the server. Leave the window open |
-| 5 | `./bin/claude-local.sh` | Claude Code, second window, pointed at you |
+| 2 | `./bin/download-model.sh` | the 20 GB — resumable, pointer-verified, de-duplicated |
+| 3 | `./bin/verify-model.sh` | proves the weights are real, not 135-byte placeholders |
+| 4 | `./bin/doctor.sh` | 21 checks, PASS/FAIL with a fix each. Changes nothing |
+| 5 | `./bin/serve.sh` | starts the server. Leave the window open |
+| 6 | `./bin/claude-local.sh` | Claude Code, second window, pointed at you |
 
-Free memory before step 4 — the server refuses to start below the threshold and names the apps to close. Never used Terminal? [`docs/02-install.md`](docs/02-install.md) assumes nothing at all.
+</details>
 
 ### Too big? Pick a smaller build
 
@@ -180,6 +201,7 @@ Being precise about this matters more than looking finished.
 
 ```text
 airgap/
+├── start.sh                 ← the one command: tools, model, checks
 ├── bin/
 │   ├── detect-hardware.sh   ← reads your Mac, derives every setting
 │   ├── doctor.sh            ← 21 checks, a fix per failure
