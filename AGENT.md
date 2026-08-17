@@ -14,11 +14,14 @@ against the installed binaries, and what has already been tried and found false.
 not a record — [`AUDIT.md`](AUDIT.md) holds the status of every item, and if the
 two ever disagree, `AUDIT.md` is right.*
 
-- **Last landed:** `C1` (doctor reads the `[hot-cache]` log line and the
-  `/metrics.json` counters) with `C2` folded in, and an `A1` follow-up
-  (`stop.sh` waits on the pid, not the port), 2026-08-17.
-- **Next:** `B1` — make `bench.sh` keep prefill and peak memory. Then `D3`,
-  `E1`. The ranked list with efforts is at the top of `AUDIT.md`.
+- **Last landed:** `B1` (`bench.sh` keeps prefill and peak memory, takes
+  `PROMPT_FILE=`, and loads under `serve.sh`'s own flags via one shared list,
+  `LOAD_SHAPE_ARGS` in `env.sh`), 2026-08-17. Its first long-prompt run put a
+  number on `A3`: a 2.6 GB working set on the 9B at 16k tokens.
+- **Next:** `D3` — doctor probes a streamed tool call. Then `E1`, which now
+  has evidence behind it (`PREFILL_CHUNK` 4096 → 1024 cut the working set
+  2.6 → 1.1 GB at a 24% prefill cost). The ranked list is at the top of
+  `AUDIT.md`.
 - **Blocked on hardware, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `AUDIT.md` E5 and A5 both stop short
   of a measurement for this reason, and `ROADMAP.md` Phase 0 names it.
@@ -42,7 +45,12 @@ two ever disagree, `AUDIT.md` is right.*
 - `bin/env.sh` — settings resolution and shared helpers. A new setting needs
   **three** edits here: the `ENV_KEYS` list, the default assignment, and the
   export list. Missing `ENV_KEYS` means the setting works in `config.env` but
-  not from the command line.
+  not from the command line. Settings only `bench.sh` reads (`TOKENS`,
+  `PROMPT`, `PROMPT_FILE`) are the one exception: on `ENV_KEYS`, defaulted in
+  `bench.sh`, not exported. `LOAD_SHAPE_ARGS` is also here — the four flags
+  that shape a load's memory footprint, passed by both `serve.sh` and
+  `bench.sh`; a memory-relevant flag belongs in that list, not in either
+  script.
 - `bin/detect-hardware.sh` — the memory model. Takes a weight size and a context
   window, returns the budget the guards enforce.
 - `bin/serve.sh` — the only script that loads the model. Ends in `exec`, so
@@ -131,6 +139,42 @@ resumed (2 × 1181 = 2362), `prompt_tokens_total` all prompt tokens (3 × 1212 =
 The strings *"Prefix cache hit count"* / *"Prefix cache lookup count"* are
 Prometheus HELP text on the separate text-format endpoint — they are **not**
 JSON keys. Do not grep for them in `/metrics.json`.
+
+**`mlx-serve --prompt` (one-shot mode) prints three stat lines on stdout, and
+accepts the serve-side load flags.** After the answer, delimited by two
+`==========` lines: `Prompt: N tokens, R tokens-per-sec`, `Generation: N tokens,
+R tokens-per-sec`, `Peak memory: X GB`. `--ctx-size`, `--kv-quant` and
+`--prefill-chunk` are honoured in this mode (`[args] kv-quant: turboquant 4-bit`
+on stderr) and do not distort the decode figure (35–36 vs 37 tok/s with and
+without, same prompt). **`Peak memory` is MLX's Metal-buffer accounting, not
+process RSS**: `footprint(1)` on the process showed `phys_footprint 5328 MB`
+with `IOAccelerator (graphics) 4946 MB` against a printed `4.822 GB` — the
+whole process is ~0.5 GB above the printed peak. Treat it as a lower bound.
+`bench.sh` parses all three lines; there is no `--prompt-file` flag, so
+`PROMPT_FILE=` is read by the script and passed as the `--prompt` argument
+(a 62 KB file is fine; ARG_MAX here is 1 MB).
+
+```
+$ mlx-serve --model ./Qwen3.8-9B-mlx-4Bit --prompt "Say hello in five words." \
+    --max-tokens 20 --temp 0.0 --ctx-size 65536 --kv-quant turbo4 --prefill-chunk 4096 --no-vision
+==========
+Hello, how are you?
+==========
+Prompt: 18 tokens, 128.403 tokens-per-sec
+Generation: 6 tokens, 49.204 tokens-per-sec
+Peak memory: 4.805 GB
+$ footprint -p <pid>          # while a one-shot run is generating
+mlx-serve [35576]: 64-bit    Footprint: 5322 MB
+4940 MB  IOAccelerator (graphics)   214 MB  MALLOC_LARGE   144 MB  Owned physical footprint (unmapped) (graphics)
+```
+
+**The prefill working set is chunk-bound and large.** MEASURED on the 9B,
+single samples, `bench.sh` with `PROMPT_FILE=docs/08-how-it-works.md`
+(16,377 tokens): peak 7.52 GB, i.e. **+2.56 GB** over weights + KV-used at
+`PREFILL_CHUNK=4096`; **+1.11 GB** at `PREFILL_CHUNK=1024`, prefill 374 →
+285 tok/s. Decode after that prompt: 15.6 tok/s, against 36.7 after a
+41-token one. Not measured on the 27B. This is the number `A3` was waiting
+for and the evidence `E1` needed.
 
 **`--api-key` gates `/metrics` and `/v1/models`, but not `/health` — and it
 exempts loopback entirely.** The server's own banner says so:
@@ -249,6 +293,9 @@ strength of a diff.
 3. If a figure changed, say which of the three labels it carries now.
 4. If a change touches a guard, prove the refusal still fires. A guard that
    silently stopped refusing looks identical to one that never had to.
-5. If a change touches `serve.sh`, check its help text still describes it.
+5. If a change touches `serve.sh`, check its help text still describes it —
+   and if it touches the argv it builds, capture `ps -o args= -p <pid>` of the
+   running server before and after and compare the flag/value pairs. That is
+   how `B1`'s `LOAD_SHAPE_ARGS` hoist was proven a no-op.
 6. Anything verified only on the 9B says so. The 27B has never been loaded on
    this machine, and several open items exist precisely because of that.

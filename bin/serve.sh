@@ -274,13 +274,15 @@ args=(
   --serve
   --host "$HOST"
   --port "$PORT"
-  --ctx-size "$CTX_SIZE"
-  --kv-quant "$KV_QUANT"
+  # Context size, KV format, prefill chunk and the vision switch come from one
+  # list in env.sh that bench.sh passes too, so the peak it measures is reached
+  # under these same settings. Split on spaces on purpose; see env.sh.
+  # shellcheck disable=SC2206
+  $LOAD_SHAPE_ARGS
   --prefix-cache-mem "$PREFIX_CACHE_MEM"
   --prefix-cache-disk "$PREFIX_CACHE_DISK"
   --max-resident-models "$MAX_RESIDENT_MODELS"
   --max-resident-mem "$MAX_RESIDENT_MEM"
-  --prefill-chunk "$PREFILL_CHUNK"
   --log-level "$LOG_LEVEL"
   --log-file "$LOG_FILE"
 )
@@ -303,11 +305,6 @@ fi
 # whose first cold turn on a big context legitimately needs longer.
 if [ "$SERVE_TIMEOUT" != "0" ]; then
   args+=( --timeout "$SERVE_TIMEOUT" )
-fi
-
-# The image-reading part costs memory and Claude Code sends text.
-if [ "$NO_VISION" = "1" ]; then
-  args+=( --no-vision )
 fi
 
 # A password for the server. Empty is correct while HOST is 127.0.0.1.

@@ -1314,7 +1314,8 @@ that on purpose, and the override is not optional.
 tokens-per-second number, no prefill rate, no locally reproduced speed comparison
 between the guesser on and off. Every timing figure on this page is
 PUBLISHER-REPORTED and came from a different Mac. `./bin/bench.sh` exists so you
-can measure your own.
+can measure your own; the only figures it has produced so far are the 9B's, in
+[07 §9](07-tuning.md#bench).
 
 ---
 

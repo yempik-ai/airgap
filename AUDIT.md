@@ -18,7 +18,7 @@ environment facts established along the way. Read that file first — it exists 
 these findings are not researched twice.
 
 Items are referenced by id from [`ROADMAP.md`](ROADMAP.md). All are **OPEN**
-except `A1`, `A5` and `C1`, marked **DONE** below.
+except `A1`, `A5`, `C1` and `B1`, marked **DONE** below.
 
 Evidence is cited as `file:line` at the time of the audit. Line numbers drift;
 the greps are given where the reader will need to re-locate something.
@@ -37,7 +37,7 @@ marks *never measured*.
 | ✅ | `A1` instance lock in `serve.sh` — **DONE** | small | high |
 | ✅ | `A5` name the stall timeout — **DONE** | small | medium |
 | ✅ | `C1` read the cache evidence already being written — **DONE** | medium | high |
-| 4 | `B1` make `bench.sh` keep prefill and peak memory | medium | high |
+| ✅ | `B1` make `bench.sh` keep prefill and peak memory — **DONE** | medium | high |
 | 5 | `D3` doctor probes a streamed tool call | medium | high |
 | 6 | `E1` stop overriding the engine's prefill sizing | small | medium |
 
@@ -140,6 +140,13 @@ model at all and which the 1 GB spare may not cover at `PREFILL_CHUNK=4096`.
 `docs/04-memory-safety.md:196-200` narrates a "~1 GB working space" into the
 peak, but `hw_rebudget` never adds it. `B1` is what turns this into a number.
 
+*Number, 2026-08-17 (`B1`, 9B, MEASURED, single sample):* the working set above
+weights + KV was **+2.56 GB** at 16,377 prompt tokens with `PREFILL_CHUNK=4096`
+and **+1.11 GB** at `PREFILL_CHUNK=1024`. On the 9B that sits inside a
+`MIN_FREE_GB` of 11 with room to spare; on the 27B, where `MIN_FREE_GB=22`
+rounds up from 21.6, a comparable working set is not covered. Not measured on
+the 27B — still the missing measurement.
+
 ### A4 — `CTX_SIZE` is validated only in `doctor.sh`
 
 Grepped for `max_position_embeddings` across `bin/` and `start.sh`: one hit,
@@ -234,7 +241,40 @@ admitting one that will not.
 
 ## B. Measurement
 
-### B1 — `bench.sh` throws away two numbers it already receives
+### B1 — `bench.sh` throws away two numbers it already receives — **DONE**
+
+> **Shipped 2026-08-17.** `bench.sh` keeps all three lines: each run prints
+> `prompt : N tokens, read at R tokens/s`, the decode line, and `peak memory`;
+> the result block quotes prefill *with its prompt length*, and puts the peak
+> next to the guard's arithmetic as *peak − weights − KV actually used* — the
+> working set `hw_rebudget` does not line-item (`A3`). `PROMPT_FILE=` makes a
+> whole file the prompt. Correction 2 is done by construction, not by copying:
+> the four load-shape flags (`--ctx-size`, `--kv-quant`, `--prefill-chunk`,
+> `--no-vision`) now live in one list, `LOAD_SHAPE_ARGS` in `env.sh`, which
+> `serve.sh` and `bench.sh` both pass; `serve.sh`'s argv was captured with `ps`
+> before and after and the flag/value pairs are identical (order aside).
+>
+> Verified on the reference machine, 9B, `mlx-serve 26.8.8`, single samples:
+> the built-in 41-token prompt gives prefill 201 tok/s, decode 36.7, peak
+> 4.78 GB (+0.08 GB working set); `PROMPT_FILE=docs/08-how-it-works.md`
+> (16,377 tokens) gives prefill 374 tok/s, decode 15.6, peak 7.52 GB —
+> **+2.56 GB working set** at `PREFILL_CHUNK=4096`; the same file at
+> `PREFILL_CHUNK=1024` gives 285 tok/s and +1.11 GB. So the working set is
+> chunk-bound, `PREFILL_CHUNK` is the lever, and `docs/04`'s "~1 GB" row is
+> right on the 9B only at the smaller chunk — noted there. `PROMPT_FILE`
+> missing or empty refuses before anything loads; the lock is released on
+> both paths. The flags do not distort the speed figure: same prompt with and
+> without them, decode 35–36 vs 37 tok/s.
+>
+> The **Unknown** below is resolved: `footprint(1)` on the one-shot process
+> reported `phys_footprint 5328 MB`, of which the `IOAccelerator (graphics)`
+> row was 4946 MB, against a printed `Peak memory: 4.822 GB`. The printed
+> figure is MLX's Metal-buffer accounting; the whole process is ~0.5 GB above
+> it. It is labelled a lower bound in the script and the docs.
+>
+> Not measured on the 27B. Its working set at a 20,909-token first turn is
+> the number `A3` still needs, and it is likely larger than the 9B's 2.6 GB.
+
 
 `mlx-serve` prints three lines; `bin/bench.sh:145` greps one. The comment at
 `:120-127` *quotes the other two* and then discards them:
@@ -278,6 +318,11 @@ and tracks the working set, but it may exclude process overhead — label it
 at 20,909. There is no `PROMPT_FILE`, no context sweep, and no document stating
 that decode speed decays with depth — `docs/08-how-it-works.md:350-372` presents
 a context-independent bandwidth ceiling.
+
+*Partly answered by `B1`, 2026-08-17:* `PROMPT_FILE=` exists, and the decay is
+now a measured figure on the 9B — decode 36.7 tok/s after a 41-token prompt,
+15.6 after 16,377 (single samples). The sweep and the `docs/08` correction are
+still open.
 
 ds4's committed CSVs show the decay is large on this hardware class: M5 Max
 Flash q2 falls **39.35 → 27.64 t/s decode** and **790 → 398 t/s prefill**

@@ -182,11 +182,11 @@ Being precise about this matters more than looking finished.
 | **Every script, actually run** — `start`, `setup`, `download-model`, `models`, `verify-model`, `doctor`, `serve`, `claude-local`, `stop` | ✓ all of them |
 | **Claude Code answering from a local model, end to end** | ✓ `serve → doctor → claude-local -p` returned `AIRGAP OK` on the 9B |
 | Anthropic `/v1/messages`, tool calling, prefix-cache reuse | ✓ verified |
-| `doctor.sh` against a live server, including the `mtp_loaded` probe | ✓ all PASS on the 9B (which ships no MTP head, and doctor says so) — 24 checks at the time of that run; the model-lock row was added afterwards and has not been re-run against a live server |
-| `bench.sh`, exact-match check and decode speed | ✓ on the 9B: identical output, 57 tok/s |
+| `doctor.sh` against a live server, including the `mtp_loaded` probe | ✓ all PASS on the 9B (which ships no MTP head, and doctor says so) — 27 checks against a live server on 2026-08-17, model-lock and cache-evidence rows included |
+| `bench.sh`, exact-match check, decode speed, prefill rate and peak memory | ✓ on the 9B: identical output; 36.7 tok/s decode after a 41-token prompt, 15.6 after 16,377; prefill 374 tok/s at 16,377 tokens; peak 7.52 GB there, 2.6 GB of it working set above weights + KV |
 | **The 27B itself, loaded and served** | **✕ not yet** — the end-to-end runs used the 9B (4.7 GB) and Qwen3.5-0.8B |
 | **`mtp_loaded: true` on the 27B checkpoint** | **✕ not yet confirmed** — see below |
-| Tokens per second on the 27B, prefill rate | ✕ never measured |
+| Tokens per second, prefill rate and peak memory on the 27B | ✕ never measured (the 9B figures above are the only ones) |
 
 The end-to-end runs above used **`9b-4bit`** (a community distillation into the Qwen3.5-9B architecture) and **Qwen3.5-0.8B** — both the same `qwen3_5` architecture family as the 27B, so they exercise the same code path at a size that fits alongside a working day. What has not been run is the 27B itself.
 

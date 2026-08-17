@@ -427,6 +427,11 @@ The claim worth checking is not that it is faster. It is that the answer is
 **identical** — that this is a pure speed gain and not a quality trade.
 `./bin/bench.sh` runs the model twice with the randomness switched off, once with
 the feature on and once with it off, and compares a fingerprint of each answer.
+While it is at it, it keeps the two other figures mlx-serve prints — how fast
+the prompt was read (prefill) and the peak memory — and puts the peak next to
+the arithmetic the memory guard in
+[04](04-memory-safety.md#the-total-on-the-test-machine) is built on. It loads the model with the same context size, KV format, prefill
+chunk and vision setting `./bin/serve.sh` uses, so that comparison is fair.
 
 **WHAT THIS CHANGES ON YOUR MAC.** It loads the selected model's weights into
 memory — about 19.1 GB for the 5-bit 27B — twice, one after the other. It uses
@@ -459,37 +464,85 @@ You should see something like this — this is a real run, MEASURED on the test
 machine, of the 9B rather than the 27B:
 
 ```
-memory   18.0 GB available (need 11 GB) — ok
+memory   21.0 GB available (need 11 GB) — ok
 model:  Qwen3.8-9B-mlx-4Bit (~4.7 GB)
 prompt: Explain why speculative decoding produces output identical to standard...
-tokens: 60, temp 0.0 (greedy — required for an exact-match comparison)
+tokens: 200, temp 0.0 (greedy — required for an exact-match comparison)
+load:   --ctx-size 65536 --kv-quant turbo4 --prefill-chunk 4096 --no-vision   (the same as serve.sh)
 This loads the model twice. Expect a wait with no output while it reads the disk.
+The figures per run are the ones mlx-serve prints itself; the load is not in them.
 
 ── spec-on ─────────────────────────────────
-  generated  : 60 tokens
-  speed      : 57.114 tokens/s (mlx-serve's own figure, decode only)
-  output sha : 3cb28ef32b0af61d
+  prompt      : 41 tokens, read at 201.224 tokens/s   (prefill)
+  generated   : 200 tokens, at 36.746 tokens/s        (decode — the speed figure)
+  peak memory : 4.779 GB
+  output sha  : 5df6c56513eeea39
 ── spec-off ─────────────────────────────────
-  generated  : 60 tokens
-  speed      : 56.302 tokens/s (mlx-serve's own figure, decode only)
-  output sha : 3cb28ef32b0af61d
+  prompt      : 41 tokens, read at 197.445 tokens/s   (prefill)
+  generated   : 200 tokens, at 36.055 tokens/s        (decode — the speed figure)
+  peak memory : 4.779 GB
+  output sha  : 5df6c56513eeea39
 
 ── result ──────────────────────────────────
   outputs IDENTICAL  <- speculative decoding is exact, as expected
-  speed-up ~ 1.01x  (57.114 tokens/s with the speed features on, 56.302 off)
+  speed-up ~ 1.02x  (36.746 tokens/s with the speed features on, 36.055 off)
+  prefill    201.224 tokens/s at 41 prompt tokens (speed features on)
+             ^ at a prompt this short that is mostly per-call overhead, several
+               times under the real rate. PROMPT_FILE=<file> measures a real one.
+  peak       4.78 GB, the higher of the two runs — mlx-serve's own figure for its
+             Metal buffers, a lower bound on the process (about 0.5 GB under it, measured)
+  guard      counts weights ~4.7 GB + a full 65536-token conversation 1.00 GB = 5.70 GB
+             for a load like this (arithmetic; MIN_FREE_GB=11 adds the prefix cache,
+             which a one-shot run never fills). This run used 241 of those tokens: 0.00 GB.
+  gap        +0.08 GB — peak minus weights minus the conversation actually used: the
+             working set the arithmetic does not line-item. It grows with the prompt;
+             a longer PROMPT_FILE= is how to see by how much.
 ```
 
 Read that run honestly: the 9B ships no MTP head, and this prompt gives prompt
 lookup nothing to copy, so the two speeds are the same within noise — which is
 exactly what the two identical fingerprints and a ratio of 1.0 say. It is a
-57-tokens-per-second figure for the 9B on an M3 Max, one short run, and nothing
-more. On an OrcaRouter 27B, where the head exists, the publisher's own figures
-are 6.81 seconds against 10.15 seconds for the same answer — PUBLISHER-REPORTED,
-NOT YET reproduced on the test machine. The interesting line is always the
-last-but-one: `outputs IDENTICAL`.
+37-tokens-per-second figure for the 9B on an M3 Max, one short run, and nothing
+more (an earlier 60-token run of the same script printed 57 — one short run is
+not a stable figure, so always quote it with its prompt and token count). On an OrcaRouter 27B,
+where the head exists, the publisher's own figures are 6.81 seconds against
+10.15 seconds for the same answer — PUBLISHER-REPORTED, NOT YET reproduced on
+the test machine. The interesting line is always the first of the result block:
+`outputs IDENTICAL`.
 
-The speeds are the ones mlx-serve prints after each run: decode only, so reading
-the model off the disk does not blur them.
+The three figures per run are the ones mlx-serve prints after each run. Reading
+the model off the disk is in none of them.
+
+**The prefill figure is only worth quoting with a long prompt.** At the
+built-in question it is mostly fixed per-call overhead, several times under the
+real rate. `PROMPT_FILE=` makes the whole of a file the prompt — any document
+from `docs/` is a fair stand-in for the ~21,000 tokens Claude Code sends on
+every turn:
+
+```
+PROMPT_FILE=docs/08-how-it-works.md ./bin/bench.sh
+```
+
+MEASURED on the test machine with the 9B, `mlx-serve 26.8.8`, single samples,
+same settings as above:
+
+| prompt | prefill | decode after it | peak memory | working set above weights + KV |
+|---:|---:|---:|---:|---:|
+| 41 tokens | 201 tokens/s | 36.7 tokens/s | 4.78 GB | +0.08 GB |
+| 16,377 tokens (`docs/08`) | 374 tokens/s | 15.6 tokens/s | 7.52 GB | +2.56 GB |
+| 16,377 tokens, `PREFILL_CHUNK=1024` | 285 tokens/s | 15.6 tokens/s | 6.06 GB | +1.11 GB |
+
+Three things that table says, each on the 9B only. The prefill rate at a real
+prompt is roughly double the short-prompt figure, and depth costs decode: the
+same model wrote at 36.7 tokens/s after a 41-token prompt and 15.6 after a
+16,377-token one. The peak grows far more than the conversation does — the
+working set while reading a long prompt was 2.6 GB at `PREFILL_CHUNK=4096`, and
+`PREFILL_CHUNK=1024` cut it to 1.1 GB at a 24% prefill cost, which is what that
+setting is for ([§4](#4-the-settings-that-matter-and-what-each-one-is-for)). And mlx-serve's `Peak memory` is its
+own accounting of its Metal buffers: `footprint(1)` on the same process showed
+about 0.5 GB more, so treat the printed peak as a lower bound. None of this
+has been measured on the 27B, whose working set is likely larger — see
+`AUDIT.md` A3.
 
 **If you do not see that.**
 
@@ -659,6 +712,7 @@ carries the same list with a longer explanation each.
 | `PROBE` | `1` | `doctor.sh` |
 | `TOKENS` | `200` | `bench.sh` |
 | `PROMPT` | a fixed question | `bench.sh` |
+| `PROMPT_FILE` | unset — a file whose whole contents are the prompt; overrides `PROMPT` | `bench.sh` |
 
 ---
 

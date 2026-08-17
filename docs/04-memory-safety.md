@@ -211,6 +211,16 @@ The two remaining rows above — the fixed summaries and the working space while
 reading a prompt — are transient and are covered by the rounding. The server
 refuses to start below this number.
 
+**The "~1 GB" working-space row now has a measurement against it, and it is
+larger.** `./bin/bench.sh` puts mlx-serve's own peak next to this arithmetic
+([07 §9](07-tuning.md#bench)). MEASURED on the test machine with the **9B**,
+single samples: reading a 16,377-token prompt at `PREFILL_CHUNK=4096` took
+**2.6 GB** above weights + conversation; `PREFILL_CHUNK=1024` cut that to
+**1.1 GB** at a 24% prefill cost. So on the 9B the row is right only at the
+smaller chunk. Not measured on the 27B, whose working set is likely larger,
+and where 2.6 GB would be more than the rounding in `MIN_FREE_GB=22` covers.
+That is `AUDIT.md` A3, and it is open.
+
 **That figure is different on every Mac**, because the context window and the
 prefix cache are sized from your Mac's memory. To print yours, run from the repo
 root:

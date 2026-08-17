@@ -66,13 +66,16 @@ macOS 26.5.2:
 | Checkpoint composition, 5-bit 27B | 2,207 tensors; 504 quantized matrices; 333 vision; 29 MTP |
 | Decode speed of the 9B (`keXjos/Qwen3.8-9B-mlx-4Bit`), 60 greedy tokens, `bin/bench.sh`, mlx-serve's own figure | 57 tokens/s |
 | `bin/bench.sh` exact-match check on the 9B, speed features on vs off | identical output |
+| `bin/bench.sh` on the 9B, `mlx-serve 26.8.8`, single samples: prefill rate | 201 tokens/s at a 41-token prompt; 374 tokens/s at 16,377 tokens; 285 tokens/s at 16,377 tokens with `PREFILL_CHUNK=1024` |
+| `bin/bench.sh` on the 9B: decode after a long prompt | 36.7 tokens/s after 41 prompt tokens, 15.6 after 16,377 |
+| `bin/bench.sh` on the 9B: peak memory (mlx-serve's own Metal-buffer figure) | 4.78 GB at 41 prompt tokens, 7.52 GB at 16,377 — 2.6 GB above weights + KV at `PREFILL_CHUNK=4096`, 1.1 GB above at `PREFILL_CHUNK=1024`. `footprint(1)` on the process showed ~0.5 GB more than the printed peak |
 
 **PUBLISHER-REPORTED**, not reproduced here: MTP speculative decoding on the 27B
 took 6.81 s against 10.15 s with the head disabled, producing an identical output
 SHA-256.
 
-**NOT MEASURED**: no tokens-per-second or prefill-rate figure for the **27B** has
-been benchmarked by this project, on any machine, and the 27B has not been loaded
+**NOT MEASURED**: no tokens-per-second, prefill-rate or peak-memory figure for the
+**27B** has been benchmarked by this project, on any machine, and the 27B has not been loaded
 here. Any 27B throughput number attributed to `airgap` did not come from this
 repository. `bin/bench.sh` produces one.
 

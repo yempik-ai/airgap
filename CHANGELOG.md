@@ -59,9 +59,15 @@ First public release.
   window, and switches off telemetry, error reporting, the auto-updater,
   marketplace auto-install and background tasks.
 - `bin/bench.sh` — loads the selected model twice, speed features on and off,
-  compares the two answers byte for byte, and reports mlx-serve's own decode
-  tokens-per-second for each. MEASURED on the test machine with the 9B: identical
-  output, 57 tokens/s.
+  compares the two answers byte for byte, and reports the three figures mlx-serve
+  prints for each: prefill rate, decode rate and peak memory. It loads under the
+  same context/KV/prefill-chunk/vision flags `serve.sh` uses (one list,
+  `LOAD_SHAPE_ARGS` in `env.sh`), and puts the peak next to the memory guard's
+  own arithmetic. `PROMPT_FILE=` makes a whole file the prompt, which is the
+  only way to a prefill figure worth quoting. MEASURED on the test machine with
+  the 9B: identical output; 36.7 tokens/s decode after a 41-token prompt, 15.6
+  after 16,377; prefill 374 tokens/s at 16,377 tokens; peak 7.52 GB there, of
+  which 2.6 GB is working set above weights + KV. Closes `AUDIT.md` B1.
 - **A model lock** (`LOCK_DIR`, default `~/.airgap/model.lock`). Only one process
   on this Mac may hold the weights. Every other concurrency check in the repo is
   scoped to a port, and a port cannot see what actually hurts: `mlx-serve` claims

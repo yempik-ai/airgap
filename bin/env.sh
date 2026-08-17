@@ -32,7 +32,7 @@ ENV_KEYS="MODEL_QUANT MODEL_REPO MODEL_DIR MODEL_ID HOST PORT CTX_SIZE KV_QUANT 
 PREFIX_CACHE_MEM PREFIX_CACHE_DISK MAX_RESIDENT_MODELS MAX_RESIDENT_MEM \
 IDLE_EVICT_SECS SERVE_TIMEOUT PREFILL_CHUNK MIN_FREE_GB MIN_DISK_GB LOG_LEVEL LOG_FILE \
 LOCK_DIR API_KEY METRICS EXTRA_ARGS DEDUP LEAN_MCP CLAUDE_BIN PYTHON_BIN WITH_VENV \
-CLAUDE_CODE_MAX_OUTPUT_TOKENS PROBE SKIP_BREW TOKENS PROMPT"
+CLAUDE_CODE_MAX_OUTPUT_TOKENS PROBE SKIP_BREW TOKENS PROMPT PROMPT_FILE"
 
 # --- Step 1: remember exactly what the caller set ----------------------------
 # "_ENVSET_x is non-empty" means the caller really set x, even if they set it
@@ -316,6 +316,18 @@ unset _YOURS_MIN_FREE_GB _YOURS_MAX_RESIDENT_MEM _YOURS_PREFIX_CACHE_MEM
 
 # --- Derived -----------------------------------------------------------------
 BASE_URL="http://${HOST}:${PORT}"
+
+# The flags that decide how much memory a load takes beyond the weights: the
+# context size, the KV format, the prefill chunk, and whether the vision tower
+# is loaded. serve.sh passes them to the server and bench.sh passes the very
+# same ones to its one-shot load, so the peak memory bench.sh reports is a peak
+# reached under the settings the memory guard is sized for. One list, here, so
+# the two cannot drift apart. Split on spaces where it is used, like EXTRA_ARGS;
+# every value in it is a single word.
+LOAD_SHAPE_ARGS="--ctx-size $CTX_SIZE --kv-quant $KV_QUANT --prefill-chunk $PREFILL_CHUNK"
+if [ "$NO_VISION" = "1" ]; then
+  LOAD_SHAPE_ARGS="$LOAD_SHAPE_ARGS --no-vision"
+fi
 
 export MODEL_QUANT
 export ROOT MODEL_REPO MODEL_DIR MODEL_ID HOST PORT CTX_SIZE KV_QUANT NO_VISION \

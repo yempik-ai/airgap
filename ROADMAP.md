@@ -90,10 +90,13 @@ able to prove things it currently only asserts. Ordered as in `AUDIT.md`.
       line is produced on every request into a log nothing opens.
       **Shipped 2026-08-17** — `doctor.sh` reads the current run's log and
       `/metrics.json`; `docs/05` §7d names the log path.
-- [ ] `B1` — `bench.sh` keeps the prefill rate and peak memory it currently
+- [x] `B1` — `bench.sh` keeps the prefill rate and peak memory it currently
       parses away. Peak memory is the only empirical check that exists on the
       memory arithmetic; prefill is the number behind "the first response is
       slow", which the README still marks never measured.
+      **Shipped 2026-08-17** — with `PROMPT_FILE=` and the load flags shared
+      with `serve.sh`. First numbers, 9B only: prefill 374 tok/s at 16,377
+      tokens, and a 2.6 GB working set the arithmetic does not model (`A3`).
 - [ ] `D3` — doctor probes a *streamed* tool call. Today every check can pass
       on a build that cannot emit one, which is the capability Claude Code is
       entirely built on.
