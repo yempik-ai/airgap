@@ -141,11 +141,15 @@ memory for the cache, in GiB = context size in tokens / 65,536
 ```
 
 65,536 tokens therefore costs exactly 1.00 GiB. This formula is **exact for this
-architecture**. The 9B in the catalog has the same layer pattern with half as
-many layers, so for it the formula over-estimates by two, which is the safe
-direction for a memory guard and why the scripts use the one formula for both.
-For an ordinary dense model, where every layer holds a growing cache, it is
-wrong by a factor of several. Do not carry it across to one.
+architecture at `turbo4`**. The 9B in the catalog has the same layer pattern with
+half as many layers, so it costs half; an ordinary dense model, where every layer
+holds a growing cache, costs several times more; and Section 3's `KV_QUANT=8` and
+`KV_QUANT=off` cost two and four times this. The scripts do not carry the formula
+— they read the growing-layer count, the kv-heads and the head size from the
+selected checkpoint's own `config.json` and scale by `KV_QUANT`, so the memory
+guard's `MIN_FREE_GB` and the GPU-ceiling refusal follow the model you actually
+selected and the setting you actually chose. `./bin/verify-model.sh` prints the
+figure it read on its `kv` line.
 
 </details>
 
@@ -235,8 +239,10 @@ KV_QUANT=8 ./bin/serve.sh
 
 You should see the server's usual banner with `kv-quant 8` on the `context` line.
 
-At the default 65,536-token window this raises the cache from 1.0 GB to 2.0 GB.
-If your Mac cannot spare that, lower `CTX_SIZE` in the same command:
+At the default 65,536-token window this raises the cache from 1.0 GB to 2.0 GB,
+and `MIN_FREE_GB` — the free memory `serve.sh` insists on — rises with it, so a
+Mac that cannot spare the extra is refused rather than stalled. If yours is,
+lower `CTX_SIZE` in the same command:
 
 ```
 CTX_SIZE=32768 KV_QUANT=8 ./bin/serve.sh

@@ -102,11 +102,11 @@ cmd_list() {
   ram="${HW_RAM_GB:-0}"
   echo "Qwen3.8 for Apple Silicon, in MLX format. Abliterated unless marked [stock]."
   echo "Your Mac has ${ram} GB of memory. \"needs\" is the free memory ./bin/serve.sh will"
-  echo "insist on for that build at a ${CTX_SIZE}-token window, worked out for this Mac:"
+  echo "insist on for that build at a ${CTX_SIZE}-token window, kv-quant ${KV_QUANT}, worked out for this Mac:"
   echo "     ok = comfortable      TIGHT = close everything first      NO = will not fit under the GPU ceiling"
   echo
 
-  printf '%s\n' "$CATALOG" | while IFS='|' read -r k repo gb loaded abl note; do
+  printf '%s\n' "$CATALOG" | while IFS='|' read -r k repo gb loaded kv abl note; do
     [ -z "$k" ] && continue
 
     mark="   "
@@ -116,9 +116,11 @@ cmd_list() {
     esac
     [ "$(basename "$MODEL_DIR")" = "$(basename "$repo")" ] && mark=" ->"
 
-    # The same arithmetic serve.sh enforces, for this build on this Mac.
+    # The same arithmetic serve.sh enforces, for this build on this Mac. The
+    # KV figure is the catalog's: this list must work before anything is on
+    # disk, and the catalog copy is verified against each config.json.
     [ -n "$loaded" ] || loaded="$gb"
-    hw_fit_mark "$loaded" "$CTX_SIZE"
+    hw_fit_mark "$loaded" "$CTX_SIZE" "$kv"
     fit="$HW_FIT_MARK"; need="$HW_MIN_FREE_GB"
 
     tag=""; [ "$abl" = "no" ] && tag="  [stock]"

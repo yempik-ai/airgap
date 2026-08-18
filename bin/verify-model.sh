@@ -67,7 +67,11 @@ fi
 
 # Everything below is one Python program. It uses only the standard library:
 # no pip, no virtual environment, no downloads.
-MODEL_DIR="$MODEL_DIR" "$PYTHON_BIN" - <<'PYEOF'
+# The KV figures come in from env.sh rather than being worked out again here:
+# model_kv_kib is the one reader of that fact, and HW_KV_GB is what the guards
+# will enforce for the configured window.
+MODEL_DIR="$MODEL_DIR" KV_KIB="${HW_KV_KIB:-}" KV_QUANT="$KV_QUANT" KV_GB="${HW_KV_GB:-}" \
+  CTX_SIZE="$CTX_SIZE" KV_BITS="$(hw_kv_bits "$KV_QUANT")" "$PYTHON_BIN" - <<'PYEOF'
 import json, os, struct, sys, glob
 
 d = os.environ["MODEL_DIR"]
@@ -102,6 +106,10 @@ print("layers   %d = %d linear_attention (Gated DeltaNet) + %d full_attention" %
       (n_layers, n_lin, n_full))
 print("         (full_attention_interval %s) -- only the %d hold a growing KV cache" %
       (interval, n_full))
+if os.environ.get("KV_KIB"):
+    print("kv       %s KiB per token at 16 bits; %g KiB at kv-quant %s -- a %s-token window costs %s GB"
+          % (os.environ["KV_KIB"], float(os.environ["KV_KIB"]) * int(os.environ["KV_BITS"]) / 16,
+             os.environ["KV_QUANT"], os.environ["CTX_SIZE"], os.environ["KV_GB"]))
 
 # --- quantization ------------------------------------------------------------
 q = cfg.get("quantization") or cfg.get("quantization_config") or {}

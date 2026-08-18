@@ -183,25 +183,55 @@ hw_top_memory_users() {
 # 5-bit figure is MEASURED here, the other two are PUBLISHER-REPORTED. The
 # catalog file says which is which.
 #
-# KV cache: only the 16 full-attention layers grow (48 of the 64 layers are
-# Gated DeltaNet and hold a constant-size recurrent state). Verified from
-# config.json: 16 full_attention layers x 2 (K,V) x 4 kv-heads x 256 head_dim
-# x 2 bytes = 65536 B = exactly 64 KiB per token at fp16. With the turbo4
-# 4-bit KV cache that is 16 KiB per token, so:
-#     kv_gb = ctx_tokens / 65536      (65536 tokens -> exactly 1.0 GiB)
-# This formula is EXACT for the 27B and an OVER-estimate for the 9B in the
-# catalog (8 full-attention layers, so half the cost per token). Over-estimating
-# is the safe direction for a memory guard, so the one formula is used for both.
-# It is WRONG for a dense model, where every layer grows a cache.
+# KV cache: what one token of conversation costs is a property of the model,
+# not of this file. Only layers that keep a growing key/value record count;
+# in the Qwen3.8 hybrid that is one layer in four (the other three are Gated
+# DeltaNet and hold a constant-size state), and in an ordinary dense model it
+# is every layer. Per token, at 16 bits per number:
+#     growing layers x 2 (K,V) x kv-heads x head_dim x 2 bytes
+# which is 64 KiB for the 27B (16 x 2 x 4 x 256 x 2 = 65536 B) and 32 KiB for
+# the 9B (8 such layers). That figure arrives here as an argument: bin/env.sh
+# reads it from the selected checkpoint's own config.json (model_kv_kib), and
+# bin/catalog.sh carries a verified copy for builds not on disk yet. Until
+# 2026-08-18 this file used the 27B's 64 KiB for everything (AUDIT.md F5),
+# which over-charged the 9B twice over and would have under-charged a dense
+# model by a factor of several while still reading as authoritative.
+#
+# KV_QUANT then divides it: turbo4 packs each number into 4 bits, so the 27B
+# costs 16 KiB per token and a 65536-token window exactly 1.0 GiB — the
+# reference configuration. `off` keeps all 16 bits, so the same window costs
+# 4.0 GiB, and the guard has to know that when a user follows docs/07's
+# advice to raise KV_QUANT. NOT counted: the per-group scale and bias a
+# quantized cache carries. mlx-serve does not publish its group size, so that
+# overhead cannot be worked out here; the guard's rounding-up absorbs it, and
+# bench.sh's `gap` line is where a real load's excess over this arithmetic
+# shows.
 
-# hw_rebudget <weights_gb> <ctx_tokens>
+# hw_kv_bits <kv_quant>  — bits per number the KV cache is stored at, for a
+# --kv-quant mode name as mlx-serve --help lists them: off, 4, 8, turbo2,
+# turbo4. A name this does not know reads as 16, the largest — the guard then
+# asks for more than the load will take rather than less, and mlx-serve
+# refuses the unknown name itself a moment later.
+hw_kv_bits() {
+  case "$1" in
+    4|turbo4) echo 4 ;;
+    8)        echo 8 ;;
+    turbo2)   echo 2 ;;
+    *)        echo 16 ;;
+  esac
+}
+
+# hw_rebudget <weights_gb> <ctx_tokens> <kv_kib_per_token>
 #
-# Works out the three memory settings from a weight size and a context size.
-# Sets HW_KV_GB, HW_MIN_FREE_GB, HW_MAX_RESIDENT_MEM, HW_PREFIX_CACHE_MEM.
-# Needs HW_RAM_GB. Called by hw_recommend, and again by bin/env.sh once the
-# build actually on disk and the final CTX_SIZE are both known.
+# Works out the three memory settings from a weight size, a context size and
+# the model's per-token KV cost at 16 bits (see above). Sets HW_KV_GB,
+# HW_MIN_FREE_GB, HW_MAX_RESIDENT_MEM, HW_PREFIX_CACHE_MEM. Needs HW_RAM_GB
+# and HW_KV_QUANT (the --kv-quant mode, set by hw_recommend — one value per
+# process, unlike the per-model figure, which is why it is not an argument).
+# Called by hw_recommend, and again by bin/env.sh once the build actually on
+# disk and the final CTX_SIZE are both known.
 #
-#   kv               = ctx / 65536                    (turbo4: 16 KiB/token)
+#   kv               = ctx x kv_kib x bits/16 / 1048576   (GiB)
 #   reserve          = ceil(weights + kv) + 1         weights, conversation, 1 GB spare
 #   PREFIX_CACHE_MEM = 256 MB per GB left after that reserve and an 8 GB macOS
 #                      reserve, clamped to [512, 8192] MB
@@ -218,8 +248,18 @@ hw_top_memory_users() {
 # MIN_FREE_GB=22, MAX_RESIDENT_MEM=21GB, PREFIX_CACHE_MEM=1536MB — the
 # committed reference configuration. Change a number here and re-check that.
 hw_rebudget() {
-  eval "$(awk -v ram="${HW_RAM_GB:-0}" -v w="$1" -v ctx="$2" 'BEGIN {
-    kv      = ctx / 65536
+  # An empty or zero per-token figure would silently drop the conversation
+  # term to nothing — the under-charge this arithmetic exists to prevent — so
+  # it is a loud failure, not a quiet default. bin/env.sh's cascade always has
+  # a figure (config.json, catalog, or the recommended build's); reaching
+  # this means a caller was changed without it.
+  if ! awk -v k="${3:-}" 'BEGIN { exit !(k > 0) }'; then
+    echo "hw_rebudget: no per-token KV figure was given (third argument: '${3:-}')" >&2
+    return 1
+  fi
+  eval "$(awk -v ram="${HW_RAM_GB:-0}" -v w="$1" -v ctx="$2" -v kib="$3" \
+             -v bits="$(hw_kv_bits "${HW_KV_QUANT:-}")" 'BEGIN {
+    kv      = ctx * kib * bits / 16 / 1048576
     reserve = int(w + kv) + ((w + kv) > int(w + kv) ? 1 : 0) + 1
     pfx     = (ram - reserve - 8) * 256
     if (pfx < 512)  pfx = 512
@@ -241,6 +281,13 @@ hw_recommend() {
   HW_WIRED_AUTO_GB="$(hw_wired_auto_gb)"
   HW_WIRED_MANUAL="$(hw_wired_is_manual)"
   HW_GPU_CORES="$(hw_gpu_cores)"
+  # The KV-cache format the budget is worked out for. bin/env.sh has already
+  # put a KV_QUANT from the command line or config.env in place when it
+  # sources this file, and takes this value back as the setting's default, so
+  # `turbo4` — the reference configuration — is stated once, here.
+  HW_KV_QUANT="${KV_QUANT:-turbo4}"
+  HW_KV_KIB=0
+  HW_KV_SOURCE=""
   HW_KV_GB=0
   HW_WIRED_OK="yes"
   HW_CTX_SIZE=0
@@ -296,8 +343,13 @@ hw_recommend() {
   HW_RECOMMENDED_REPO="$(catalog_field "$HW_RECOMMENDED_KEY" 2)"
   HW_WEIGHTS_GB="$(catalog_field "$HW_RECOMMENDED_KEY" 4)"
   [ -n "$HW_WEIGHTS_GB" ] || HW_WEIGHTS_GB="$(catalog_field "$HW_RECOMMENDED_KEY" 3)"
+  # The recommended build's per-token KV cost, from the catalog: nothing is on
+  # disk yet at this point. bin/env.sh replaces both with the selected model's
+  # own figures once it knows which model that is.
+  HW_KV_KIB="$(catalog_field "$HW_RECOMMENDED_KEY" 5)"
+  HW_KV_SOURCE="catalog"
 
-  hw_rebudget "$HW_WEIGHTS_GB" "$HW_CTX_SIZE"
+  hw_rebudget "$HW_WEIGHTS_GB" "$HW_CTX_SIZE" "$HW_KV_KIB"
 
   # Sanity check against the wired ceiling, which is the one that can stall the
   # whole Mac rather than merely swap. Weights + KV must fit UNDER it.
@@ -328,7 +380,7 @@ hw_wired_fits() {
     'BEGIN { print (w + kv <= lim) ? "yes" : "no" }'
 }
 
-# hw_fit_mark <weights_gb> <ctx_tokens>
+# hw_fit_mark <weights_gb> <ctx_tokens> <kv_kib_per_token>
 # Sets HW_FIT_MARK to "NO", "TIGHT" or "ok" for one build on this Mac, using
 # the same arithmetic bin/serve.sh enforces: NO when weights + KV cache do not
 # fit under the GPU wired ceiling (serve.sh refuses), TIGHT when the free
@@ -336,7 +388,7 @@ hw_wired_fits() {
 # otherwise. Also leaves HW_MIN_FREE_GB etc. set for that build, so callers can
 # print them. A variable rather than output so it works outside a subshell.
 hw_fit_mark() {
-  hw_rebudget "$1" "$2"
+  hw_rebudget "$1" "$2" "$3"
   if [ "$(hw_wired_fits "$1" "$HW_KV_GB")" = "no" ]; then
     HW_FIT_MARK="NO"
   elif awk -v n="$HW_MIN_FREE_GB" -v r="$HW_RAM_GB" 'BEGIN { exit !(n > r * 0.65) }'; then
@@ -351,10 +403,10 @@ hw_fit_mark() {
 hw_catalog_fits() {
   _save="HW_KV_GB=$HW_KV_GB HW_MIN_FREE_GB=$HW_MIN_FREE_GB HW_MAX_RESIDENT_MEM=$HW_MAX_RESIDENT_MEM HW_PREFIX_CACHE_MEM=$HW_PREFIX_CACHE_MEM"
   _out=""
-  while IFS='|' read -r _k _repo _dl _ld _abl _note; do
+  while IFS='|' read -r _k _repo _dl _ld _kv _abl _note; do
     [ -n "$_k" ] || continue
     [ -n "$_ld" ] || _ld="$_dl"
-    hw_fit_mark "$_ld" "$1"
+    hw_fit_mark "$_ld" "$1" "$_kv"
     if [ "$HW_FIT_MARK" = "ok" ]; then
       _out="${_out:+$_out, }${_k} (${_dl} GB)"
     fi
@@ -363,7 +415,7 @@ $CATALOG
 EOF
   eval "$_save"
   printf '%s\n' "$_out"
-  unset _save _out _k _repo _dl _ld _abl _note
+  unset _save _out _k _repo _dl _ld _kv _abl _note
 }
 
 # ---------------------------------------------------------------------------
@@ -447,7 +499,7 @@ hw_report() {
   echo
   echo "recommended settings for this Mac:"
   echo "  build             ${HW_RECOMMENDED_KEY}  (${HW_RECOMMENDED_REPO}, ~${HW_WEIGHTS_GB} GB of weights, text-only)"
-  echo "  CTX_SIZE          ${HW_CTX_SIZE}   (KV cache ${HW_KV_GB} GB at turbo4)"
+  echo "  CTX_SIZE          ${HW_CTX_SIZE}   (KV cache ${HW_KV_GB} GB at kv-quant ${HW_KV_QUANT}: ${HW_KV_KIB} KiB/token at 16-bit, ${HW_KV_SOURCE})"
   echo "  MIN_FREE_GB       ${HW_MIN_FREE_GB}"
   echo "  MAX_RESIDENT_MEM  ${HW_MAX_RESIDENT_MEM}"
   echo "  PREFIX_CACHE_MEM  ${HW_PREFIX_CACHE_MEM}"

@@ -177,6 +177,7 @@ fi
 if [ "${HW_WIRED_OK:-yes}" = "no" ]; then
   echo "REFUSING TO START — the weights do not fit under this Mac's GPU memory ceiling." >&2
   echo "  weights + conversation : ${HW_WEIGHTS_GB} + ${HW_KV_GB} GB" >&2
+  echo "  conversation           : ${CTX_SIZE} tokens at kv-quant ${KV_QUANT} (${HW_KV_KIB} KiB/token at 16-bit, ${HW_KV_SOURCE})" >&2
   echo "  GPU wired ceiling      : ${HW_WIRED_AUTO_GB} GB (arithmetic — the rule Apple applies to ${HW_RAM_GB} GB of memory)" >&2
   echo >&2
   echo "Memory reserved for the GPU cannot be swapped out, so loading this would" >&2
@@ -187,7 +188,8 @@ if [ "${HW_WIRED_OK:-yes}" = "no" ]; then
   echo "tempting on the Macs with the least room for it." >&2
   echo >&2
   echo "  instead: a smaller build. ./bin/models.sh list marks the ones that fit," >&2
-  echo "           and ./bin/models.sh use <key> selects one." >&2
+  echo "           and ./bin/models.sh use <key> selects one. A smaller CTX_SIZE, or" >&2
+  echo "           KV_QUANT=turbo4 if you raised it, shrinks the conversation term." >&2
   if [ -n "${HW_ALT_MODEL:-}" ]; then
     echo "           ${HW_ALT_MODEL}" >&2
   fi
@@ -337,12 +339,14 @@ if [ "${MIN_FREE_GB}" != "0" ]; then
   if awk -v a="$avail" -v m="$MIN_FREE_GB" 'BEGIN { exit !(a < m) }'; then
     echo "REFUSING TO START — not enough free memory." >&2
     echo "  available : ${avail} GB" >&2
-    echo "  required  : ${MIN_FREE_GB} GB (weights ~${HW_WEIGHTS_GB} GB + conversation + prefix cache)" >&2
+    echo "  required  : ${MIN_FREE_GB} GB (weights ~${HW_WEIGHTS_GB} GB + conversation ${HW_KV_GB} GB + prefix cache ${PREFIX_CACHE_MEM})" >&2
+    echo "              conversation = ${CTX_SIZE} tokens at kv-quant ${KV_QUANT} (${HW_KV_KIB} KiB/token at 16-bit, ${HW_KV_SOURCE})" >&2
     echo >&2
     echo "Free some memory, then retry. Biggest wins, in order:" >&2
     hw_top_memory_users "    " 6 >&2
     echo >&2
     echo "Docker Desktop is a common one — 'docker desktop stop' frees its whole VM." >&2
+    echo "A smaller CTX_SIZE, or KV_QUANT=turbo4 if you raised it, lowers the requirement." >&2
     echo "Override with MIN_FREE_GB=0 if you know what you are doing." >&2
     exit 1
   fi

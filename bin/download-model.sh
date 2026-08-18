@@ -164,10 +164,14 @@ printf '[2/5] %-22s ok — huggingface.co/%s%s\n' "resolving repo" "$MODEL_REPO"
 if [ -n "$repo_gb" ]; then
   fit_gb="$(catalog_loaded_gb_for_dir "$(basename "$MODEL_DIR")")"
   [ -n "$fit_gb" ] || fit_gb="$repo_gb"
-  hw_rebudget "$fit_gb" "$CTX_SIZE"
+  # HW_KV_KIB is the figure env.sh settled on for this MODEL_DIR: the catalog's
+  # for a catalog build, and the recommended build's for one this repository
+  # has never seen — the only per-token number there is before config.json
+  # arrives in step 3.
+  hw_rebudget "$fit_gb" "$CTX_SIZE" "$HW_KV_KIB"
   if [ "$(hw_wired_fits "$fit_gb" "$HW_KV_GB")" = "no" ]; then
     die "${MODEL_REPO} cannot be loaded on this Mac, so it is not worth downloading." \
-        "weights + conversation : ${fit_gb} + ${HW_KV_GB} GB" \
+        "weights + conversation : ${fit_gb} + ${HW_KV_GB} GB (${CTX_SIZE} tokens at kv-quant ${KV_QUANT}, ${HW_KV_KIB} KiB/token at 16-bit — ${HW_KV_SOURCE})" \
         "GPU wired ceiling      : ${HW_WIRED_AUTO_GB} GB (arithmetic — the rule Apple applies to ${HW_RAM_GB} GB of memory)" \
         "./bin/serve.sh would refuse to start it, for the reason docs/04-memory-safety.md#wired-limit gives." \
         "Pick a build that fits: ./bin/models.sh list" \

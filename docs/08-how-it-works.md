@@ -699,6 +699,11 @@ what makes the price affordable.
 
 Every figure in that table is arithmetic from the formula above, which is exact
 for this architecture. It is not a benchmark and does not depend on your Mac.
+The scripts do not carry the formula: they read the growing-layer count and the
+head sizes from the selected checkpoint's own `config.json` and scale by
+`KV_QUANT`, so the same arithmetic comes out right for the 9B in the catalog
+(half the layers, half the cost) and for a conventional model (every layer, four
+times the cost) without anyone editing a constant.
 
 Look at the bottom-right cell. A conventional model at full context would need 64
 GiB of notes on top of 19 GiB of weights. That is why 262144 is printed in this

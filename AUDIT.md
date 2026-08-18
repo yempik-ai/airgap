@@ -53,16 +53,16 @@ marks *never measured*.
 | ✅ | `A6` a minimum `mlx-serve` version, refused in `serve.sh` — **DONE** | small | high |
 | ✅ | `A2` a disk refusal for the prefix cache, from one function — **DONE** | small | high |
 | ✅ | `C3` say the log rotates; show its tail when a server is gone — **DONE** | small | medium |
+| ✅ | `F5` the KV figure per model (from `config.json`) and per `KV_QUANT` — **DONE** | small | high |
 
 No numbered item is left that neither a loaded model nor a second machine is
-needed for — with one exception, recorded here so it is not lost: `F5` is
-arithmetic over each checkpoint's own `config.json` and needs nothing loaded
-at all. It is filed under §F as Phase 2 sequencing, which is why it reads as
-deferred rather than as the small offline fix it also is. `E4` carried the largest measured speed-up in this audit and shipped
+needed for. `F5` was the last: arithmetic over each checkpoint's own
+`config.json`, filed under §F as Phase 2 sequencing, and done 2026-08-18 as
+the small offline fix it also was. `E4` carried the largest measured speed-up in this audit and shipped
 opt-in, as required: a behavioural change with an unmeasured quality cost is
-not a default. Everything in §F is roadmap sequencing, not code — absorbed
-into `ROADMAP.md` Phases 2–3 (revised 2026-08-17), nothing left to do until
-Phase 2 starts. Still open, and why: `B2` (a context sweep) and `B6` (a
+not a default. Everything else in §F is roadmap sequencing, not code —
+absorbed into `ROADMAP.md` Phases 2–3 (revised 2026-08-17), nothing left to do
+until Phase 2 starts. Still open, and why: `B2` (a context sweep) and `B6` (a
 quality suite — also the only way `E4`'s quality cost becomes a number) need
 the model loaded at length; `C4`, `E2`, `E3` need a measurement to say
 anything honest. Of the measurements, only `A3`'s missing number needs the
@@ -1175,7 +1175,41 @@ implementation. The adapter needs a readiness **hook** — a command the adapter
 supplies — rather than a fixed path, and `doctor.sh` needs one row per adapter
 rather than one hardcoded curl. Cheap now, expensive after two adapters exist.
 
-### F5 — the KV formula is one Qwen3.8 constant with no per-model value
+### F5 — the KV formula is one Qwen3.8 constant with no per-model value — **DONE**
+
+> **Shipped 2026-08-18.** The per-token figure is now read, not assumed:
+> `model_kv_kib` in `bin/env.sh` (beside `model_max_ctx`, the other reader of
+> `config.json`) computes growing layers × 2 × kv-heads × head_dim × 2 bytes
+> from the selected checkpoint's own file — every layer counts unless its
+> `layer_types` entry is `linear_attention`, the one constant-state kind
+> verified here, and no `layer_types` at all means dense — and `bin/catalog.sh`
+> gained a `kv KiB/token` column for builds not on disk, VERIFIED the same day
+> against all nine repositories' `config.json` on huggingface.co (64 for every
+> 27B, 32 for the 9B). `hw_rebudget` takes that figure as a third argument and
+> scales it by `KV_QUANT`'s bit-width (`hw_kv_bits`: `off` 16, `8`, `4` and
+> `turbo4` 4, `turbo2` 2, anything unknown 16), which the audit did not name
+> and turned out to matter as much: `docs/06` and `docs/07` send people to
+> `KV_QUANT=8` and `off` promising a refusal if the Mac cannot spare it, and
+> the guard could not see either. `HW_KV_KIB` and `HW_KV_SOURCE`
+> (`config.json` / `catalog` / `assumed from <build>`) are set once in `env.sh`
+> step 6 and quoted by `serve.sh`'s two refusals, `download-model.sh`'s,
+> doctor's `gpu ceiling` row, `detect-hardware.sh`'s report and a new `kv`
+> line in `verify-model.sh`; `models.sh list` reads the catalog column per
+> entry. `KV_QUANT`'s default `turbo4` is now stated once, in `hw_recommend`,
+> and `env.sh` takes it back, so the budget and the setting cannot drift.
+>
+> Verified on the reference machine: the reference budget is unchanged
+> (27B, 65536, turbo4 → 1.00 GB, `MIN_FREE_GB=22`, `21GB`, `1536MB`); the 9B
+> reads 32 KiB from disk and its term halves to 0.50 GB; `KV_QUANT=off` on the
+> 27B is 4.00 GB and `MIN_FREE_GB=24`; `KV_QUANT=off CTX_SIZE=131072` is
+> 8.00 GB and is refused at the ceiling (19.1 + 8.00 > 27.0) where it used to
+> pass with a phantom 2 GB. `tests/kv-figure.sh` holds all of it, plus the
+> reader on a dense shape (256 KiB — the docs' "four times as much"), a
+> derived `head_dim`, an unfamiliar layer kind (counted as growing) and broken
+> JSON (nothing). Not counted, and labelled in `detect-hardware.sh`: the
+> per-group scale and bias a quantized cache carries — mlx-serve does not
+> publish its group size, and `bench.sh`'s `gap` line is where a real load's
+> excess over the arithmetic shows.
 
 `bin/detect-hardware.sh:176-185` derives `kv_gb = ctx/65536` from 16
 full-attention layers, and its own comments state it over-estimates the 9B and

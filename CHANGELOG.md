@@ -240,6 +240,28 @@ First public release.
   down cleanly, `stop.sh` prints its last 8 lines. `doctor.sh` prints them
   under a failed `/v1/messages` and under `server not running`. Closes
   `AUDIT.md` C3.
+- **The KV-cache figure is per model and per `KV_QUANT`.** Every guard —
+  `MIN_FREE_GB`, the GPU-ceiling refusal, `models.sh list`'s `ok`/`TIGHT`/`NO`,
+  `download-model.sh`'s "not worth downloading" — charged every model the 27B's
+  64 KiB per token at 4 bits, whatever the checkpoint and whatever `KV_QUANT`
+  said: the 9B was over-charged twice over, a dense model would have been
+  under-charged by a factor of several while reading as authoritative, and
+  `KV_QUANT=off` (which `docs/06` and `docs/07` tell people to try, promising a
+  refusal if the Mac cannot spare it) was invisible to the guard, so a 131072-
+  token window at 16 bits passed the ceiling check with a phantom 2 GB where
+  the true term is 8. Now `model_kv_kib` (`bin/env.sh`) reads growing layers ×
+  2 × kv-heads × head_dim × 2 bytes from the selected checkpoint's own
+  `config.json` (every layer counts unless it is `linear_attention`; no
+  `layer_types` means dense), `bin/catalog.sh` carries a `kv KiB/token` column
+  VERIFIED against all nine repositories' `config.json` on huggingface.co (64
+  for every 27B, 32 for the 9B) for builds not on disk, and `hw_rebudget`
+  scales by `KV_QUANT`'s bit-width (`off` 16, `8`, `4`/`turbo4`, `turbo2`; an
+  unknown name reads as 16). Refusals, doctor's `gpu ceiling` row and
+  `verify-model.sh`'s new `kv` line quote the figure and where it came from
+  (`config.json`, `catalog`, or `assumed from <build>`). Not counted, and said
+  so: the per-group scale a quantized cache carries — mlx-serve does not
+  publish its group size. The reference configuration is unchanged
+  (22 / 21GB / 1536MB on 36 GB). `tests/kv-figure.sh`. Closes `AUDIT.md` F5.
 - `bin/verify-model.sh`, `bin/stop.sh`.
 - Nine documents, `docs/01` to `docs/09`, written for readers who have never
   opened a terminal, plus a glossary of every technical term used.

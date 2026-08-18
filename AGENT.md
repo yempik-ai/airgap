@@ -27,13 +27,17 @@ two ever disagree, `AUDIT.md` is right.*
   names a foreign port holder), `A6` (`MLX_SERVE_MIN=26.8.8`, refused),
   `A2` (`hw_disk_need_gb` — `MIN_DISK_GB` is computed and `serve.sh` refuses
   a disk that cannot hold the prefix cache), `C3` (the log rotates at 32 MB,
-  and its tail is shown when a server is gone).** Details and numbers:
+  and its tail is shown when a server is gone)** · `F5` (the KV figure is
+  per model — `model_kv_kib` reads it from `config.json`, the catalog's new
+  `kv KiB/token` column stands in before download — and per `KV_QUANT`;
+  the 9B's term halved, `KV_QUANT=off` is finally seen by the guards, the
+  reference budget is unchanged). Details and numbers:
   `CHANGELOG.md`; status per item: `AUDIT.md`.
   Two things a later session must not undo: the `docs/07` renumbering (a new
   §7; 7–13 → 8–14, cross-refs updated everywhere but `AUDIT.md`'s
   audit-time citations) and the six-line `claude-local.sh` banner.
 - **Roadmap position:** Phase 0.5 (the audit backlog) is complete, and so is
-  every audit item that needs neither the 27B nor a measurement — 18 of 24.
+  every audit item that needs neither the 27B nor a measurement — 19 of 24.
   Phase 0 (credibility gaps, "before publishing") is 1 of 5 — the four left
   need hardware this machine cannot give while in use (the 27B loaded, a
   fresh user account, a 16 GB Mac, the `A5` stall experiment on the 27B);
@@ -46,12 +50,10 @@ two ever disagree, `AUDIT.md` is right.*
   — both need the model loaded at length, and the 9B is enough to start
   (it loads here with ~14 GB free; proven 2026-08-18). Only `A3`'s missing
   number, and `ROADMAP.md` Phase 0's first item, actually need the 27B.
-  **Still offline, and the slice to take when the machine is busy:** `F5`
-  (a per-model KV figure — every input is in each checkpoint's own
-  `config.json`: `layer_types`, `num_key_value_heads`, `head_dim`, and the
-  KV bit-width; the current `ctx/65536` is one Qwen3.8 constant that the
-  file's own comment calls wrong for a dense model), the exposure-and-label
-  half of `E3`, and the tokens-per-MB half of `E2`.
+  **Still offline, and the slice to take when the machine is busy:** the
+  exposure-and-label half of `E3`, and the tokens-per-MB half of `E2` (the
+  per-token KV figure it needs, `HW_KV_KIB`, now exists — `F5` landed
+  2026-08-18).
 - **Blocked on memory, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `serve.sh` needs 22 GB free for
   it and a working day leaves ~14 (2026-08-18: a 3.2 GB VM, a browser,
@@ -94,8 +96,13 @@ two ever disagree, `AUDIT.md` is right.*
   against — raise it in the commit that starts passing a newer flag), the
   `model_*` helpers that answer "is the model here, and is it whole?" for the
   five scripts that ask (`model_state` → `absent`/`partial`/`complete`), and
-  the readers `model_max_ctx`, `mlx_serve_version`, `version_lt`, `log_tail`
-  and `log_ended_cleanly`. A question two scripts ask belongs here, once.
+  the readers `model_max_ctx` and `model_kv_kib` (the two readers of
+  `config.json`: the model's maximum context, and what one token costs in KV
+  cache at 16 bits — `hw_rebudget` scales the latter by `KV_QUANT`, and
+  `HW_KV_KIB` / `HW_KV_SOURCE` say what figure the budget used and whether it
+  came from `config.json`, the catalog or an assumption), `mlx_serve_version`,
+  `version_lt`, `log_tail` and `log_ended_cleanly`. A question two scripts
+  ask belongs here, once.
 - `bin/detect-hardware.sh` — the memory model. Takes a weight size and a context
   window, returns the budget the guards enforce. The disk model is here too:
   `hw_disk_need_gb download|serve` is the one place the download peak and the
@@ -104,7 +111,9 @@ two ever disagree, `AUDIT.md` is right.*
 - `bin/serve.sh` — the only script that loads the model. Ends in `exec`, so
   nothing can run after the server is up.
 - `bin/doctor.sh` — checks, never changes. Every row carries a fix.
-- `bin/catalog.sh` — the one list of models.
+- `bin/catalog.sh` — the one list of models. Seven columns; the `kv KiB/token`
+  one is verified against each repository's `config.json`, and a new entry
+  needs its own figure computed, not a neighbour's copied.
 - `docs/01`–`09` — user-facing, in reading order. Contributor material does not
   go here.
 - `bench/` — one `.tsv` per Mac, one row per `bench.sh` run, header and
@@ -122,6 +131,10 @@ two ever disagree, `AUDIT.md` is right.*
   `model-state.sh` holds the `absent`/`partial`/`complete` contract and the
   rule that only `env.sh` and `verify-model.sh` may enumerate shards;
   `verify-truncation.sh` holds `verify-model.sh`'s byte and index checks;
+  `kv-figure.sh` holds the per-model, per-`KV_QUANT` KV arithmetic — the
+  bit-width map, the reference budget, `model_kv_kib` on hand-written
+  `config.json` shapes, the catalog column and `env.sh`'s
+  config.json → catalog → assumed cascade;
   `serve-guards.sh` fires four of `serve.sh`'s refusals with a stubbed
   `mlx-serve` on `PATH` (which is also what stops a wrongly-passing guard
   from loading 20 GB — `MIN_FREE_GB=999999` is the second backstop, so
@@ -253,7 +266,10 @@ mlx-serve [35576]: 64-bit    Footprint: 5322 MB
 **The prefill working set is chunk-bound and large; the rate is not.**
 MEASURED on the 9B, single samples, `bench.sh` with
 `PROMPT_FILE=docs/08-how-it-works.md` (16,377 tokens on 2026-08-17, 16,408
-on 2026-08-18): peak 7.52 GB, i.e. **+2.56 GB** over weights + KV-used at
+on 2026-08-18; the peaks are the measurement, the "+N GB" gaps were worked
+out with the pre-`F5` KV term, which charged the 9B the 27B's 16 KiB/token,
+so each gap here reads about 0.13 GB low against what `bench.sh` prints
+today): peak 7.52 GB, i.e. **+2.56 GB** over weights + KV-used at
 `PREFILL_CHUNK=4096` (7.535 / +2.58 when re-run a day later); **+1.11 GB** at
 1024; **+0.72 GB** at 512 (peak 5.63); **+4.57 GB** at the 8192 one-shot
 ceiling (peak 9.52). Prefill rate: 374 then 309 at 4096, 285 at 1024, 430 at

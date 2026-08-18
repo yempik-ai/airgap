@@ -166,12 +166,18 @@ KV cache in GB = context window in tokens / 65536
 
 65,536 tokens is therefore exactly 1.0 GB. 131,072 tokens is 2.0 GB.
 
-**This formula is exact for this model and wrong for most others.** A conventional
-model where all 64 layers keep a growing notebook would cost four times as much.
-The 9B in the catalog has the same pattern with half as many layers, so for it
-the formula over-estimates by two — the safe direction for a guard, which is why
-the scripts use the one formula for both. Do not reuse it for a conventional
-model, where every layer keeps a growing notebook.
+**This formula is exact for this model at `turbo4`, and for nothing else.** A
+conventional model where all 64 layers keep a growing notebook would cost four
+times as much; the 9B in the catalog has the same pattern with half as many
+layers, so it costs half (8 KiB per token, 0.5 GB at 65,536); and `KV_QUANT=8`
+or `KV_QUANT=off` doubles or quadruples the figure. The scripts do not carry the
+formula above — they read the growing-layer count, the kv-heads and the head size
+from the selected checkpoint's own `config.json` (`bin/catalog.sh` holds a verified
+copy for builds not downloaded yet) and scale by `KV_QUANT`, so `MIN_FREE_GB`, the
+GPU-ceiling refusal and `./bin/models.sh list` are right for the 9B, for a dense
+model, and for a raised `KV_QUANT` alike. `./bin/verify-model.sh` prints the
+per-token figure it read on its `kv` line, and every refusal that quotes the
+conversation term says where the figure came from.
 </details>
 
 **3. Everything else — about 2 to 3 GB.** Working space while the model reads your
@@ -724,13 +730,15 @@ programs currently running, so you know what to close.
 ```
 REFUSING TO START — not enough free memory.
   available : 10.5 GB
-  required  : 22 GB (weights ~19.1 GB + conversation + prefix cache)
+  required  : 22 GB (weights ~19.1 GB + conversation 1.00 GB + prefix cache 1536MB)
+              conversation = 65536 tokens at kv-quant turbo4 (64 KiB/token at 16-bit, config.json)
 
 Free some memory, then retry. Biggest wins, in order:
     2.7 GB  com.apple.Virtualization.VirtualMachine
     1.0 GB  Arc Helper
 
 Docker Desktop is a common one — 'docker desktop stop' frees its whole VM.
+A smaller CTX_SIZE, or KV_QUANT=turbo4 if you raised it, lowers the requirement.
 Override with MIN_FREE_GB=0 if you know what you are doing.
 ```
 

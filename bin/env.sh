@@ -155,6 +155,72 @@ model_state() {
   echo complete
 }
 
+# --- What the model says about itself: two readers of config.json -----------
+# Both print a number or nothing — nothing when there is no model, no python3,
+# or no such key — and every caller treats nothing as "cannot tell". One
+# reader per fact, so no two scripts can disagree about what the model says.
+# PYTHON_BIN is defaulted here rather than under Tools below because step 6
+# calls model_kv_kib before the defaults section is reached.
+: "${PYTHON_BIN:=python3}"
+
+# The largest context this model was built for. serve.sh refuses a CTX_SIZE
+# above it; doctor reports it.
+model_max_ctx() {
+  [ -f "$1/config.json" ] || return 0
+  command -v "$PYTHON_BIN" >/dev/null 2>&1 || return 0
+  "$PYTHON_BIN" -c '
+import json, sys
+try:
+    c = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+t = c.get("text_config", c)
+v = t.get("max_position_embeddings") or c.get("max_position_embeddings")
+if isinstance(v, int) and v > 0:
+    print(v)
+' "$1/config.json" 2>/dev/null || true
+}
+
+# What one token of conversation costs this model in KV cache at 16 bits per
+# number, in KiB (AUDIT.md F5): growing layers x 2 (K,V) x kv-heads x head_dim
+# x 2 bytes / 1024. Every layer counts as growing unless its `layer_types`
+# entry says linear_attention — the one constant-state kind verified here
+# (Qwen3.8's Gated DeltaNet). A checkpoint with no `layer_types` at all is an
+# ordinary dense model and every layer counts; a kind this has not met also
+# counts, which is the direction that over-charges rather than under-charges.
+# `num_key_value_heads` falls back to `num_attention_heads` (no grouped-query
+# attention) and `head_dim` to hidden_size / heads, both as the transformers
+# loaders do. hw_rebudget (bin/detect-hardware.sh) turns this into GB for a
+# context size and a KV_QUANT; bin/catalog.sh carries a verified copy for
+# builds not on disk yet.
+model_kv_kib() {
+  [ -f "$1/config.json" ] || return 0
+  command -v "$PYTHON_BIN" >/dev/null 2>&1 || return 0
+  "$PYTHON_BIN" -c '
+import json, sys
+try:
+    c = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+t = c.get("text_config", c)
+types = t.get("layer_types")
+n = t.get("num_hidden_layers")
+if isinstance(types, list) and types:
+    grow = sum(1 for x in types if x != "linear_attention")
+elif isinstance(n, int) and n > 0:
+    grow = n
+else:
+    sys.exit(0)
+heads = t.get("num_attention_heads")
+kvh = t.get("num_key_value_heads") or heads
+hd = t.get("head_dim")
+if not hd and isinstance(heads, int) and heads > 0 and isinstance(t.get("hidden_size"), int):
+    hd = t["hidden_size"] // heads
+if isinstance(kvh, int) and kvh > 0 and isinstance(hd, int) and hd > 0:
+    print("%g" % (grow * 2 * kvh * hd * 2 / 1024))
+' "$1/config.json" 2>/dev/null || true
+}
+
 # =============================================================================
 # Defaults. Each `: "${X:=y}"` means "if X has no value yet, make it y".
 # Anything already set by the steps above is left alone.
@@ -268,7 +334,17 @@ if [ "${HW_APPLE_SILICON:-no}" = "yes" ]; then
   fi
   [ -n "$_w" ] || _w="$HW_WEIGHTS_GB"
 
-  hw_rebudget "$_w" "$CTX_SIZE"
+  # The per-token KV cost of the model actually selected: its own config.json
+  # when it is on disk (a metadata clone already has that file, so a download
+  # in progress is judged by its true figure), the catalog's verified copy
+  # when it is not, and the recommended build's figure for a model this
+  # repository has never heard of and does not have yet. HW_KV_SOURCE says
+  # which, so every message that quotes the number can say where it came from.
+  _kv="$(model_kv_kib "$MODEL_DIR")"; _kvs="config.json"
+  if [ -z "$_kv" ]; then _kv="$(catalog_kv_kib_for_dir "$(basename "$MODEL_DIR")")"; _kvs="catalog"; fi
+  if [ -z "$_kv" ]; then _kv="$HW_KV_KIB"; _kvs="assumed from ${HW_RECOMMENDED_KEY}"; fi
+
+  hw_rebudget "$_w" "$CTX_SIZE" "$_kv"
   [ -n "${_YOURS_MIN_FREE_GB:-}" ]      || MIN_FREE_GB="$HW_MIN_FREE_GB"
   [ -n "${_YOURS_MAX_RESIDENT_MEM:-}" ] || MAX_RESIDENT_MEM="$HW_MAX_RESIDENT_MEM"
   [ -n "${_YOURS_PREFIX_CACHE_MEM:-}" ] || PREFIX_CACHE_MEM="$HW_PREFIX_CACHE_MEM"
@@ -277,19 +353,26 @@ if [ "${HW_APPLE_SILICON:-no}" = "yes" ]; then
   # every message that quotes it quotes the truth. The GPU wired-ceiling check
   # is redone for the same reason: it must judge the weights you really have.
   HW_WEIGHTS_GB="$_w"
-  # Read by hw_report (detect-hardware.sh) and doctor.sh after this file is
-  # sourced; shellcheck cannot see across files.
+  HW_KV_KIB="$_kv"
+  # Read by hw_report (detect-hardware.sh), serve.sh and doctor.sh after this
+  # file is sourced; shellcheck cannot see across files.
+  # shellcheck disable=SC2034
+  HW_KV_SOURCE="$_kvs"
   # shellcheck disable=SC2034
   HW_WIRED_OK="$(hw_wired_fits "$_w" "$HW_KV_GB")"
-  unset _w
+  unset _w _kv _kvs
 fi
 unset _YOURS_MIN_FREE_GB _YOURS_MAX_RESIDENT_MEM _YOURS_PREFIX_CACHE_MEM
 
 # --- Efficiency --------------------------------------------------------------
 # How the running conversation is stored in memory. turbo4 packs it to four
 # bits per number after a rotation that spreads out the extreme values first,
-# so it costs the same as plain 4-bit storage and loses less accuracy.
-: "${KV_QUANT:=turbo4}"
+# so it costs the same as plain 4-bit storage and loses less accuracy. The
+# default is taken from hw_recommend, which is `turbo4` unless you set it, and
+# is where it is stated: the memory budget in step 6 was worked out for this
+# exact value, and the two must not be able to drift apart. `off` and `8` cost
+# four and two times the memory, and the budget follows (docs/07 §3).
+: "${KV_QUANT:=$HW_KV_QUANT}"
 
 # The image-reading part of the model costs memory, and Claude Code sends text.
 # Set NO_VISION=0 to load it anyway (only needed to feed the model pictures).
@@ -412,7 +495,7 @@ fi
 MLX_SERVE_MIN="26.8.8"
 
 : "${CLAUDE_BIN:=claude}"
-: "${PYTHON_BIN:=python3}"
+# PYTHON_BIN (default python3) is set above, with the config.json readers.
 # 1 makes setup.sh build the optional Python environment. Nothing in this repo
 # needs it; it exists for people who want to poke at the weights themselves.
 : "${WITH_VENV:=0}"
@@ -461,26 +544,6 @@ available_gb() { hw_available_gb; }
 # not, and a check against the wrong one would be worthless.
 free_disk_gb() {
   df -k "${1:-$ROOT}" 2>/dev/null | awk 'NR==2 { printf "%.1f", $4 / 1048576 }'
-}
-
-# The largest context this model was built for, from its own config.json.
-# Prints the number, or nothing when there is no model, no python3, or no such
-# key. serve.sh refuses a CTX_SIZE above it; doctor reports it. One reader, so
-# the two cannot disagree about what the model says.
-model_max_ctx() {
-  [ -f "$1/config.json" ] || return 0
-  command -v "$PYTHON_BIN" >/dev/null 2>&1 || return 0
-  "$PYTHON_BIN" -c '
-import json, sys
-try:
-    c = json.load(open(sys.argv[1]))
-except Exception:
-    sys.exit(0)
-t = c.get("text_config", c)
-v = t.get("max_position_embeddings") or c.get("max_position_embeddings")
-if isinstance(v, int) and v > 0:
-    print(v)
-' "$1/config.json" 2>/dev/null || true
 }
 
 # The mlx-serve version, e.g. 26.8.8. `mlx-serve --version` prints one line per

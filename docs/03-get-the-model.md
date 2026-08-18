@@ -406,6 +406,7 @@ config   model_type = qwen3_5   (correct, not a typo -- Qwen3.8-27B is built on
          model_type "llama". Runtimes dispatch on model_type.)
 layers   64 = 48 linear_attention (Gated DeltaNet) + 16 full_attention
          (full_attention_interval 4) -- only the 16 hold a growing KV cache
+kv       64 KiB per token at 16 bits; 16 KiB at kv-quant turbo4 -- a 65536-token window costs 1.00 GB
 quant    5-bit affine, group size 64
 shards   5/5 headers parsed, no git-lfs pointers
 tensors  2207 total | 504 quantized | 333 vision | 29 MTP
@@ -663,9 +664,11 @@ huggingface.co. For a worked example, that might be `mlx-community/Qwen3-14B-4bi
 The folder is named after the model you asked for, so nothing ends up in a folder
 claiming to be something else. Be aware that these documents describe the 27B
 checkpoint specifically; the KV-cache arithmetic in [07 — tuning](07-tuning.md)
-is exact for it, an over-estimate for the 9B in the catalog (which has the same
-layer pattern with half as many layers), and wrong for a conventional dense
-model, where every layer grows a cache.
+is that model's worked example. The scripts read the per-token cost from each
+checkpoint's own `config.json`, so the memory guard is sized for the model you
+download — half the 27B's cost for the 9B in the catalog, several times more for
+a conventional dense model, where every layer grows a cache — and
+`./bin/verify-model.sh` shows the figure it read on its `kv` line.
 
 ---
 

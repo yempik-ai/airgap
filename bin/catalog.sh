@@ -12,7 +12,7 @@
 #
 # One line per model:
 #
-#   key | huggingface repo | download GB | loaded GB | abliterated | note
+#   key | huggingface repo | download GB | loaded GB | kv KiB/token | abliterated | note
 #
 #   key          the short name you type: ./bin/models.sh pull 27b-4bit
 #   download GB  the real total of the .safetensors files, read from the
@@ -31,6 +31,20 @@
 #                Only the OrcaRouter builds carry the MTP speculative-decoding
 #                head; every other entry was checked against its weight index
 #                on huggingface.co and has none.
+#   kv KiB/token what one token of conversation costs in the KV cache at
+#                16 bits per number, in KiB. hw_rebudget (bin/detect-hardware.sh)
+#                divides it by KV_QUANT's bit-width and multiplies by CTX_SIZE;
+#                only layers that hold a growing cache count, which in the
+#                Qwen3.8 hybrid is one layer in four. VERIFIED 2026-08-18 for
+#                all nine entries from each repository's own config.json on
+#                huggingface.co: 64 for every 27B (16 full-attention layers x
+#                2 x 4 kv-heads x 256 head_dim x 2 bytes), 32 for the 9B (8
+#                such layers). Once a build is on disk its config.json is read
+#                instead (model_kv_kib in bin/env.sh); this column is what the
+#                scripts use before then — models.sh list, download-model.sh's
+#                refusal, and the recommendation for a Mac with nothing
+#                downloaded yet. A new entry needs this figure computed from
+#                its config.json, not copied from a neighbour.
 #   abliterated  yes = the publisher removed the refusal behaviour.
 #                no  = safety training intact.
 #
@@ -40,15 +54,15 @@
 # to start. ./bin/models.sh list shows the result for the Mac it runs on.
 
 CATALOG='
-9b-4bit|keXjos/Qwen3.8-9B-mlx-4Bit|4.7|4.7|no|Smallest. A community distillation of Qwen3.8 into the Qwen3.5-9B architecture (empero-ai), not an official Qwen release. Safety training intact. No MTP head. Best for seeing the stack work, and the default on Macs under 32 GB.
-27b-2bit|EgorKodin/Qwen3.8-27B-ABLITERATED-2bit-MLX-TextOnly|7.8|7.8|yes|Smallest abliterated 27B. 2-bit costs real quality — try it before trusting it. Text only, no MTP head.
-27b-4bit-aeon|choppedgarlic/Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-4bit-MLX|14.1|14.1|yes|A different abliteration lineage (AEON) at 4-bit. Text only, no MTP head. Smaller than OrcaRouter 4-bit; fits under the GPU ceiling of a 24 GB Mac.
-27b-4bit-stock|mlx-community/Qwen3.8-27B-4bit|15.0||no|The stock Qwen3.8-27B at 4-bit, safety training intact. No MTP head shipped in these files.
-27b-4bit|chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-4bit|16.9|16.3|yes|OrcaRouter 4-bit. The default on a 32 GB Mac.
-27b-5bit|chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit|20.0|19.1|yes|OrcaRouter 5-bit. THE TESTED BUILD — every measured number in these docs came from it. The default from 36 GB.
-27b-6bit|chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-6bit|23.0||yes|OrcaRouter 6-bit. Worth it only if you have memory to spare.
-27b-8bit|chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-8bit|29.1|27.7|yes|OrcaRouter 8-bit. The default from 64 GB.
-27b-8bit-stock|mlx-community/Qwen3.8-27B-8bit|27.5||no|The stock Qwen3.8-27B at 8-bit, safety training intact. No MTP head shipped in these files.
+9b-4bit|keXjos/Qwen3.8-9B-mlx-4Bit|4.7|4.7|32|no|Smallest. A community distillation of Qwen3.8 into the Qwen3.5-9B architecture (empero-ai), not an official Qwen release. Safety training intact. No MTP head. Best for seeing the stack work, and the default on Macs under 32 GB.
+27b-2bit|EgorKodin/Qwen3.8-27B-ABLITERATED-2bit-MLX-TextOnly|7.8|7.8|64|yes|Smallest abliterated 27B. 2-bit costs real quality — try it before trusting it. Text only, no MTP head.
+27b-4bit-aeon|choppedgarlic/Qwen3.8-27B-AEON-ULTIMATE-UNCENSORED-4bit-MLX|14.1|14.1|64|yes|A different abliteration lineage (AEON) at 4-bit. Text only, no MTP head. Smaller than OrcaRouter 4-bit; fits under the GPU ceiling of a 24 GB Mac.
+27b-4bit-stock|mlx-community/Qwen3.8-27B-4bit|15.0||64|no|The stock Qwen3.8-27B at 4-bit, safety training intact. No MTP head shipped in these files.
+27b-4bit|chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-4bit|16.9|16.3|64|yes|OrcaRouter 4-bit. The default on a 32 GB Mac.
+27b-5bit|chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit|20.0|19.1|64|yes|OrcaRouter 5-bit. THE TESTED BUILD — every measured number in these docs came from it. The default from 36 GB.
+27b-6bit|chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-6bit|23.0||64|yes|OrcaRouter 6-bit. Worth it only if you have memory to spare.
+27b-8bit|chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-8bit|29.1|27.7|64|yes|OrcaRouter 8-bit. The default from 64 GB.
+27b-8bit-stock|mlx-community/Qwen3.8-27B-8bit|27.5||64|no|The stock Qwen3.8-27B at 8-bit, safety training intact. No MTP head shipped in these files.
 '
 
 # The OrcaRouter builds share one repository name with the quantization as the
@@ -75,6 +89,16 @@ catalog_field() {
 catalog_loaded_gb_for_dir() {
   printf '%s\n' "$CATALOG" | awk -F'|' -v d="$1" '
     NF >= 4 { n = split($2, p, "/"); if (p[n] == d) { print ($4 != "" ? $4 : $3); exit } }'
+}
+
+# catalog_kv_kib_for_dir <folder name>
+# Print the KV-cache cost of one token at 16 bits, in KiB, for a model folder
+# named after a catalog repository, or nothing. bin/env.sh asks the checkpoint's
+# own config.json first and this second, so the catalog figure only ever
+# stands in for a build that is not on disk yet.
+catalog_kv_kib_for_dir() {
+  printf '%s\n' "$CATALOG" | awk -F'|' -v d="$1" '
+    NF >= 5 { n = split($2, p, "/"); if (p[n] == d) { print $5; exit } }'
 }
 
 # catalog_download_gb_for_dir <folder name>

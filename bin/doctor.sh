@@ -359,6 +359,9 @@ esac
 # so the row shows both and judges the build against both: the estimate can
 # err in either direction, and admitting a build the real ceiling cannot hold
 # is the failure that stalls a Mac.
+# The conversation term is per model and per KV_QUANT (AUDIT.md F5); the row
+# says where its per-token figure came from, so a guess never reads as a fact.
+kv_note=" — ${CTX_SIZE} tokens at kv-quant ${KV_QUANT}, ${HW_KV_KIB} KiB/token at 16-bit, ${HW_KV_SOURCE}"
 wired_measured=""
 [ -f "$LOG_FILE" ] && wired_measured="$(log_wired_gb "$LOG_FILE")"
 if [ -n "$wired_measured" ]; then
@@ -367,11 +370,11 @@ else
   ceiling_note="Apple's ${HW_WIRED_AUTO_GB} GB ceiling (arithmetic — the server logs the real one at load)"
 fi
 if [ "${HW_WIRED_OK:-yes}" = "no" ]; then
-  row FAIL "gpu ceiling" "$(basename "$MODEL_DIR"): weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) do not fit under ${ceiling_note}. Pick a smaller build: ./bin/models.sh list" "docs/04-memory-safety.md#wired-limit"
+  row FAIL "gpu ceiling" "$(basename "$MODEL_DIR"): weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB${kv_note}) do not fit under ${ceiling_note}. Pick a smaller build: ./bin/models.sh list" "docs/04-memory-safety.md#wired-limit"
 elif [ -n "$wired_measured" ] && ! awk -v w="$HW_WEIGHTS_GB" -v kv="$HW_KV_GB" -v lim="$wired_measured" 'BEGIN { exit !(w + kv <= lim) }'; then
-  row FAIL "gpu ceiling" "$(basename "$MODEL_DIR"): weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) fit the ${HW_WIRED_AUTO_GB} GB estimate but not the ${wired_measured} GB the server measured at its last load. Pick a smaller build: ./bin/models.sh list" "docs/04-memory-safety.md#wired-limit"
+  row FAIL "gpu ceiling" "$(basename "$MODEL_DIR"): weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB${kv_note}) fit the ${HW_WIRED_AUTO_GB} GB estimate but not the ${wired_measured} GB the server measured at its last load. Pick a smaller build: ./bin/models.sh list" "docs/04-memory-safety.md#wired-limit"
 else
-  row PASS "gpu ceiling" "weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) fit under ${ceiling_note}"
+  row PASS "gpu ceiling" "weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB${kv_note}) fit under ${ceiling_note}"
 fi
 
 avail="$(available_gb)"
@@ -707,11 +710,7 @@ fi
 # may send. It must not exceed what the model itself was built for, which is
 # written in the model's own config.json.
 if [ "$model_ok" = "1" ]; then
-  model_max="$(python3 -c '
-import json,sys
-c = json.load(open(sys.argv[1])); t = c.get("text_config", c)
-print(t.get("max_position_embeddings") or c.get("max_position_embeddings") or "")
-' "$MODEL_DIR/config.json" 2>/dev/null || true)"
+  model_max="$(model_max_ctx "$MODEL_DIR")"
   if [ -z "$model_max" ]; then
     row WARN "context" "CTX_SIZE=${CTX_SIZE}; the model's config.json does not state its maximum"
   elif [ "$CTX_SIZE" -le "$model_max" ] 2>/dev/null; then

@@ -1190,6 +1190,7 @@ config   model_type = qwen3_5   (correct, not a typo — Qwen3.8-27B is built on
          model_type "llama". Runtimes dispatch on model_type.)
 layers   64 = 48 linear_attention (Gated DeltaNet) + 16 full_attention
          (full_attention_interval 4) — only the 16 hold a growing KV cache
+kv       64 KiB per token at 16 bits; 16 KiB at kv-quant turbo4 — a 65536-token window costs 1.00 GB
 quant    5-bit affine, group size 64
 shards   5/5 headers parsed, no git-lfs pointers
 tensors  2207 total | 504 quantized | 333 vision | 29 MTP
@@ -1290,7 +1291,7 @@ airgap doctor
 PASS  macos             26.5.2 (arm64)
 PASS  apple silicon     Apple M3 Max, 30 GPU cores
 PASS  ram tier          36 GB total — workable, default build 27b-5bit at 65536 tokens
-PASS  gpu ceiling       weights + conversation (19.1 + 1.00 GB) fit under Apple's 27.0 GB ceiling (arithmetic — the server logs the real one at load)
+PASS  gpu ceiling       weights + conversation (19.1 + 1.00 GB — 65536 tokens at kv-quant turbo4, 64 KiB/token at 16-bit, config.json) fit under Apple's 27.0 GB ceiling (arithmetic — the server logs the real one at load)
 PASS  memory            36 GB total, 24.3 GB available (need 22)
 PASS  wired limit       iogpu.wired_limit_mb=0 (auto — about 27.0 GB by arithmetic) — recommended
 PASS  disk              460.4 GB free (need 15 for the 10GB prefix cache + 5 GB spare)
@@ -1629,13 +1630,15 @@ all means the server is answering.
    ```
    REFUSING TO START — not enough free memory.
      available : 10.5 GB
-     required  : 22 GB (weights ~19.1 GB + conversation + prefix cache)
+     required  : 22 GB (weights ~19.1 GB + conversation 1.00 GB + prefix cache 1536MB)
+                 conversation = 65536 tokens at kv-quant turbo4 (64 KiB/token at 16-bit, config.json)
 
    Free some memory, then retry. Biggest wins, in order:
        2.7 GB  com.apple.Virtualization.VirtualMachine
        1.0 GB  Arc Helper
 
    Docker Desktop is a common one — 'docker desktop stop' frees its whole VM.
+   A smaller CTX_SIZE, or KV_QUANT=turbo4 if you raised it, lowers the requirement.
    Override with MIN_FREE_GB=0 if you know what you are doing.
    ```
 

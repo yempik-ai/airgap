@@ -184,18 +184,19 @@ the server (that stays `serve.sh`, one window, one job).
 ## Phase 2 — the catalog as a first-class thing
 
 - Move the catalog from a shell heredoc to a data file (`catalog.tsv` or JSON)
-  with the same six columns plus two: **format** (`mlx`, `gguf`) and **family**
+  with the same seven columns plus two: **format** (`mlx`, `gguf`) and **family**
   (`qwen3.8`, `gemma`, `deepseek`, …). Scripts read it; humans and PRs edit it.
 - Add families that the runtime already serves and people already ask for,
   each entry with a verified repository, a verified size, and a verified weight
   index — never a guessed one.
 - `models.sh list` grows a `--family` filter and keeps printing the free memory
   each build needs *on this Mac*, which is the number that matters.
-- A per-model KV-cache constant in the catalog, replacing the single Qwen3.8
-  figure that is currently documented as exact-for-this-architecture and
-  conservative-for-the-9B. (`AUDIT.md` F5 — this is the precondition for the
-  wider catalog, not a nicety: every guard under-estimates KV cost the moment a
-  non-hybrid family is added, while still reading as authoritative.)
+- ~~A per-model KV-cache constant in the catalog~~ — **done 2026-08-18**
+  (`AUDIT.md` F5): the per-token figure is read from each checkpoint's own
+  `config.json`, the catalog carries a verified copy per entry, and `KV_QUANT`
+  scales it. It was the precondition for the wider catalog: a new family's
+  entry needs its figure computed from its `config.json`, and its guards are
+  then right without anyone touching `detect-hardware.sh`.
 - The `format` column is also what unblocks GGUF, which Phase 3 no longer has to
   wait for a second server to deliver. See F1.
 

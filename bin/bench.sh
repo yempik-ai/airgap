@@ -351,7 +351,8 @@ fi
 
 # Peak memory, next to the arithmetic the memory guard is built on. hw_rebudget
 # counts the weights plus a conversation term sized for the FULL context window
-# (HW_KV_GB at CTX_SIZE, i.e. 16 KiB per token with turbo4), plus the prefix
+# (HW_KV_GB at CTX_SIZE: this model's own per-token figure at this KV_QUANT —
+# 16 KiB per token for the 27B at turbo4, 8 for the 9B), plus the prefix
 # cache — which a one-shot run never fills, so it is left out here. A run this
 # size uses only prompt + answer tokens of that window, so the honest comparison
 # is peak minus weights minus the conversation actually used: what is left is

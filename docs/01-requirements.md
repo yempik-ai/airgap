@@ -250,7 +250,7 @@ verdict        workable  --  The reference configuration. Fits, but you must clo
 
 recommended settings for this Mac:
   build             27b-5bit  (chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit, ~19.1 GB of weights, text-only)
-  CTX_SIZE          65536   (KV cache 1.00 GB at turbo4)
+  CTX_SIZE          65536   (KV cache 1.00 GB at kv-quant turbo4: 64 KiB/token at 16-bit, catalog)
   MIN_FREE_GB       22
   MAX_RESIDENT_MEM  21GB
   PREFIX_CACHE_MEM  1536MB
