@@ -23,9 +23,10 @@ reads, and which of the resulting failures are silent. Learning MLX or Ollama
 just to answer those questions, for one harness, is the friction. `airgap`
 exists to remove it fully.
 
-Today it does that for **one harness on one model family on one runtime**:
-Claude Code, Qwen3.8 in MLX format, `mlx-serve` on Apple Silicon. The rest of
-this page is the path from there to *any harness, any runtime, one abstraction*,
+Today it does that for **two harnesses on one model family on one runtime**:
+Claude Code and the Codex CLI (both verified end to end on 2026-08-18), Qwen3.8
+in MLX format, `mlx-serve` on Apple Silicon. The rest of this page is the path
+from there to *any harness, any runtime, one abstraction*,
 without giving up the three things that make the current version worth using:
 
 1. **Guards, not warnings.** The scripts refuse rather than let a Mac swap or a
@@ -50,9 +51,10 @@ without giving up the three things that make the current version worth using:
 - The memory model (`bin/detect-hardware.sh`) is already model-agnostic: it takes
   a weight size and a context window and produces the budget. Only the KV-cache
   constant is architecture-specific, and it is documented as such.
-- `bin/claude-local.sh` is already a *harness adapter*: it maps "the server at
-  this address, this model id, this context size" onto the settings one harness
-  reads. That mapping is the whole per-harness surface.
+- A *harness adapter* maps "the server at this address, this model id, this
+  context size" onto the settings one harness reads. That mapping is the whole
+  per-harness surface, and since 2026-08-18 it is one file per harness in
+  `harness/`, with `bin/run.sh` doing the parts every harness needs.
 
 ## Phase 0 — close the credibility gaps in 0.1.0 (before publishing)
 
@@ -162,24 +164,57 @@ rather than a budget, and is `E4` above.
 One command per harness, all reading the same `env.sh`, none of them starting
 the server (that stays `serve.sh`, one window, one job).
 
-- A harness adapter is a small file, `harness/<name>.sh`, that declares three
-  things and nothing else: which API dialect it speaks (`anthropic`, `openai` or
-  `ollama`), how to hand it the base URL, model id and context size (environment
-  variables, a flag, or a config file it owns), and how to prove the wiring
-  worked (`-p 'reply AIRGAP OK'` or its equivalent).
-- `bin/claude-local.sh` becomes `harness/claude-code.sh` with a compatibility
-  shim, so nothing documented breaks.
-- Candidates, in the order people asked: Pi, Hermes Agent, a DeepSeek harness,
-  Codex CLI, OpenCode, Aider — each verified end to end before it is listed, the
-  way Claude Code was. **Not shipped**: none of these adapters exists yet, and
-  which config surface each harness exposes has to be checked against its
-  current release, not remembered.
-- `doctor.sh` gains one row per adapter present: does the harness binary exist,
-  and would it be pointed at loopback.
-- The docs gain one page, `docs/10-other-harnesses.md`, and the README's "Pick
-  your path" gains one line. Nothing else in the docs should need to change,
-  because nothing else is harness-specific — that is the test of whether the
-  abstraction is right.
+- [x] **The contract and the dispatcher.** A harness adapter is a small file,
+      `harness/<name>.sh`, that declares which API dialect it speaks
+      (`anthropic`, `openai` or `ollama`), which command starts it, how to make
+      it answer one question and exit, and how to point it at the base URL,
+      model id and context size. **Shipped 2026-08-18** — four names
+      (`HARNESS_DIALECT`, `HARNESS_BIN`, `HARNESS_ONESHOT`, `harness_wire`),
+      plus two optional ones: `harness_usage`, and `HARNESS_ENDPOINT` for an
+      adapter whose real endpoint disagrees with its dialect's usual one.
+      Checking the server, the banner, the timeout arithmetic and the probe
+      live once in `bin/run.sh` and `bin/env.sh`, never in an adapter.
+      `bin/run.sh [--probe] <name>` dispatches; `tests/harness-contract.sh` and
+      `tests/run-dispatch.sh` hold both halves offline.
+- [x] `bin/claude-local.sh` becomes `harness/claude-code.sh` with a
+      compatibility shim, so nothing documented breaks. **Shipped 2026-08-18**
+      — the shim is one `exec` line and the ~58 references to the old name in
+      the docs stay true. Its banner is now eight lines, not six: line 1 names
+      the adapter and its dialect, and the answer cap moved to an `output` line
+      of its own.
+- [x] **Claude Code, verified end to end.** **Shipped 2026-08-18** —
+      `./bin/run.sh --probe claude-code` → `AIRGAP OK`, 47.4 s on a first turn
+      and 4.1 s warm, 20,718 prompt tokens per turn at `LEAN_MCP=1` (MEASURED;
+      Claude Code 2.1.234, mlx-serve 26.8.8, `Qwen3.8-9B-mlx-4Bit`, M3 Max
+      36 GB).
+- [x] **Codex CLI, verified end to end.** **Shipped 2026-08-18** —
+      `./bin/run.sh --probe codex` → `AIRGAP OK`, 21.3 s cold and 3.1 s warm,
+      9,336 prompt tokens per turn at `LEAN_MCP=1` against 10,271 at
+      `LEAN_MCP=0`, i.e. 935 for its plugins (MEASURED; Codex CLI 0.147.0, same
+      server, model and machine). One design assumption was falsified on
+      contact: the plan said `wire_api = "chat"`, and 0.147.0 refuses to start
+      on it ("no longer supported"), so the adapter speaks Responses
+      (`/v1/responses`), which mlx-serve 26.8.8 serves and the probe verified.
+- [x] `doctor.sh` gains one row per adapter present: does the harness binary
+      exist, and would it be pointed at loopback. **Shipped 2026-08-18** — the
+      section is now `harness wiring`, the rows are derived from `harness/*.sh`,
+      and a missing binary is a `WARN` pointing at `docs/10-other-harnesses.md`.
+- [x] The docs gain one page, `docs/10-other-harnesses.md`, and the README's
+      "Pick your path" gains one line. **Shipped 2026-08-18.** The rest of that
+      item was a test of whether the abstraction is right — *nothing else in the
+      docs should need to change, because nothing else is harness-specific* —
+      and it very nearly held. Two other pages did change, in quoted output
+      only: `docs/02` and `docs/06` paste the Claude Code banner and doctor's
+      section header, and both changed shape. No explanation of how anything
+      works had to be rewritten anywhere, and `docs/05` took its one new
+      sentence. Captured output is the part of a document that a refactor
+      touches; that is worth knowing before Phases 2 and 3 make the same bet.
+- [ ] Candidates, in the order people asked: Pi, Hermes Agent, a DeepSeek
+      harness, OpenCode, Aider — each verified end to end before it is listed,
+      the way Claude Code and Codex were. **Not shipped**: none of these
+      adapters exists, none of those harnesses is installed on the machine this
+      repository is developed on, and which config surface each one exposes has
+      to be checked against its current release, not remembered.
 
 ## Phase 2 — the catalog as a first-class thing
 
