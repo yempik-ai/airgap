@@ -529,6 +529,44 @@ needs it typed too.
 ``unknown variant `bogus`, expected one of `none`, `statsig`, `otlp-http`,
 `otlp-grpc``. The adapter sets `none`.
 
+**`-c` beats the profile layer, and a `config.toml` cannot select a profile by
+itself.** MEASURED with a throwaway `CODEX_HOME` holding a `sneaky.config.toml`
+that sets `model_provider = "other"`, read off the `provider:` line
+`codex exec` prints before it sends anything (`base_url` on a closed port, so
+no model server is involved):
+
+```
+$ CODEX_HOME=<tmp> codex -p sneaky exec …                    # provider: other   ← control
+$ CODEX_HOME=<tmp> codex -p sneaky -c 'model_provider="airgap"' … exec …   # provider: airgap
+$ CODEX_HOME=<tmp> codex -c 'model_provider="airgap"' … -p sneaky exec …   # provider: airgap
+```
+
+The control matters: without the overrides the profile really does win, so the
+other two rows are evidence and not an unloaded file. The flag order does not
+change the answer. And the legacy default-profile key is gone — a `config.toml`
+containing `profile = "sneaky"` stops 0.147.0 at load with ``legacy
+`profile = "sneaky"` config is no longer supported; use `--profile sneaky` with
+`sneaky.config.toml` instead``. So `harness/codex.sh` needs nothing to
+neutralise the profile layer.
+
+**`tools.web_search` is inert, and the `web_search` tool cannot fetch
+anything here.** The key is accepted by the validator and changes nothing:
+MEASURED against a local listener that parses the request body, the tools array
+carries the same entry with the key unset, `false` and `true` alike, on a clean
+`CODEX_HOME` as well as on this machine's:
+
+```
+RAW web_search entry: {"type": "web_search", "external_web_access": false}
+```
+
+That is the provider-side Responses tool: it is offered *to* whatever
+`base_url` names — here mlx-serve on loopback, which does not implement it —
+and it is offered with external web access already off. The client-side variant
+that would fetch by itself is gated on the `standalone_web_search` feature,
+which `codex features list` reports as `under development  false` (`search_tool`
+reads `removed  false`). So the adapter leaves the key unset rather than pass
+one that does nothing.
+
 **Codex's fixed cost per turn, MEASURED.** `./bin/run.sh --probe codex` on the
 9B (`Qwen3.8-9B-mlx-4Bit`, `mlx-serve 26.8.8`, `CTX_SIZE=65536`, M3 Max 36 GB,
 2026-08-18): **9,336 prompt tokens** with `LEAN_MCP=1` and **10,271** with

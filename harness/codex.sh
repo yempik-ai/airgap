@@ -61,20 +61,27 @@ WHAT IT DOES
 
 WHAT IT COSTS
   No extra memory beyond the server that is already running. No money.
-  Nothing leaves your Mac. No Codex account is needed: this was checked by
-  running it, and a custom provider with no key requirement answers.
+  No Codex account is needed: this was checked by running it, and a custom
+  provider with no key requirement answers.
+
+  Everything this script sends goes to your Mac and nowhere else. What it
+  cannot speak for is the MCP servers you set up yourself in
+  ~/.codex/config.toml: those are yours, some of them talk to the internet,
+  and Codex 0.147.0 has no way to switch them off from the command line. The
+  "mcp" line the banner prints says which ones LEAN_MCP=1 does switch off.
 
 USAGE (run from the folder you want to work in)
   ./bin/run.sh codex                   start a session in the current folder
   ./bin/run.sh codex exec "hello"      ask one question and exit
   ./bin/run.sh --probe codex           ask one test question and report
-  ./bin/run.sh codex --help            print Codex's own help
+  ./bin/run.sh codex --help            print this help
 
-  Anything you type after the name is passed straight to Codex. One flag of
-  Codex's own is worth knowing: outside a git checkout, `codex exec` refuses
-  unless you add --skip-git-repo-check, so the one-shot form there reads
-  ./bin/run.sh codex exec --skip-git-repo-check "hello". --probe adds it for
-  you, which is why --probe works from any folder.
+  Anything else you type after the name is passed straight to Codex, so
+  `codex --help` in another window is how you read Codex's own help. One flag
+  of its own is worth knowing here: outside a git checkout, `codex exec`
+  refuses unless you add --skip-git-repo-check, so the one-shot form there
+  reads ./bin/run.sh codex exec --skip-git-repo-check "hello". --probe adds it
+  for you, which is why --probe works from any folder.
 
 SETTINGS
   LEAN_MCP=0      load your plugins as well. They cost 935 prompt tokens per
@@ -168,6 +175,25 @@ harness_wire() {
 
   # NOT set: model_providers.<id>.env_key. The provider needs no key, and
   # naming an env var here would make Codex require one.
+  #
+  # NOT set: tools.web_search. The key exists in 0.147.0, and setting it is a
+  # no-op: MEASURED against a listener that prints the request body, the tools
+  # array carries `{"type":"web_search","external_web_access":false}` with the
+  # key unset, false and true alike, on a clean CODEX_HOME as well as this
+  # one. That entry is the provider-side Responses tool — it is offered TO the
+  # server named by base_url, which is this Mac, and it is offered with web
+  # access already off. The client-side variant that would fetch by itself
+  # needs the `standalone_web_search` feature, which `codex features list`
+  # reports as "under development / false". So there is nothing here to switch
+  # off, and passing a key that changes nothing would be worse than saying so.
+  #
+  # NOT set: anything to neutralise the profile layer. -c wins over it,
+  # MEASURED: with a throwaway CODEX_HOME holding a `sneaky.config.toml` that
+  # names a different model_provider, `-p sneaky` alone resolves to that
+  # provider, and `-p sneaky` together with the overrides above resolves to
+  # `airgap` whichever side of them the flag is typed. A config.toml cannot
+  # select a profile by itself either: 0.147.0 refuses the legacy
+  # `profile = "name"` key outright ("no longer supported; use --profile").
   #
   # NOT set: an answer-length cap or a thinking knob. Codex's reasoning effort
   # comes from the person's own config.toml and this repo has not measured what
