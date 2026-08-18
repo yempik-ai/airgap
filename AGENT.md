@@ -43,10 +43,15 @@ two ever disagree, `AUDIT.md` is right.*
   waiting on; `B2` (a context sweep — `bench.sh` already emits the row a
   sweep would append, so it is a loop and a cap, 9B is enough to start) and
   `B6` (a quality suite, the only way `E4`'s quality cost becomes a number)
-  — both need the model loaded at length. Everything left in `AUDIT.md`
-  needs the 27B (`A3`, `E5`) or a measurement before it can say anything
-  honest (`C4`, `E2`, `E3`); there is no longer an offline slice to take
-  when the machine is busy.
+  — both need the model loaded at length, and the 9B is enough to start
+  (it loads here with ~14 GB free; proven 2026-08-18). Only `A3`'s missing
+  number, and `ROADMAP.md` Phase 0's first item, actually need the 27B.
+  **Still offline, and the slice to take when the machine is busy:** `F5`
+  (a per-model KV figure — every input is in each checkpoint's own
+  `config.json`: `layer_types`, `num_key_value_heads`, `head_dim`, and the
+  KV bit-width; the current `ctx/65536` is one Qwen3.8 constant that the
+  file's own comment calls wrong for a dense model), the exposure-and-label
+  half of `E3`, and the tokens-per-MB half of `E2`.
 - **Blocked on memory, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `serve.sh` needs 22 GB free for
   it and a working day leaves ~14 (2026-08-18: a 3.2 GB VM, a browser,

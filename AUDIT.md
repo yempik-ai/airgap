@@ -54,15 +54,22 @@ marks *never measured*.
 | ✅ | `A2` a disk refusal for the prefix cache, from one function — **DONE** | small | high |
 | ✅ | `C3` say the log rotates; show its tail when a server is gone — **DONE** | small | medium |
 
-No numbered item is left that a machine with the model loaded is not needed
-for. `E4` carried the largest measured speed-up in this audit and shipped
+No numbered item is left that neither a loaded model nor a second machine is
+needed for — with one exception, recorded here so it is not lost: `F5` is
+arithmetic over each checkpoint's own `config.json` and needs nothing loaded
+at all. It is filed under §F as Phase 2 sequencing, which is why it reads as
+deferred rather than as the small offline fix it also is. `E4` carried the largest measured speed-up in this audit and shipped
 opt-in, as required: a behavioural change with an unmeasured quality cost is
 not a default. Everything in §F is roadmap sequencing, not code — absorbed
 into `ROADMAP.md` Phases 2–3 (revised 2026-08-17), nothing left to do until
 Phase 2 starts. Still open, and why: `B2` (a context sweep) and `B6` (a
 quality suite — also the only way `E4`'s quality cost becomes a number) need
 the model loaded at length; `C4`, `E2`, `E3` need a measurement to say
-anything honest; `A3`, `E5` need the 27B.
+anything honest. Of the measurements, only `A3`'s missing number needs the
+27B; `B2`, `B6` and `E5`'s two questions are answerable on the 9B — `E5`'s
+own note says "needs the 27B loaded", and that is over-stated: what it has
+to compare is two `[hot-cache]` lines and how Claude Code's `-p` mode renders
+its system block, neither of which is a property of the weights.
 
 ---
 
