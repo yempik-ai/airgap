@@ -97,9 +97,12 @@ able to prove things it currently only asserts. Ordered as in `AUDIT.md`.
       **Shipped 2026-08-17** — with `PROMPT_FILE=` and the load flags shared
       with `serve.sh`. First numbers, 9B only: prefill 374 tok/s at 16,377
       tokens, and a 2.6 GB working set the arithmetic does not model (`A3`).
-- [ ] `D3` — doctor probes a *streamed* tool call. Today every check can pass
+- [x] `D3` — doctor probes a *streamed* tool call. Today every check can pass
       on a build that cannot emit one, which is the capability Claude Code is
       entirely built on.
+      **Shipped 2026-08-17** — two rows, `tool call` and `streamed call`, one
+      body with only `stream` toggled, every failure named. Its reader's
+      failure branches are held by `tests/tool-call-verdict.sh` (2026-08-18).
 - [x] `E1` — stop overriding the engine's own prefill sizing. This one is
       subtraction: `mlx-serve` already sizes the chunk from memory, and airgap's
       hardcoded 4096 is a second, worse-informed source of truth.

@@ -591,6 +591,10 @@ simply having the download resumed.
 > `input`, an empty body, non-JSON); `PROBE=0` → three SKIP rows; a
 > `claude-local.sh -p` turn with the fallback disabled answered, streamed.
 > Doctor is 29 checks against a live server (was 27), 22 with it down.
+> Those reader checks were ad hoc in a scratch directory that day; since
+> 2026-08-18 they are `tests/tool-call-verdict.sh` with the captures under
+> `tests/fixtures/tool-call/`, run by CI, so a change to `tool_call_verdict`
+> or `tool_call_row` is caught without a server.
 
 `bin/doctor.sh:323-331` sends `max_tokens: 8`, content `"hi"`, and checks only
 that curl exited 0. Every check can pass on a build — the 2-bit at

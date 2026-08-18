@@ -152,7 +152,15 @@ Next: open another window and run ./bin/claude-local.sh
 ```
 
 After that the server prints its own startup messages, and finally a line saying
-it is listening.
+it is listening. One of those messages is worth knowing by sight:
+
+```
+Prefill chunk: 1024 tokens (memory-sized down from 8192; --prefill-chunk overrides)
+```
+
+That is the server choosing how much of a long prompt to read at a time, from
+the memory free at that moment; the number differs run to run and Mac to Mac,
+and this repository leaves it to the server ([07 §12](07-tuning.md#never)).
 
 Six of those values differ on your Mac: the two memory figures, the path (it
 contains your account name), the context size, the two budget figures, and the

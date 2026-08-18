@@ -182,8 +182,8 @@ Being precise about this matters more than looking finished.
 | **Every script, actually run** — `start`, `setup`, `download-model`, `models`, `verify-model`, `doctor`, `serve`, `claude-local`, `stop` | ✓ all of them |
 | **Claude Code answering from a local model, end to end** | ✓ `serve → doctor → claude-local -p` returned `AIRGAP OK` on the 9B |
 | Anthropic `/v1/messages`, tool calling, prefix-cache reuse | ✓ verified |
-| `doctor.sh` against a live server, including the `mtp_loaded` probe | ✓ all PASS on the 9B (which ships no MTP head, and doctor says so) — 29 checks against a live server on 2026-08-17, model-lock, cache-evidence and tool-call (plain and streamed) rows included |
-| `bench.sh`, exact-match check, decode speed, prefill rate and peak memory | ✓ on the 9B: identical output; 36.7 tok/s decode after a 41-token prompt, 15.6 after 16,377; prefill 374 tok/s at 16,377 tokens; peak 7.52 GB there, 2.6 GB of it working set above weights + KV |
+| `doctor.sh` against a live server, including the `mtp_loaded` probe | ✓ all PASS on the 9B (which ships no MTP head, and doctor says so) — 29 checks against a live server on 2026-08-18, model-lock, cache-evidence and tool-call (plain and streamed) rows included; the tool-call reader's failure branches are exercised offline by `tests/tool-call-verdict.sh` against captured answers |
+| `bench.sh`, exact-match check, decode speed, prefill rate and peak memory | ✓ on the 9B: identical output; 36.7 tok/s decode after a 41-token prompt, 15.6 after 16,377; prefill 374 tok/s at 16,377 tokens (309 a day later — the rate is noisy, the peak is not); peak 7.52 GB there at a pinned 4096-token prefill chunk, 2.6 GB of it working set above weights + KV; 5.63 GB / 0.7 GB at the 512 the server sizes for itself ([07 §9](docs/07-tuning.md#bench)) |
 | **The 27B itself, loaded and served** | **✕ not yet** — the end-to-end runs used the 9B (4.7 GB) and Qwen3.5-0.8B |
 | **`mtp_loaded: true` on the 27B checkpoint** | **✕ not yet confirmed** — see below |
 | Tokens per second, prefill rate and peak memory on the 27B | ✕ never measured (the 9B figures above are the only ones) |
@@ -235,8 +235,15 @@ airgap/
 │   ├── verify-model.sh      ← integrity check
 │   └── bench.sh             ← speculative decoding on versus off, tokens/s
 ├── docs/                    ← 01 → 09, in reading order
+├── tests/                   ← offline checks: doctor's tool-call reader against
+│                              captured answers, the load-shape contract
+├── .github/workflows/ci.yml ← shellcheck + bash -n, and tests/ on a macOS runner
 └── config.env.example       ← every setting, with its default
 ```
+
+`bash tests/run.sh` runs the tests; they need bash and python3, no server and
+no weights. What they do **not** cover is anything that needs the model
+loaded — that is `./bin/doctor.sh` and `./bin/bench.sh` on your own Mac.
 
 ---
 

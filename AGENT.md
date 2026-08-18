@@ -19,9 +19,18 @@ two ever disagree, `AUDIT.md` is right.*
   this machine for the 9B by what was free at load, against the 4096 airgap
   pinned — and `bench.sh` says plainly that its one-shot load reads at the
   8192 ceiling instead), 2026-08-18. Running it showed one-shot mode does not
-  memory-size — see the facts below.
-- **Next:** the numbered list in `AUDIT.md` is empty. What is left is `E4`
-  (thinking off — opt-in or not at all) and §F, which is roadmap sequencing.
+  memory-size — see the facts below. Same day, found by running it:
+  `bench.sh` never released the model lock after a full run (fixed); and the
+  `D3` reader checks moved from a scratch directory into `tests/`, with a CI
+  workflow that runs shellcheck and the tests. The workflow itself has run
+  only as its local equivalent so far — the first push to GitHub is its
+  first real run; if it fails there, that is the first thing to look at.
+- **Next:** the numbered list in `AUDIT.md` is empty. What is left, in
+  order of value: the 27B measurement (hardware-blocked — `AUDIT.md` A3, E5,
+  `ROADMAP.md` Phase 0), which every "9B only" figure in this file is
+  waiting on; `E4` (thinking off — opt-in or not at all, quality cost
+  unmeasured); §F (roadmap sequencing, no code). Nothing here is blocked on a
+  decision.
 - **Blocked on hardware, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `AUDIT.md` E5 and A5 both stop short
   of a measurement for this reason, and `ROADMAP.md` Phase 0 names it.
@@ -60,6 +69,14 @@ two ever disagree, `AUDIT.md` is right.*
 - `bin/catalog.sh` — the one list of models.
 - `docs/01`–`09` — user-facing, in reading order. Contributor material does not
   go here.
+- `tests/` — offline checks, no server and no weights: `tool-call-verdict.sh`
+  lifts `row`, `tool_probe_body`, `tool_call_verdict` and `tool_call_row` out
+  of `doctor.sh` by their `name() {`…`}` ranges (doctor cannot be sourced; it
+  runs at load), stubs `srv_curl` to print a fixture, and checks the row each
+  captured shape renders; `load-shape.sh` holds the `LOAD_SHAPE_ARGS`
+  contract. Rename one of those functions and the test says so by name.
+  `tests/run.sh` runs all; `.github/workflows/ci.yml` runs it on a macOS
+  runner and shellcheck on Ubuntu.
 
 ## Quality rules
 
@@ -353,6 +370,35 @@ machine is 36 GB and its entire disk budget is 45 GB. This cannot be fixed in
 Bash — the shapes are compiled constants. See `AUDIT.md` §F for the honest
 framing.
 
+## Working here from an agent harness
+
+Small things that cost a session each the first time. None of them is a repo
+fact; all of them are about the tools an agent reaches this repo through.
+
+- **The tool shell may be zsh, which does not word-split an unquoted `$VAR`.**
+  Every script here is bash and relies on splitting (`LOAD_SHAPE_ARGS`,
+  `EXTRA_ARGS`). A probe that "proves" a flag is missing may be proving only
+  that zsh kept the string whole — run split-dependent probes under
+  `bash -c '…'`. Same for `source <(…)`: write the harness to a file and run
+  it with `bash file`.
+- **The server writes to `stdout` and to `LOG_FILE`; only the log survives a
+  backgrounded start.** `nohup ./bin/serve.sh > <scratch>/serve.out 2>&1 &`,
+  about 20 s to `/health` for the 9B, `./bin/stop.sh` to end it. Everything
+  the docs quote from the server (`Prefill chunk:`, `[hot-cache]`,
+  `[preflight]`, `[registry]`) is in the log, scoped past the last
+  `^Logging to ` banner.
+- **`doctor.sh` sends three requests when the server is up** (an 8-token
+  "hi" and two 69-token tool calls). They count in `/metrics.json` and in the
+  `[hot-cache]` lines, and on a fresh server they are the "biggest hit" the
+  `prefix cache` row quotes until a real long prompt has been sent. Expected,
+  not a bug.
+- **`truncated` on the tool-call rows is a WARN by design**: a build that is
+  still reasoning at the cap is slow for agent work, not broken. Revisit only
+  with a 27B measurement.
+- **`mlx-serve` reports the 9B as `qwen3_5_moe` in its banner.** The "not
+  MoE" fact above is about the 27B's `config.json`; the 9B is a different
+  checkpoint and the two statements do not conflict.
+
 ## Before you claim something works
 
 The repository's credibility is its only feature. Nothing is "done" on the
@@ -370,3 +416,8 @@ strength of a diff.
    how `B1`'s `LOAD_SHAPE_ARGS` hoist was proven a no-op.
 6. Anything verified only on the 9B says so. The 27B has never been loaded on
    this machine, and several open items exist precisely because of that.
+7. `bash tests/run.sh` and `shellcheck -S warning start.sh bin/*.sh tests/*.sh`
+   pass. CI runs exactly those. If you change what `doctor.sh`'s tool-call
+   rows say, the fixture test's expected strings change in the same commit;
+   if you capture a new fixture, say which server and model it came from in
+   the test's header comment.

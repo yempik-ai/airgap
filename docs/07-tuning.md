@@ -430,8 +430,12 @@ the feature on and once with it off, and compares a fingerprint of each answer.
 While it is at it, it keeps the two other figures mlx-serve prints — how fast
 the prompt was read (prefill) and the peak memory — and puts the peak next to
 the arithmetic the memory guard in
-[04](04-memory-safety.md#the-total-on-the-test-machine) is built on. It loads the model with the same context size, KV format, prefill
-chunk and vision setting `./bin/serve.sh` uses, so that comparison is fair.
+[04](04-memory-safety.md#the-total-on-the-test-machine) is built on. It loads the model with the same context size, KV format and
+vision setting `./bin/serve.sh` uses, so that comparison is fair — with one
+flag it cannot share unless you pin it: the server sizes its own prefill chunk
+when it starts, and a one-shot load like this reads at the ceiling instead, so
+the peak is an upper bound on the server's. The output says so and names the
+`PREFILL_CHUNK=` that reproduces the server's shape.
 
 **WHAT THIS CHANGES ON YOUR MAC.** It loads the selected model's weights into
 memory — about 19.1 GB for the 5-bit 27B — twice, one after the other. It uses
