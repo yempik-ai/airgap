@@ -184,6 +184,23 @@ have it right now. Close more apps, or go back to the smaller window. That is th
 guard working.
 [06 — troubleshooting](06-troubleshooting.md#not-enough-memory).
 
+**There is a ceiling on this setting, and it is the model's, not ours.** Every
+checkpoint states its own maximum in `config.json` as `max_position_embeddings`
+— 262,144 for the Qwen3.8 builds, and less for many other models you could point
+`MODEL_DIR` at. `./bin/serve.sh` reads it and **refuses** above it:
+
+```
+REFUSING TO START — CTX_SIZE is larger than this model's own maximum.
+  CTX_SIZE      : 999999 tokens
+  model maximum : 262144 tokens (Qwen3.8-9B-mlx-4Bit/config.json)
+```
+
+Without that refusal the number still had effects: it raised `MIN_FREE_GB` for a
+window nothing would ever hold, could trip the GPU-ceiling guard for a reason
+that was not the real one, and otherwise failed one request at a time once the
+server was up. `./bin/doctor.sh` reports the same comparison in its `context`
+row before you get there.
+
 ### How much window do you actually get?
 
 Less than the number suggests, because Claude Code spends some of it before you
@@ -510,7 +527,7 @@ fit, and the script refuses while the server holds the port.
 ./bin/stop.sh
 ```
 
-You should see `stopped.` or `nothing running on port 11234.`, then a line
+You should see `stopped.` or `nothing is holding the weights`, then a line
 showing the memory before and after. Then:
 
 ```
@@ -755,7 +772,7 @@ carries the same list with a longer explanation each.
 | `API_KEY` | empty. Not a secret: a value here is visible to other accounts on this Mac. |
 | `METRICS` | `1` |
 | `LOG_LEVEL` | `info` |
-| `LOG_FILE` | `~/.mlx-serve/logs/mlx-serve-<PORT>.log` |
+| `LOG_FILE` | `~/.mlx-serve/logs/mlx-serve-<PORT>.log` (mlx-serve rotates it at 32 MB) |
 | `EXTRA_ARGS` | empty |
 
 **Memory and size** — all four worked out from your Mac
@@ -779,8 +796,21 @@ carries the same list with a longer explanation each.
 
 | Name | Default |
 |---|---|
-| `MIN_DISK_GB` | `45` |
+| `MIN_DISK_GB` | worked out for the selected build: `45` for the 5-bit 27B, `20` for the 9B |
 | `DEDUP` | `1` |
+
+`MIN_DISK_GB` is the free disk `./bin/download-model.sh` insists on, and it is
+computed rather than typed: the larger of the download's peak (two copies of
+the download, until `git lfs dedup` reclaims one) and the steady state after it
+(the weights plus `PREFIX_CACHE_DISK`), plus 5 GB of spare for macOS. The
+download size is the input, not the loaded size the memory guards use — the
+vision tower and the tokenizer files land on disk even though the server never
+loads them. The same
+function sizes the refusal `./bin/serve.sh` makes when the disk cannot hold the
+prefix cache it is about to be told to write — `PREFIX_CACHE_DISK` + that same
+5 GB, measured on the volume holding `~/.mlx-serve`. Lower the cache rather
+than the guard: `PREFIX_CACHE_DISK=2GB`, or `0` to switch the disk tier off and
+keep only the memory one.
 
 **Claude Code**
 

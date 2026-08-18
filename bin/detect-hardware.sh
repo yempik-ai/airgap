@@ -367,7 +367,56 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# 4. Output
+# 4. Disk
+# ---------------------------------------------------------------------------
+# Disk was the one resource with no refusal covering it (AUDIT.md A2): a Mac
+# with 6 GB free passed every check and then started a server told to write a
+# 10 GB prefix cache. The arithmetic lives here, once, and both refusals
+# (download-model.sh, serve.sh) and doctor's row read it from this function.
+
+# hw_size_gb <size> — a settings value like 10GB, 512MB, 2G, off or 0, as GB.
+# Prints a decimal. Anything unrecognised reads as 0, which is the safe
+# direction: it never inflates a requirement out of a value nobody understands.
+hw_size_gb() {
+  awk -v s="${1:-0}" 'BEGIN {
+    t = tolower(s)
+    if (t == "" || t == "off" || t == "none") { printf "0.0"; exit }
+    n = t + 0
+    if (t ~ /kb?$/) n = n / 1048576
+    else if (t ~ /mb?$/) n = n / 1024
+    else if (t ~ /tb?$/) n = n * 1024
+    printf "%.1f", n
+  }'
+}
+
+# hw_disk_need_gb <download|serve> <weights_gb> <cache_disk_gb> — the free disk
+# that phase needs, in whole GB, rounded up.
+#
+#   download : the peak, plus what the server will want afterwards. git-lfs
+#              keeps a second copy of every shard until dedup reclaims it, so
+#              the peak is 2 x weights; after dedup the steady state is
+#              weights + the cache tier. The larger of the two governs, because
+#              the download must survive both. (They never coexist: dedup runs
+#              before any server does.)
+#   serve    : the cache tier the server is configured to write. The weights
+#              are already on disk and are not written again.
+#
+# Both add HW_DISK_SPARE_GB. macOS itself needs room — swap, snapshots, log
+# rotation — and a disk driven to zero by our own cache is a worse failure than
+# a refusal. It is a policy number, not a measurement, and this is its one
+# statement.
+HW_DISK_SPARE_GB=5
+hw_disk_need_gb() {
+  awk -v phase="$1" -v w="${2:-0}" -v c="${3:-0}" -v spare="$HW_DISK_SPARE_GB" 'BEGIN {
+    if (phase == "download") { peak = 2 * w; steady = w + c; need = (peak > steady ? peak : steady) }
+    else                     { need = c }
+    need += spare
+    printf "%d", int(need) + (need > int(need) ? 1 : 0)
+  }'
+}
+
+# ---------------------------------------------------------------------------
+# 5. Output
 # ---------------------------------------------------------------------------
 
 hw_report() {

@@ -77,26 +77,35 @@ step "2 of 4: the model"
 # shellcheck source=bin/env.sh
 source ./bin/env.sh
 
-have_weights=0
-if [ -f "$MODEL_DIR/config.json" ]; then
-  for w in "$MODEL_DIR"/*.safetensors; do
-    [ -f "$w" ] || continue
-    [ "$(stat -f%z "$w" 2>/dev/null || echo 0)" -gt 1000000 ] && have_weights=1
-    break
-  done
-fi
+# One shard is not an answer. A `git lfs pull` stopped part way leaves the
+# shards it did not reach as 135-byte pointers, and this step used to call that
+# "already here" and skip the resume — so the user met the problem two steps
+# later, in verify-model.sh, instead of having the download finished for them
+# (AUDIT.md D2). model_state (bin/env.sh) asks over every shard, and every
+# other script that asks gets the same answer from the same helper.
+state="$(model_state "$MODEL_DIR")"
 
-if [ "$have_weights" = "1" ]; then
+if [ "$state" = "complete" ]; then
   echo "already here: $(basename "$MODEL_DIR")"
   echo "to use a different build:  ./bin/models.sh list"
 else
-  echo "No model on disk yet."
-  echo "About to download: $MODEL_REPO"
-  echo "Picked for this ${HW_RAM_GB} GB Mac. ./bin/download-model.sh prints the exact size first;"
+  if [ "$state" = "partial" ]; then
+    echo "Half here: $(basename "$MODEL_DIR") was downloaded part way and stopped."
+    echo "About to resume it. Nothing already fetched is downloaded twice."
+  else
+    echo "No model on disk yet."
+    echo "About to download: $MODEL_REPO"
+    echo "Picked for this ${HW_RAM_GB} GB Mac."
+  fi
+  echo "./bin/download-model.sh prints the exact size first;"
   echo "the download resumes if interrupted, so this is safe to stop. Other builds: ./bin/models.sh list"
   echo
   if [ "$ASSUME_YES" != "1" ] && [ -t 0 ]; then
-    printf 'Download it now? [y/N] '
+    if [ "$state" = "partial" ]; then
+      printf 'Resume it now? [y/N] '
+    else
+      printf 'Download it now? [y/N] '
+    fi
     read -r answer
     case "$answer" in
       y|Y|yes|YES) : ;;

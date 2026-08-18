@@ -104,6 +104,25 @@ section() {
 # Shorten a long path so the line still fits a normal terminal.
 shortpath() { echo "$1" | sed "s|^$HOME|~|"; }
 
+# The last lines the server wrote. Printed under a failed check rather than as
+# a row of its own, because it is evidence for the row above it, not a verdict.
+# mlx-serve rotates this file at 32 MB, so it is never the whole history.
+# $1 = "always" prints them even when the last server said goodbye; without it
+# a log that ends in an orderly shutdown gets one line instead of eight, because
+# then "not running" is not a surprise and there is nothing to explain.
+show_log_tail() {
+  if [ ! -f "$LOG_FILE" ]; then
+    echo "                        no log at $(shortpath "$LOG_FILE") — was the server started by ./bin/serve.sh?"
+    return 0
+  fi
+  if [ "${1:-}" != "always" ] && log_ended_cleanly "$LOG_FILE"; then
+    echo "                        the last server on this port shut down cleanly."
+    return 0
+  fi
+  echo "                        the last 8 lines of $(shortpath "$LOG_FILE"):"
+  log_tail "$LOG_FILE" 8 "                          " || true
+}
+
 # Every request to our own server goes through here. --api-key gates every
 # endpoint but /health — for non-loopback clients; the server trusts localhost
 # (see AGENT.md) — so the key is added in one place rather than remembered at
@@ -376,16 +395,25 @@ else
   row WARN "wired limit" "iogpu.wired_limit_mb=${wired} (set by hand) — recommend 0 (auto). Reverts on restart."
 fi
 
-disk="$(free_disk_gb)"
+# Two different questions, one function (hw_disk_need_gb, detect-hardware.sh).
+# Before the download: the peak, about twice the weights. After it: the prefix
+# cache the server is told it may write, which is what serve.sh refuses on.
+# The cache goes under ~/.mlx-serve, so that volume is the one measured once
+# the model is here.
+cache_gb="$(hw_size_gb "$PREFIX_CACHE_DISK")"
 if [ -f "$MODEL_DIR/config.json" ]; then
-  need_disk=5
+  disk="$(free_disk_gb "$HOME")"
+  need_disk="$(hw_disk_need_gb serve "$HW_WEIGHTS_GB" "$cache_gb")"
+  disk_what="for the ${PREFIX_CACHE_DISK} prefix cache + ${HW_DISK_SPARE_GB} GB spare"
 else
+  disk="$(free_disk_gb)"
   need_disk="$MIN_DISK_GB"
+  disk_what="to download ${MODEL_REPO}"
 fi
 if awk -v d="$disk" -v m="$need_disk" 'BEGIN { exit !(d >= m) }'; then
-  row PASS "disk" "${disk} GB free"
+  row PASS "disk" "${disk} GB free (need ${need_disk} ${disk_what})"
 else
-  row FAIL "disk" "${disk} GB free, need ${need_disk} GB" "docs/06-troubleshooting.md#disk-space"
+  row FAIL "disk" "${disk} GB free, need ${need_disk} ${disk_what}" "docs/06-troubleshooting.md#disk-space"
 fi
 
 # =============================================================================
@@ -412,8 +440,19 @@ else
   row SKIP "git-lfs enabled" "cannot check until git-lfs is installed"
 fi
 
+# Installed is not enough: every flag serve.sh passes was verified against
+# MLX_SERVE_MIN, and an older build answers one of them with an argparse error
+# a minute into a load. serve.sh refuses on the same comparison; this is the
+# row that says so before you get there.
 if command -v mlx-serve >/dev/null 2>&1; then
-  row PASS "mlx-serve" "$(mlx-serve --version 2>/dev/null | awk '{print $NF}' | head -1)"
+  mlx_ver="$(mlx_serve_version)"
+  if [ -z "$mlx_ver" ]; then
+    row WARN "mlx-serve" "installed, but it does not report its version in a shape this script knows (needs ${MLX_SERVE_MIN} or newer)"
+  elif version_lt "$mlx_ver" "$MLX_SERVE_MIN"; then
+    row FAIL "mlx-serve" "${mlx_ver} — older than the ${MLX_SERVE_MIN} this repo's flags need. Run: brew update && brew upgrade mlx-serve" "docs/02-install.md#mlx-serve"
+  else
+    row PASS "mlx-serve" "${mlx_ver} (needs ${MLX_SERVE_MIN} or newer)"
+  fi
 else
   row FAIL "mlx-serve" "not installed. Run: ./bin/setup.sh" "docs/02-install.md#mlx-serve"
 fi
@@ -437,24 +476,30 @@ else
 fi
 
 if [ "$model_ok" = "1" ]; then
-  n_shards=0; bad=""; bytes=0
+  n_shards=0; bytes=0
   while IFS= read -r shard; do
     [ -n "$shard" ] || continue
     n_shards=$((n_shards + 1))
-    sz="$(stat -f%z "$shard" 2>/dev/null || echo 0)"
-    bytes=$((bytes + sz))
-    if [ "$sz" -lt 1000000 ] && [ -z "$bad" ]; then
-      bad="$(basename "$shard") is a ${sz}-byte pointer"
-    fi
-  done < <(find "$MODEL_DIR" -name '*.safetensors' 2>/dev/null)
+    bytes=$((bytes + $(stat -f%z "$shard" 2>/dev/null || echo 0)))
+  done <<EOF
+$(model_shards "$MODEL_DIR")
+EOF
 
+  # Both halves of "is it whole?", asked over every shard by the same helpers
+  # serve.sh, start.sh and models.sh use: a shard still a git-lfs pointer, and
+  # a shard the checkpoint's index names that never arrived.
+  pointer="$(model_pointer_shard "$MODEL_DIR" || true)"
+  missing="$(model_missing_shards "$MODEL_DIR" | tr '\n' ' ')"
   gb="$(awk -v b="$bytes" 'BEGIN { printf "%.1f", b / 1073741824 }')"
   if [ "$n_shards" = "0" ]; then
     row FAIL "weights" "no .safetensors files found" "docs/03-get-the-model.md"
-  elif [ -n "$bad" ]; then
-    row FAIL "weights" "$bad" "docs/06-troubleshooting.md#lfs-pointers"
+  elif [ -n "$pointer" ]; then
+    row FAIL "weights" "${pointer% *} is a ${pointer##* }-byte pointer, not weights" "docs/06-troubleshooting.md#lfs-pointers"
+  elif [ -n "${missing// /}" ]; then
+    row FAIL "weights" "${n_shards} shards here, but the index names ${missing% } as well — the download stopped part way. Run: ./bin/download-model.sh" "docs/03-get-the-model.md"
   else
-    row PASS "weights" "${n_shards} shards, no pointers, ${gb} GB on disk (about ${HW_WEIGHTS_GB} GB is loaded)"
+    if [ "$n_shards" = "1" ]; then shard_word="shard"; else shard_word="shards"; fi
+    row PASS "weights" "${n_shards} ${shard_word}, no pointers, ${gb} GB on disk (about ${HW_WEIGHTS_GB} GB is loaded)"
   fi
 
   row PASS "model id" "$MODEL_ID"
@@ -610,6 +655,7 @@ print(c.get("prefix_cache_hits_total", 0), c.get("prefix_cache_queries_total", 0
       row PASS "/v1/messages" "round trip ok (8 tokens)"
     else
       row FAIL "/v1/messages" "the server did not answer a small test question" "docs/06-troubleshooting.md#no-server"
+      show_log_tail always
     fi
     # After the round trip, so a cold server has already reloaded the model
     # by the time these are timed against a real answer.
@@ -632,6 +678,10 @@ else
   if [ -f "$LOG_FILE" ]; then
     row SKIP "prefix cache" "the last run's log is at $(shortpath "$LOG_FILE") — look for [hot-cache] lines"
   fi
+  # Why it is not running is written in the log and was shown by nothing
+  # (AUDIT.md C3). A server that was stopped on purpose ends quietly here; one
+  # that died says so in these lines.
+  show_log_tail
 fi
 
 # =============================================================================

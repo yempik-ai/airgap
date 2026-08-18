@@ -144,11 +144,20 @@ if ! acquire_model_lock "bench.sh"; then
   exit 1
 fi
 
-if [ ! -f "$MODEL_DIR/config.json" ]; then
-  echo "error: no model at $MODEL_DIR" >&2
-  echo "       run: ./bin/download-model.sh" >&2
-  exit 1
-fi
+# The same question, and the same answer, as serve.sh: this script loads the
+# model too, and a half-downloaded folder is a crash a minute from now rather
+# than a message (bin/env.sh, AUDIT.md D2).
+case "$(model_state "$MODEL_DIR")" in
+  complete) : ;;
+  partial)
+    echo "error: the model at $MODEL_DIR is not completely downloaded." >&2
+    echo "       run: ./bin/download-model.sh      (it resumes where it stopped)" >&2
+    exit 1 ;;
+  *)
+    echo "error: no model at $MODEL_DIR" >&2
+    echo "       run: ./bin/download-model.sh" >&2
+    exit 1 ;;
+esac
 
 # --- Guard: is there enough free memory? -------------------------------------
 # This script loads the model, so it needs the same protection serve.sh has.

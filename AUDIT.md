@@ -18,9 +18,9 @@ environment facts established along the way. Read that file first — it exists 
 these findings are not researched twice.
 
 Items are referenced by id from [`ROADMAP.md`](ROADMAP.md). All are **OPEN**
-except `A1`, `A5`, `C1`, `B1`, `D3`, `E1`, `E4`, `A7`, `B3`, `B4` and `B5`,
-marked **DONE** below; §F is roadmap sequencing and was absorbed into `ROADMAP.md`
-Phases 2–3 on 2026-08-17.
+except `A1`, `A2`, `A4`, `A5`, `A6`, `A7`, `B1`, `B3`, `B4`, `B5`, `C1`, `C3`,
+`D1`, `D2`, `D3`, `D4` and `E1`, `E4`, marked **DONE** below; §F is roadmap
+sequencing and was absorbed into `ROADMAP.md` Phases 2–3 on 2026-08-17.
 
 Evidence is cited as `file:line` at the time of the audit. Line numbers drift;
 the greps are given where the reader will need to re-locate something.
@@ -47,20 +47,21 @@ marks *never measured*.
 | ✅ | `B3` say what `IDENTICAL` proves: this run, not the algorithm — **DONE** | small | high |
 | ✅ | `B5` a checked-in release gate, `RELEASE.md` — **DONE** | small | high |
 | ✅ | `B4` `bench.sh` ends as one row; `bench/` holds one file per Mac — **DONE** | small | high |
+| ✅ | `D1`+`D2` a truncated or half-arrived shard is caught, once, for everyone — **DONE** | small | high |
+| ✅ | `A4` `CTX_SIZE` refused above the model's own maximum, in `serve.sh` — **DONE** | small | high |
+| ✅ | `D4` `stop.sh` stops what holds the weights; names a foreign port holder — **DONE** | small | high |
+| ✅ | `A6` a minimum `mlx-serve` version, refused in `serve.sh` — **DONE** | small | high |
+| ✅ | `A2` a disk refusal for the prefix cache, from one function — **DONE** | small | high |
+| ✅ | `C3` say the log rotates; show its tail when a server is gone — **DONE** | small | medium |
 
-No numbered item is left. `E4` carried the largest measured speed-up in this
-audit and shipped opt-in, as required: a behavioural change with an unmeasured
-quality cost is not a default. Everything in §F is roadmap sequencing, not
-code — absorbed into `ROADMAP.md` Phases 2–3 (revised 2026-08-17), nothing
-left to do until Phase 2 starts. Still open, and why: `B2` (a context sweep)
-and `B6` (a quality suite — also the only way `E4`'s quality cost becomes a
-number) need the model loaded at length. Seven need neither the 27B nor a
-decision and are the next slice, ranked by user harm: `D1` + `D2` (a
-truncated shard passes verify; three "is it here?" checks read one shard),
-`A4` (`CTX_SIZE` guard in `serve.sh`), `D4` (`stop.sh` cannot stop a bench
-and misreports a foreign port holder), `A6` (`mlx-serve` minimum version),
-`A2` (disk guard for the prefix cache), `C3` (say the log rotates at 32 MB;
-show its tail on failure). `C4`, `E2`, `E3` need a measurement to say
+No numbered item is left that a machine with the model loaded is not needed
+for. `E4` carried the largest measured speed-up in this audit and shipped
+opt-in, as required: a behavioural change with an unmeasured quality cost is
+not a default. Everything in §F is roadmap sequencing, not code — absorbed
+into `ROADMAP.md` Phases 2–3 (revised 2026-08-17), nothing left to do until
+Phase 2 starts. Still open, and why: `B2` (a context sweep) and `B6` (a
+quality suite — also the only way `E4`'s quality cost becomes a number) need
+the model loaded at length; `C4`, `E2`, `E3` need a measurement to say
 anything honest; `A3`, `E5` need the 27B.
 
 ---
@@ -132,7 +133,33 @@ exists if a platform primitive is preferred over `mkdir` + `kill -0`.
 **Also update** `bin/serve.sh:35`, which says "Checks seven things" and
 enumerates 1–7 at `:36-41`.
 
-### A2 — no disk guard for the prefix cache
+### A2 — no disk guard for the prefix cache — **DONE**
+
+
+> **Shipped 2026-08-18.** `hw_disk_need_gb` (`bin/detect-hardware.sh`) is the
+> one place the arithmetic lives, with `hw_size_gb` to read `10GB`/`512MB`/`0`
+> and `HW_DISK_SPARE_GB=5` stated once as the policy number it is:
+>
+> - `download` — the larger of the peak (two copies of the download, until
+>   `git lfs dedup` reclaims one) and the steady state after it (weights +
+>   cache tier), plus the spare. `MIN_DISK_GB` now defaults to this instead of
+>   a hardcoded 45: **45** for the 5-bit 27B (unchanged, and now derived) and
+>   **20** for the 9B, where 45 was simply wrong. The DOWNLOAD size is the
+>   input, not the loaded size the memory guards use — the vision tower lands
+>   on disk (`catalog_download_gb_for_dir`).
+> - `serve` — the cache tier plus the spare, which is `serve.sh`'s new Guard 3
+>   and `doctor.sh`'s `disk` row once the model is here (it asked for a flat
+>   5 GB before). Measured on the volume holding `~/.mlx-serve`, not the
+>   checkout's, because that is where `kv-cache` goes.
+>
+> The refusal names the fix that is usually right — a smaller cache, not more
+> disk: `PREFIX_CACHE_DISK=2GB`, or `0` to keep only the memory tier (the
+> server documents `0/off disables`).
+>
+> Refusal transcript: `PREFIX_CACHE_DISK=100000GB ./bin/serve.sh` →
+> `REFUSING TO START — not enough free disk for the prefix cache. available:
+> 465.2 GB … required: 100005 GB`. Offline proof: `tests/serve-guards.sh`.
+
 
 `bin/env.sh:233` sets `PREFIX_CACHE_DISK=10GB` and `bin/serve.sh:253` passes it.
 `bin/doctor.sh:160-164` requires only 5 GB free once `config.json` exists, and
@@ -174,7 +201,28 @@ right because the server sizes the chunk to the memory it actually has, not
 because the formula models it. The formula still has no prefill term, and the
 27B's number is still missing; both remain this item.
 
-### A4 — `CTX_SIZE` is validated only in `doctor.sh`
+### A4 — `CTX_SIZE` is validated only in `doctor.sh` — **DONE**
+
+
+> **Shipped 2026-08-18.** `model_max_ctx` (`bin/env.sh`) is now the one reader
+> of `max_position_embeddings`, and `serve.sh` Guard 0b refuses above it:
+>
+> ```
+> REFUSING TO START — CTX_SIZE is larger than this model's own maximum.
+>   CTX_SIZE      : 999999 tokens
+>   model maximum : 262144 tokens (Qwen3.8-9B-mlx-4Bit/config.json)
+> ```
+>
+> It runs BEFORE the GPU-ceiling guard on purpose, so an oversized window is
+> refused for its own reason instead of as "the weights do not fit under the
+> ceiling" — a wrong reason is worse than no reason. `doctor.sh`'s `context`
+> row reads the same helper, so the advisory copy and the guard cannot
+> disagree. Quiet when the model is not downloaded (Guard 1 refuses that) or
+> python3 is missing. `serve.sh`'s help text went from eight checks to eleven
+> with this, `A6` and `A2`.
+>
+> Offline proof: `tests/serve-guards.sh`.
+
 
 Grepped for `max_position_embeddings` across `bin/` and `start.sh`: one hit,
 `bin/doctor.sh:370`. `serve.sh:250` passes `--ctx-size` unvalidated. So
@@ -236,7 +284,27 @@ One experiment settles both — `SERVE_TIMEOUT=30 IDLE_EVICT_SECS=5`, one cold
 ~20k-token turn, record which side aborts — and it produces the first real 27B
 prefill timing as a side effect.
 
-### A6 — no minimum-version check on `mlx-serve`
+### A6 — no minimum-version check on `mlx-serve` — **DONE**
+
+
+> **Shipped 2026-08-18.** `MLX_SERVE_MIN=26.8.8` in `bin/env.sh` — a fact
+> about the flags `serve.sh` passes, not a setting — with `mlx_serve_version`
+> and `version_lt` beside it. `serve.sh` Guard 0a refuses below it and names
+> `brew update && brew upgrade mlx-serve`; `doctor.sh`'s `mlx-serve` row FAILs
+> on the same comparison and prints the minimum beside the version; `setup.sh`
+> says it at install time, which is the earliest the answer exists. A version
+> that cannot be parsed is a WARN, never "too old": it is a shape this repo
+> does not know.
+>
+> Parsing was checked against the real binary and against what this file used
+> to say. `mlx-serve --version` prints **eight lines** on stdout, one per
+> component, plus a `[mem]` line on stderr — not the one `·`-separated line
+> `AGENT.md` recorded. The version is the first line's second field; the three
+> places that parsed it by hand now call the one helper.
+>
+> Offline proof: `tests/serve-guards.sh` stubs `mlx-serve --version` at 26.8.7,
+> 26.8.8 and 26.9.0.
+
 
 `serve.sh:245-276` passes `--kv-quant turbo4`, `--prefix-cache-disk`,
 `--idle-evict-secs`, `--metrics` and `--prefill-chunk` with no capability probe.
@@ -565,7 +633,23 @@ curl yields an empty `models_json` and falls through to `:300` — a **false WAR
 not a false FAIL, and doctor still exits 0. Hoist the header array above `:293`
 and reuse it for the metrics fetch in `C1`.
 
-### C3 — the log is unbounded, unread, and never surfaced on failure
+### C3 — the log is unbounded, unread, and never surfaced on failure — **DONE**
+
+
+> **Shipped 2026-08-18.** The log is not unbounded — `mlx-serve` rotates it at
+> 32 MB — and the repository now says so where a reader meets the setting:
+> `docs/07` §11's `LOG_FILE` row, `config.env.example`, and `docs/06`'s "How to
+> stop everything". That is the whole of the first half; nothing in `bin/`
+> rotates anything, which is correct.
+>
+> The second half is `log_tail` (`bin/env.sh`), and where it is called:
+> `stop.sh` prints the last 8 lines when there was nothing of ours to stop
+> **and** the last run did not end with the server's own goodbye line — the
+> case where "nothing is running" is a surprise and the reason is in the file.
+> `doctor.sh` prints them under a `/v1/messages` that failed, and under
+> `server not running`. Not a row of its own: it is evidence for the row above
+> it, not a verdict.
+
 
 Grepped `bin/` for `rotate|logrotate`: zero. At `LOG_LEVEL=debug` a long-lived
 server writes into `~/.mlx-serve/logs/` forever, on a Mac whose disk requirement
@@ -592,7 +676,25 @@ honoured one, and `doctor.sh` cannot tell them apart either.
 
 ## D. Verification that does not verify
 
-### D1 — `verify-model.sh` cannot detect a truncated shard
+### D1 — `verify-model.sh` cannot detect a truncated shard — **DONE**
+
+
+> **Shipped 2026-08-18.** Each shard is now measured against its own header:
+> `8 + hlen + max(data_offsets[1])` is where the last tensor has to end, and a
+> file shorter than that is truncated, by exactly the number of bytes it names.
+> The header is written first, so it survives every cut — which is why every
+> count in the report agreed and `verify PASS` was printed over weights that
+> load as garbage. A second check shipped with it for the shape that leaves
+> nothing behind to inspect: a shard `model.safetensors.index.json` names and
+> that never arrived at all. Still no content hashing, and still deliberately:
+> the publishers ship no checksums, and the byte comparison catches the failure
+> this item is about.
+>
+> Offline proof: `tests/verify-truncation.sh`, over folders built at test time
+> by `tests/fixtures/make-model.py` — whole at 1 and 5 shards, truncated,
+> missing, pointer. Built rather than committed because a shard has to be over
+> 1 MB to get past the pointer test, and a 1 MB blob does not belong in git.
+
 
 `bin/verify-model.sh:128-160` reads the safetensors header and uses
 `os.path.getsize` only for the <1 MB pointer test at `:130`. The loop sums
@@ -606,7 +708,31 @@ intact header — passes `verify PASS` and the manifest tensor-count check, beca
 the counts come from the header rather than the bytes. The user meets it as a
 load failure or garbage output. The comparison is two lines.
 
-### D2 — three of four "is the model here?" checks look at one shard
+### D2 — three of four "is the model here?" checks look at one shard — **DONE**
+
+
+> **Shipped 2026-08-18.** One helper set in `bin/env.sh` — `model_shards`,
+> `model_pointer_shard`, `model_missing_shards`, `model_state` — giving one
+> answer over every shard: `absent`, `partial`, `complete`. Every caller reads
+> it. `start.sh` says "Half here … About to resume it" and offers the resume
+> instead of "already here"; `models.sh` marks `~` in `list`, refuses `use`
+> with the `pull` that finishes it, and reports `PART downloaded` in `which`;
+> `serve.sh` Guard 2 names the pointer shard and the missing ones;
+> `doctor.sh`'s `weights` row and `download-model.sh`'s own final check ask the
+> same two questions.
+>
+> `env.sh`'s model discovery deliberately still counts a `partial` folder as
+> "the model here". Its question is *which folder*, not *is it whole* — and
+> skipping a half-downloaded folder would point everything at a build that is
+> not there and offer to download a different one, when the right answer is to
+> resume this one.
+>
+> Offline proof: `tests/model-state.sh` — shard 1 of 5 with the rest pointers,
+> shard 1 of 5 with the rest never written, a first-shard pointer, a folder
+> with a `config.json` and no weights, whole at 1 and 5 shards — plus a grep
+> rule that only `env.sh` and `verify-model.sh` may enumerate `*.safetensors`,
+> which is how the four answers drifted apart in the first place.
+
 
 `bin/models.sh:95-100` returns inside the first loop iteration; `start.sh:82-87`
 and `bin/env.sh:128-135` `break` after the first shard. Only `serve.sh:189-196`
@@ -711,7 +837,24 @@ its own comment at `:5219-5220` says it "deliberately does not rewrite malformed
 but balanced DSML into assistant text; semantic recovery belongs to the model".
 It is truncation repair, not general repair.)*
 
-### D4 — `stop.sh` cannot stop everything it implies
+### D4 — `stop.sh` cannot stop everything it implies — **DONE**
+
+
+> **Shipped 2026-08-18.** Three sources, unioned, instead of one `pkill`
+> pattern: the model lock (the only thing that knows about a holder with no
+> port — a `bench.sh` run) **and its children** (bench stays a shell and runs
+> `mlx-serve` as a child, so killing the lock's pid alone would leave the child
+> holding the weights); `lsof` on the port, which is also what tells our server
+> from somebody else's program; and the old `pgrep`, kept for the moments
+> around startup and shutdown when a server is not answering `lsof`. A foreign
+> holder is reported and left alone — `nothing of ours is running, but port
+> 11234 is held by node (pid 4821)` — where it used to read `nothing running on
+> port 11234.`, the opposite of the truth.
+>
+> Offline proof: `tests/stop-targets.sh` — a lock holder with a child (both
+> stopped, lock given back), a foreign listener on the port (reported, still
+> alive afterwards), and nothing at all.
+
 
 `bin/stop.sh:53` matches `mlx-serve.*--port ${PORT}`. `bench.sh:132-137` invokes
 mlx-serve with no `--port`, so a bench run holding ~19 GB cannot be stopped by

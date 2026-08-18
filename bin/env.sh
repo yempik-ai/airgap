@@ -88,6 +88,73 @@ if [ "${HW_APPLE_SILICON:-no}" = "yes" ]; then
   : "${CTX_SIZE:=$HW_CTX_SIZE}"
 fi
 
+# --- Is the model on disk, and is it whole? ----------------------------------
+# Six scripts ask "is the model here?", three of them used to answer it from
+# the first shard alone, and an interrupted download must not get six different
+# answers (AUDIT.md D2). `git lfs pull` leaves every shard
+# it has not reached as a ~135-byte pointer file, and a copy made by hand can
+# simply be missing them, so the question is answered over EVERY shard the
+# checkpoint declares — never over the first one found.
+#
+# These sit above the defaults rather than with the other helpers at the foot
+# of this file because env.sh's own model discovery, a few lines below, is one
+# of the callers.
+
+# The shard files present in model directory $1, one per line, top level only.
+model_shards() {
+  for _ms in "$1"/*.safetensors; do
+    if [ -f "$_ms" ]; then printf '%s\n' "$_ms"; fi
+  done
+  unset _ms
+}
+
+# The first shard of $1 that is not real weights, as "name bytes". A git-lfs
+# pointer is about 135 bytes of text; anything under 1 MB is one. Prints
+# nothing and returns 1 when every shard present is real.
+model_pointer_shard() {
+  for _ms in "$1"/*.safetensors; do
+    if [ -f "$_ms" ]; then
+      _mz="$(stat -f%z "$_ms" 2>/dev/null || echo 0)"
+      if [ "$_mz" -lt 1000000 ]; then
+        printf '%s %s\n' "$(basename "$_ms")" "$_mz"
+        unset _ms _mz
+        return 0
+      fi
+    fi
+  done
+  unset _ms _mz
+  return 1
+}
+
+# The shards model.safetensors.index.json names that are not on disk at all,
+# one per line. A transfer that stopped between files leaves no pointer behind
+# to find, so the index is the only record of what should be there. Prints
+# nothing when the checkpoint ships no index — not all of them do.
+model_missing_shards() {
+  _mi="$1/model.safetensors.index.json"
+  if [ ! -f "$_mi" ]; then unset _mi; return 0; fi
+  grep -o '"[^"]*\.safetensors"' "$_mi" 2>/dev/null | tr -d '"' | sort -u | while IFS= read -r _mn; do
+    if [ ! -f "$1/$_mn" ]; then printf '%s\n' "$_mn"; fi
+  done
+  unset _mi
+}
+
+# absent | partial | complete, for model directory $1.
+#   absent    nothing usable here: no config.json, or no shard files at all
+#   partial   a download that stopped: a shard is missing or still a pointer
+#   complete  config.json, and every shard the checkpoint declares is real
+model_state() {
+  if [ ! -f "$1/config.json" ] || [ -z "$(model_shards "$1")" ]; then
+    echo absent
+    return 0
+  fi
+  if model_pointer_shard "$1" >/dev/null || [ -n "$(model_missing_shards "$1")" ]; then
+    echo partial
+    return 0
+  fi
+  echo complete
+}
+
 # =============================================================================
 # Defaults. Each `: "${X:=y}"` means "if X has no value yet, make it y".
 # Anything already set by the steps above is left alone.
@@ -115,28 +182,30 @@ fi
 # disk but exactly one other model is, use the one you actually have. Otherwise
 # a Mac large enough for 8-bit would report "no model" at the 5-bit weights
 # sitting right next to the scripts.
-# Any directory holding a config.json and a real (non-pointer) .safetensors is a
-# usable model, whoever published it — so a 2-bit build, a 9B, or something you
-# fetched by hand is found just as readily as the default. If exactly one is
-# present, use it. If several are, say nothing: ./bin/models.sh use decides, and
-# guessing between them would silently serve a model you did not choose.
+# Any directory holding a config.json and shard files is a model, whoever
+# published it — so a 2-bit build, a 9B, or something you fetched by hand is
+# found just as readily as the default. If exactly one is present, use it. If
+# several are, say nothing: ./bin/models.sh use decides, and guessing between
+# them would silently serve a model you did not choose.
+#
+# A half-downloaded folder counts here on purpose. This step only answers
+# "which folder is the model"; whether that folder is WHOLE is model_state's
+# question, and the callers that must not proceed on a partial one — start.sh,
+# models.sh, serve.sh, bench.sh, doctor.sh — each ask it. Skipping the folder instead
+# would point everything at a build that is not there and offer to download a
+# different one, when the right answer is to resume this one.
 if [ -z "${MODEL_DIR:-}" ] && [ ! -d "$ROOT/$(basename "$MODEL_REPO")" ]; then
   _found=""; _n=0
   for _d in "$ROOT"/*/; do
     _d="${_d%/}"
-    [ -f "$_d/config.json" ] || continue
-    for _w in "$_d"/*.safetensors; do
-      [ -f "$_w" ] || continue
-      if [ "$(stat -f%z "$_w" 2>/dev/null || echo 0)" -gt 1000000 ]; then
-        _found="$_d"; _n=$((_n + 1))
-      fi
-      break
-    done
+    if [ "$(model_state "$_d")" != "absent" ]; then
+      _found="$_d"; _n=$((_n + 1))
+    fi
   done
   if [ "$_n" = "1" ]; then
     MODEL_DIR="$_found"
   fi
-  unset _found _n _d _w
+  unset _found _n _d
 fi
 : "${MODEL_DIR:=$ROOT/$(basename "$MODEL_REPO")}"
 
@@ -277,9 +346,23 @@ unset _YOURS_MIN_FREE_GB _YOURS_MAX_RESIDENT_MEM _YOURS_PREFIX_CACHE_MEM
 # what would be a stalled Mac into a clear message. Set 0 to bypass (not advised).
 : "${MIN_FREE_GB:=22}"
 
-# Refuse to download when less than this much disk is free. The download tool
-# keeps a second copy of every file until the last step reclaims it, so the
-# peak requirement is about double the final size.
+# Refuse to download when less than this much disk is free, worked out for the
+# build actually selected by hw_disk_need_gb (bin/detect-hardware.sh), which is
+# also where serve.sh's own disk refusal comes from — one function, so the two
+# cannot drift. The download peak is about double the final size, because
+# git-lfs keeps a second copy of every shard until the last step reclaims it.
+# 45 GB for the 5-bit 27B (2 x its 20.0 GB download + 5 spare); 20 GB for the
+# 9B, where the 10 GB cache tier the server writes afterwards is the larger of
+# the two figures. The DOWNLOAD size is the input here, not the loaded size the
+# memory guards use: the vision tower and the tokenizer files land on disk even
+# though the server never loads them. Falls back to the reference number on a
+# Mac detection cannot size.
+if [ "${HW_APPLE_SILICON:-no}" = "yes" ]; then
+  _dl="$(catalog_download_gb_for_dir "$(basename "$MODEL_DIR")")"
+  [ -n "$_dl" ] || _dl="$HW_WEIGHTS_GB"
+  : "${MIN_DISK_GB:=$(hw_disk_need_gb download "$_dl" "$(hw_size_gb "$PREFIX_CACHE_DISK")")}"
+  unset _dl
+fi
 : "${MIN_DISK_GB:=45}"
 
 : "${LOG_LEVEL:=info}"
@@ -320,6 +403,14 @@ unset _YOURS_MIN_FREE_GB _YOURS_MAX_RESIDENT_MEM _YOURS_PREFIX_CACHE_MEM
 : "${LEAN_MCP:=1}"
 
 # --- Tools -------------------------------------------------------------------
+# The oldest mlx-serve this repository is known to work with. Not a setting:
+# it is a fact about the flags serve.sh passes. Every flag in serve.sh was
+# verified against 26.8.8 (AGENT.md, "Verified environment facts"), and an
+# older brew build answers an unknown flag with an argparse error after every
+# guard has already passed. serve.sh refuses below it and doctor reports it.
+# Raise it in the same commit that starts passing a newer flag.
+MLX_SERVE_MIN="26.8.8"
+
 : "${CLAUDE_BIN:=claude}"
 : "${PYTHON_BIN:=python3}"
 # 1 makes setup.sh build the optional Python environment. Nothing in this repo
@@ -349,7 +440,7 @@ export ROOT MODEL_REPO MODEL_DIR MODEL_ID HOST PORT CTX_SIZE KV_QUANT NO_VISION 
        PREFIX_CACHE_MEM PREFIX_CACHE_DISK MAX_RESIDENT_MODELS MAX_RESIDENT_MEM \
        IDLE_EVICT_SECS SERVE_TIMEOUT PREFILL_CHUNK MIN_FREE_GB MIN_DISK_GB LOG_LEVEL LOG_FILE \
        LOCK_DIR API_KEY METRICS EXTRA_ARGS DEDUP LEAN_MCP CLAUDE_BIN PYTHON_BIN WITH_VENV \
-       BASE_URL
+       BASE_URL MLX_SERVE_MIN
 
 # =============================================================================
 # Helpers the other scripts use. You can also call them yourself:
@@ -363,9 +454,78 @@ export ROOT MODEL_REPO MODEL_DIR MODEL_ID HOST PORT CTX_SIZE KV_QUANT NO_VISION 
 # Full explanation and the honest caveat live in bin/detect-hardware.sh.
 available_gb() { hw_available_gb; }
 
-# Free space on the disk holding this repo, in GB.
+# Free space on the volume holding $1, in GB. Default: this repository, which
+# is where the weights go. The prefix cache's disk tier does not live there —
+# it goes under ~/.mlx-serve — so serve.sh asks about $HOME instead. On most
+# Macs that is the same volume; on a checkout kept on an external disk it is
+# not, and a check against the wrong one would be worthless.
 free_disk_gb() {
-  df -k "$ROOT" 2>/dev/null | awk 'NR==2 { printf "%.1f", $4 / 1048576 }'
+  df -k "${1:-$ROOT}" 2>/dev/null | awk 'NR==2 { printf "%.1f", $4 / 1048576 }'
+}
+
+# The largest context this model was built for, from its own config.json.
+# Prints the number, or nothing when there is no model, no python3, or no such
+# key. serve.sh refuses a CTX_SIZE above it; doctor reports it. One reader, so
+# the two cannot disagree about what the model says.
+model_max_ctx() {
+  [ -f "$1/config.json" ] || return 0
+  command -v "$PYTHON_BIN" >/dev/null 2>&1 || return 0
+  "$PYTHON_BIN" -c '
+import json, sys
+try:
+    c = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+t = c.get("text_config", c)
+v = t.get("max_position_embeddings") or c.get("max_position_embeddings")
+if isinstance(v, int) and v > 0:
+    print(v)
+' "$1/config.json" 2>/dev/null || true
+}
+
+# The mlx-serve version, e.g. 26.8.8. `mlx-serve --version` prints one line per
+# component — "mlx-serve 26.8.8", "mlx 0.32.0", "llama.cpp b10034", … — plus a
+# "[mem]" line on stderr; the number is the first line's second field. Prints
+# nothing when mlx-serve is missing or answers in a shape this does not know,
+# and every caller treats "nothing" as "cannot tell", never as "too old".
+mlx_serve_version() {
+  command -v mlx-serve >/dev/null 2>&1 || return 0
+  mlx-serve --version 2>/dev/null \
+    | awk 'NR == 1 { if ($2 ~ /^[0-9]+(\.[0-9]+)*$/) print $2; exit }'
+}
+
+# Is version $1 older than version $2? Dot-separated numbers, compared left to
+# right, a missing part reading as 0 — so 26.8 is older than 26.8.1. Returns
+# success when $1 is older, failure when it is the same or newer.
+version_lt() {
+  awk -v a="$1" -v b="$2" 'BEGIN {
+    n = split(a, x, "."); m = split(b, y, ".")
+    k = (n > m ? n : m)
+    for (i = 1; i <= k; i++) {
+      p = (i <= n ? x[i] + 0 : 0); q = (i <= m ? y[i] + 0 : 0)
+      if (p < q) exit 0
+      if (p > q) exit 1
+    }
+    exit 1
+  }'
+}
+
+# The last $2 (default 12) lines of log file $1, indented by $3. Returns 1 when
+# there is no log, so a caller can say so instead of printing a blank heading.
+# mlx-serve rotates this file at 32 MB, so it is the tail of the current file,
+# not of everything the server has ever written.
+log_tail() {
+  [ -f "$1" ] || return 1
+  tail -n "${2:-12}" "$1" 2>/dev/null | sed "s/^/${3:-  }/"
+}
+
+# Did the server that wrote log $1 stop on purpose? "Shutting down gracefully"
+# is mlx-serve's own goodbye line. This is what decides whether "nothing is
+# running" is an ordinary state or a surprise that needs the log explaining it,
+# in stop.sh and in doctor.sh alike.
+log_ended_cleanly() {
+  [ -f "$1" ] || return 1
+  tail -n 5 "$1" 2>/dev/null | grep -q 'Shutting down gracefully'
 }
 
 # Is the server answering on this port right now? Returns success or failure,

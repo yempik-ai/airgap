@@ -181,6 +181,65 @@ First public release.
   minute more, so the server aborts first and the side that can name the reason
   is the side that reports it. Claude Code 2.1.233 floors its own value at 300
   seconds, which is documented rather than worked around. Closes `AUDIT.md` A5.
+- **One answer to "is the model here?"** (`model_state` in `bin/env.sh`:
+  `absent`, `partial` or `complete`). Three of the four checks that asked it
+  looked at the first shard only, so a five-shard download interrupted after
+  shard 1 reported "already here", was accepted by `models.sh use`, and had its
+  resume skipped — the user met the problem two steps later in
+  `verify-model.sh`. It is now asked over every shard, and over the shards
+  `model.safetensors.index.json` names that never arrived at all. `start.sh`
+  offers the resume, `models.sh` marks `~` and refuses `use`, `serve.sh` names
+  the shard, `doctor.sh` reports it, `download-model.sh` checks the same two
+  things. `tests/model-state.sh`. Closes `AUDIT.md` D2.
+- **`verify-model.sh` now measures each shard against its own header.**
+  `8 + header + the last tensor's end offset` is where the file has to end; one
+  shorter than that is truncated, by exactly the bytes it names. The header is
+  written first, so it survives a full disk or a killed transfer intact — every
+  count in the report agreed and `verify PASS` was printed over weights that
+  load as garbage. It also fails on a shard the index names and that is not
+  there. `tests/verify-truncation.sh`, over folders built at test time by
+  `tests/fixtures/make-model.py`. Closes `AUDIT.md` D1.
+- **`CTX_SIZE` is refused above the model's own maximum** (`serve.sh`, from
+  `max_position_embeddings` in the checkpoint's `config.json` — one reader,
+  `model_max_ctx`, shared with doctor's `context` row). It was validated only
+  in the advisory script, so `CTX_SIZE=262144` on a model with a lower ceiling
+  inflated `MIN_FREE_GB`, could trip the GPU-ceiling guard for a reason that
+  was not the real one, and otherwise failed one request at a time. The guard
+  runs before that ceiling check, so the reason given is the true one. Closes
+  `AUDIT.md` A4.
+- **A minimum `mlx-serve` version** (`MLX_SERVE_MIN=26.8.8`, `bin/env.sh`).
+  Every flag `serve.sh` passes was verified against that build; an older one
+  answered with an argparse error a minute into a load, after every other guard
+  had passed. `serve.sh` refuses, `doctor.sh` FAILs the row, `setup.sh` says it
+  at install time. A version that cannot be parsed is a WARN, never "too old".
+  Closes `AUDIT.md` A6.
+- **A disk refusal for the prefix cache** (`serve.sh`), and `MIN_DISK_GB` is now
+  computed rather than typed. Disk was the one resource with no refusal
+  covering it: 6 GB free passed every check and then the server was told it
+  could write a 10 GB cache. Both numbers come from one function,
+  `hw_disk_need_gb` in `bin/detect-hardware.sh` — the download's peak (two
+  copies of the download until `git lfs dedup` reclaims one, or the weights
+  plus the cache tier, whichever is larger) and the server's need (the cache
+  tier), each plus 5 GB of spare for macOS. That leaves `MIN_DISK_GB` at 45 for
+  the 5-bit 27B, where it was, and lowers it to 20 for the 9B, where 45 was
+  simply wrong. The server's check is measured on the volume holding
+  `~/.mlx-serve`, which is where the cache goes, and names the fix that is
+  usually right: a smaller `PREFIX_CACHE_DISK`, or `0` to keep only the memory
+  tier. Closes `AUDIT.md` A2.
+- **`stop.sh` stops what holds the weights, not what matches a port.** It
+  matched `mlx-serve --port <PORT>`, so a `bench.sh` run — which passes no
+  `--port` at all — could not be stopped by the documented stop button while
+  holding about 20 GB, and a foreign program on the port was reported as
+  "nothing running on port 11234". It now takes the union of the model lock's
+  holder and its children, the `lsof` listeners on the port that are ours, and
+  the old pattern; a holder that is not ours is named and left alone.
+  `tests/stop-targets.sh`. Closes `AUDIT.md` D4.
+- **The server's log is described, and shown when it matters.** `mlx-serve`
+  rotates it at 32 MB — stated in `docs/07` §11, `config.env.example` and
+  `docs/06` — and when there was nothing to stop and the last run did not shut
+  down cleanly, `stop.sh` prints its last 8 lines. `doctor.sh` prints them
+  under a failed `/v1/messages` and under `server not running`. Closes
+  `AUDIT.md` C3.
 - `bin/verify-model.sh`, `bin/stop.sh`.
 - Nine documents, `docs/01` to `docs/09`, written for readers who have never
   opened a terminal, plus a glossary of every technical term used.

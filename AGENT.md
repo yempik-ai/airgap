@@ -20,11 +20,20 @@ two ever disagree, `AUDIT.md` is right.*
   Code 2.1.234) · `A7` (wired ceiling labelled ARITHMETIC; doctor quotes the
   server-measured 28.1 GB) · `B3` (`IDENTICAL` = observed on this run) ·
   `B5` (`RELEASE.md`) · `B4` (`bench.sh` ends as one row; `bench/` one file
-  per Mac). Details and numbers: `CHANGELOG.md`; status per item: `AUDIT.md`.
+  per Mac) · **the guards-that-do-not-guard slice: `D1`+`D2` (a truncated or
+  half-arrived shard is caught, and `model_state` in `env.sh` is the one
+  answer to "is the model here?"), `A4` (`CTX_SIZE` refused above the model's
+  own maximum), `D4` (`stop.sh` stops the lock holder and its children, and
+  names a foreign port holder), `A6` (`MLX_SERVE_MIN=26.8.8`, refused),
+  `A2` (`hw_disk_need_gb` — `MIN_DISK_GB` is computed and `serve.sh` refuses
+  a disk that cannot hold the prefix cache), `C3` (the log rotates at 32 MB,
+  and its tail is shown when a server is gone).** Details and numbers:
+  `CHANGELOG.md`; status per item: `AUDIT.md`.
   Two things a later session must not undo: the `docs/07` renumbering (a new
   §7; 7–13 → 8–14, cross-refs updated everywhere but `AUDIT.md`'s
   audit-time citations) and the six-line `claude-local.sh` banner.
-- **Roadmap position:** Phase 0.5 (the audit backlog) is complete, 7 of 7.
+- **Roadmap position:** Phase 0.5 (the audit backlog) is complete, and so is
+  every audit item that needs neither the 27B nor a measurement — 18 of 24.
   Phase 0 (credibility gaps, "before publishing") is 1 of 5 — the four left
   need hardware this machine cannot give while in use (the 27B loaded, a
   fresh user account, a 16 GB Mac, the `A5` stall experiment on the 27B);
@@ -32,12 +41,12 @@ two ever disagree, `AUDIT.md` is right.*
 - **Next, in order of value:** the 27B measurement (`AUDIT.md` A3, E5,
   `ROADMAP.md` Phase 0), which every "9B only" figure in this file is
   waiting on; `B2` (a context sweep — `bench.sh` already emits the row a
-  sweep would append, so it is a loop and a cap, 9B is enough to start) and `B6` (a quality suite,
-  the only way `E4`'s quality cost becomes a number) — both need the model
-  loaded at length. **Needing neither the 27B nor a decision, and the slice to
-  take when the machine is busy:** the seven guard fixes `AUDIT.md`'s "Order
-  of work" note ranks — `D1`+`D2`, `A4`, `D4`, `A6`, `A2`, `C3` — each small,
-  each provable offline (`tests/`) or with a refusal transcript.
+  sweep would append, so it is a loop and a cap, 9B is enough to start) and
+  `B6` (a quality suite, the only way `E4`'s quality cost becomes a number)
+  — both need the model loaded at length. Everything left in `AUDIT.md`
+  needs the 27B (`A3`, `E5`) or a measurement before it can say anything
+  honest (`C4`, `E2`, `E3`); there is no longer an offline slice to take
+  when the machine is busy.
 - **Blocked on memory, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `serve.sh` needs 22 GB free for
   it and a working day leaves ~14 (2026-08-18: a 3.2 GB VM, a browser,
@@ -75,8 +84,18 @@ two ever disagree, `AUDIT.md` is right.*
   switch, and the prefill chunk only when `PREFILL_CHUNK` pins one), passed by
   both `serve.sh` and `bench.sh`; a memory-relevant flag belongs in that list,
   not in either script.
+  Some things here are **not** settings and are therefore not on `ENV_KEYS`:
+  `MLX_SERVE_MIN` (the oldest `mlx-serve` the flags in `serve.sh` were verified
+  against — raise it in the commit that starts passing a newer flag), the
+  `model_*` helpers that answer "is the model here, and is it whole?" for the
+  five scripts that ask (`model_state` → `absent`/`partial`/`complete`), and
+  the readers `model_max_ctx`, `mlx_serve_version`, `version_lt`, `log_tail`
+  and `log_ended_cleanly`. A question two scripts ask belongs here, once.
 - `bin/detect-hardware.sh` — the memory model. Takes a weight size and a context
-  window, returns the budget the guards enforce.
+  window, returns the budget the guards enforce. The disk model is here too:
+  `hw_disk_need_gb download|serve` is the one place the download peak and the
+  prefix cache's disk requirement are worked out, and `MIN_DISK_GB`,
+  `serve.sh`'s disk refusal and doctor's `disk` row all read it.
 - `bin/serve.sh` — the only script that loads the model. Ends in `exec`, so
   nothing can run after the server is up.
 - `bin/doctor.sh` — checks, never changes. Every row carries a fix.
@@ -94,9 +113,21 @@ two ever disagree, `AUDIT.md` is right.*
   captured shape renders; `load-shape.sh` holds the `LOAD_SHAPE_ARGS`
   contract; `thinking-knob.sh` holds `claude-local.sh`'s `MAX_THINKING_TOKENS`
   guard (it points `PORT` at a closed port, so "past the guard" shows as the
-  no-server error); `wired-log.sh` holds doctor's `log_wired_gb` reader.
-  Rename one of those functions and the test says so by name.
-  `tests/run.sh` runs all; `.github/workflows/ci.yml` runs it on a macOS
+  no-server error); `wired-log.sh` holds doctor's `log_wired_gb` reader;
+  `model-state.sh` holds the `absent`/`partial`/`complete` contract and the
+  rule that only `env.sh` and `verify-model.sh` may enumerate shards;
+  `verify-truncation.sh` holds `verify-model.sh`'s byte and index checks;
+  `serve-guards.sh` fires four of `serve.sh`'s refusals with a stubbed
+  `mlx-serve` on `PATH` (which is also what stops a wrongly-passing guard
+  from loading 20 GB — `MIN_FREE_GB=999999` is the second backstop, so
+  "refused for memory" is how that test observes "got past everything
+  above"); `stop-targets.sh` gives `stop.sh` a lock holder with a child and a
+  foreign listener, checks which one it kills, and holds the rule that the
+  log's tail is printed only when the last run did not say goodbye. The last three build their
+  model folders with `tests/fixtures/make-model.py` at test time: a shard has
+  to be over 1 MB to get past the pointer test, and a 1 MB blob does not
+  belong in git. Rename one of the lifted functions and the test says so by
+  name. `tests/run.sh` runs all; `.github/workflows/ci.yml` runs it on a macOS
   runner and shellcheck on Ubuntu, on every push and pull request.
 
 ## Quality rules
@@ -143,8 +174,15 @@ and can stream expert weights from SSD for one model family. `airgap` passes
 none of it. See `AUDIT.md` §F for what that does and does not make reachable.
 
 ```
-$ mlx-serve --version
-mlx-serve 26.8.8 · mlx 0.32.0 · llama.cpp b10034 · gguf 3 · ds4 unknown
+$ mlx-serve --version          # eight lines on stdout, one per component,
+mlx-serve 26.8.8               # plus a "[mem] MLX buffer-pool cap …" line
+mlx 0.32.0                     # on STDERR. The version is line 1, field 2 —
+mlx-c fba4470b8907             # which is what mlx_serve_version() (env.sh)
+nax off (requires M5-class GPU)  # reads, and what MLX_SERVE_MIN compares.
+ggml 0.16.0 (505b1ed15)
+llama.cpp b10034
+gguf 3
+ds4 unknown
 $ mlx-serve --help | grep -E 'engine|ssd-streaming|ds4-mtp'
   --engine {auto|ds4|llama}   Engine selector for `.gguf` inputs ONLY
   --ssd-streaming             ds4 / DeepSeek-V4-Flash only

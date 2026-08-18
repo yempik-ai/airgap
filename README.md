@@ -71,7 +71,7 @@ git clone https://github.com/yempik-ai/airgap.git airgap && cd airgap
 ./bin/claude-local.sh   # window 2 — Claude Code, pointed at your Mac.
 ```
 
-`./bin/stop.sh` stops the server and hands the memory straight back.
+`./bin/stop.sh` stops whatever is holding the weights — the server on that port, or a `bench.sh` run that has no port at all — and hands the memory straight back. A program on the port that is not ours is reported, not killed.
 
 Free memory before starting the server — it refuses to start below the threshold and names the apps to close. Never used Terminal? [`docs/02-install.md`](docs/02-install.md) assumes nothing at all.
 
@@ -84,7 +84,7 @@ Free memory before starting the server — it refuses to start below the thresho
 |:--|:--|:--|
 | 1 | `./bin/setup.sh` | installs git-lfs + mlx-serve; checks Homebrew and Claude Code |
 | 2 | `./bin/download-model.sh` | the weights — size-checked against your Mac first, resumable, pointer-verified, de-duplicated |
-| 3 | `./bin/verify-model.sh` | proves the weights are real, not 135-byte placeholders |
+| 3 | `./bin/verify-model.sh` | proves every shard is real and whole — not a 135-byte placeholder, not one cut short by a full disk, and none missing that the index names |
 | 4 | `./bin/doctor.sh` | 22 checks, PASS/FAIL with a fix each. Changes nothing |
 | 5 | `./bin/serve.sh` | starts the server. Leave the window open |
 | 6 | `./bin/claude-local.sh` | Claude Code, second window, pointed at you |

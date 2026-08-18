@@ -143,6 +143,7 @@ for p in shards:
         continue
 
     parsed += 1
+    end = 0
     for name, meta in header.items():
         if name == "__metadata__":
             continue
@@ -156,8 +157,35 @@ for p in shards:
         offs = meta.get("data_offsets")
         if offs and len(offs) == 2:
             payload += offs[1] - offs[0]
+            end = max(end, offs[1])
             if is_vision(name):
                 vis_bytes += offs[1] - offs[0]
+
+    # Is the file as long as its own table of contents says it is? The header
+    # is written first and is intact in every shard a full disk or a killed
+    # pull cut short, so the counts above all agree and the missing bytes are
+    # invisible until the model loads as garbage. 8 bytes of header length,
+    # the header, then the tensors: the last one has to end at the last byte.
+    declared = 8 + hlen + end
+    if size < declared:
+        fail("%s is %d bytes, but its own table of contents describes %d -- it is truncated, %d bytes short"
+             % (os.path.basename(p), size, declared, declared - size),
+             "the transfer stopped part way. run: ./bin/download-model.sh   (it resumes)",
+             "or: cd '%s' && git lfs pull" % d)
+
+# Every shard the checkpoint's index names. A transfer that stopped BETWEEN
+# files leaves nothing behind to inspect, so the index is the only record that
+# the file was ever meant to be there.
+ipath = os.path.join(d, "model.safetensors.index.json")
+if os.path.exists(ipath):
+    try:
+        wanted = sorted(set(json.load(open(ipath)).get("weight_map", {}).values()))
+    except Exception:
+        wanted = []
+    gone = [f for f in wanted if not os.path.exists(os.path.join(d, f))]
+    if gone:
+        fail("the index names %d shard(s) that are not here: %s" % (len(gone), ", ".join(gone[:5])),
+             "run: ./bin/download-model.sh   (it resumes)")
 
 pointer_note = "no git-lfs pointers" if parsed == len(shards) else "SOME FILES UNREADABLE"
 print("shards   %d/%d headers parsed, %s" % (parsed, len(shards), pointer_note))

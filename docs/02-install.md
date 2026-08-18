@@ -1006,7 +1006,7 @@ disk     460.0 GB free (need 45 GB)
 [3/5] cloning metadata       GIT_LFS_SKIP_SMUDGE=1 (pointers now, weights next)
 [4/5] git lfs pull           about 20.0 GB — this is the long part
       Press Ctrl-C to stop. Running this command again resumes it.
-[4/5] git lfs pull           ok — no pointer files left
+[4/5] git lfs pull           ok — every shard the index names is real
       checking each file, then sharing its blocks — a minute or two on 20 GB
 [5/5] git lfs dedup          reclaimed 20.1 GB (462.5 GB free before, 482.6 GB after)
 
@@ -1275,12 +1275,12 @@ PASS  ram tier          36 GB total — workable, default build 27b-5bit at 6553
 PASS  gpu ceiling       weights + conversation (19.1 + 1.00 GB) fit under Apple's 27.0 GB ceiling (arithmetic — the server logs the real one at load)
 PASS  memory            36 GB total, 24.3 GB available (need 22)
 PASS  wired limit       iogpu.wired_limit_mb=0 (auto — about 27.0 GB by arithmetic) — recommended
-PASS  disk              460.4 GB free
+PASS  disk              460.4 GB free (need 15 for the 10GB prefix cache + 5 GB spare)
 ── tools ────────────────────────────────────
 PASS  homebrew          6.0.17
 PASS  git-lfs           3.7.1
 PASS  git-lfs enabled   switched on for your account
-PASS  mlx-serve         26.8.8
+PASS  mlx-serve         26.8.8 (needs 26.8.8 or newer)
 PASS  claude code       2.1.233
 ── model ────────────────────────────────────
 PASS  model dir         ~/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
@@ -1829,7 +1829,9 @@ cd ~/dev/local-llms/airgap
 You should see something like this:
 
 ```
+stopping pid 41288 (mlx-serve) — it holds the model lock: serve.sh, port 11234
 stopped.
+cleared the model lock (its holder, pid 41288, is gone).
 memory: 12.4 GB -> 31.8 GB available
 ```
 
@@ -1839,7 +1841,7 @@ than the first. That is the 19.1 GB coming back.
 If nothing was running, you see this instead, which is EXPECTED and harmless:
 
 ```
-nothing running on port 11234.
+nothing is holding the weights (and nothing is on port 11234).
 memory: 31.8 GB -> 31.8 GB available
 ```
 

@@ -76,3 +76,14 @@ catalog_loaded_gb_for_dir() {
   printf '%s\n' "$CATALOG" | awk -F'|' -v d="$1" '
     NF >= 4 { n = split($2, p, "/"); if (p[n] == d) { print ($4 != "" ? $4 : $3); exit } }'
 }
+
+# catalog_download_gb_for_dir <folder name>
+# Print the DOWNLOAD size in GB for a model folder named after a catalog
+# repository, or nothing. This is the disk question, not the memory one: the
+# vision tower and the tokenizer files land on disk even though the server
+# never loads them, so MIN_DISK_GB is worked out from this figure and the
+# memory guards from the loaded one above.
+catalog_download_gb_for_dir() {
+  printf '%s\n' "$CATALOG" | awk -F'|' -v d="$1" '
+    NF >= 3 { n = split($2, p, "/"); if (p[n] == d) { print $3; exit } }'
+}

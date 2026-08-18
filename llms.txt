@@ -47,9 +47,13 @@
   20.9 s. The quality cost is not measured. The server-side `--reasoning-budget`
   flag was measured inert and is not exposed.
 - The scripts refuse rather than warn: on a non-loopback host, on a build that
-  would not fit under Apple's GPU wired ceiling, below a free-memory floor, and
-  on a second attempt to load the weights while another process already holds
-  them (a lock at `~/.airgap/model.lock`, since two ~19.1 GB copies do not fit).
+  would not fit under Apple's GPU wired ceiling, below a free-memory floor, on a
+  second attempt to load the weights while another process already holds them
+  (a lock at `~/.airgap/model.lock`, since two ~19.1 GB copies do not fit), on
+  an `mlx-serve` older than the version every flag was verified against, on a
+  context size larger than the model's own maximum, on a disk that cannot hold
+  the prefix cache the server is configured to write, and on a model folder
+  whose shards are not all there.
 - No tokens-per-second figure for the 27B has been benchmarked by this project.
   The one measured speed is 57 tokens/s decode for the 9B (`keXjos/Qwen3.8-9B-mlx-4Bit`,
   60 greedy tokens, `bin/bench.sh`, Apple M3 Max 30 GPU cores). Any 27B speed

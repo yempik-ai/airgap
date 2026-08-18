@@ -77,12 +77,12 @@ PASS  ram tier          36 GB total — workable, default build 27b-5bit at 6553
 PASS  gpu ceiling       weights + conversation (19.1 + 1.00 GB) fit under Apple's 27.0 GB ceiling (arithmetic — the server logs the real one at load)
 PASS  memory            36 GB total, 24.3 GB available (need 22)
 PASS  wired limit       iogpu.wired_limit_mb=0 (auto — about 27.0 GB by arithmetic) — recommended
-PASS  disk              460.4 GB free
+PASS  disk              460.4 GB free (need 15 for the 10GB prefix cache + 5 GB spare)
 ── tools ────────────────────────────────────
 PASS  homebrew          6.0.17
 PASS  git-lfs           3.7.1
 PASS  git-lfs enabled   switched on for your account
-PASS  mlx-serve         26.8.8
+PASS  mlx-serve         26.8.8 (needs 26.8.8 or newer)
 PASS  claude code       2.1.233
 ─────────────────────────────────────────────
 21 pass, 0 warn, 0 fail, 1 skipped
@@ -865,11 +865,13 @@ is running.
 You should see something like this:
 
 ```
+stopping pid 41288 (mlx-serve) — it holds the model lock: serve.sh, port 11234
 stopped.
+cleared the model lock (its holder, pid 41288, is gone).
 memory: 12.4 GB -> 31.8 GB available
 ```
 
-Both numbers will differ. If it prints `nothing running on port 11234.`, this
+Both numbers will differ. If it prints `nothing is holding the weights`, this
 project is not the program holding the door. Continue to Step 2.
 
 **Step 2.** This lists what is using door 11234.
@@ -1133,7 +1135,7 @@ first — the benchmark loads its own copy of the model and two copies will not 
 ./bin/stop.sh
 ```
 
-You should see `stopped.` or `nothing running on port 11234.` Then run the
+You should see `stopped.` or `nothing is holding the weights`. Then run the
 benchmark from the repository folder. It loads the model twice and takes several
 minutes.
 
@@ -1182,7 +1184,9 @@ Run it from the repository folder.
 You should see something like this:
 
 ```
+stopping pid 41288 (mlx-serve) — it holds the model lock: serve.sh, port 11234
 stopped.
+cleared the model lock (its holder, pid 41288, is gone).
 memory: 12.4 GB -> 31.8 GB available
 ```
 
@@ -1520,27 +1524,47 @@ Anything beginning with `Apple M` works. Anything beginning with `Intel` does no
 ---
 
 <a id="disk-space"></a>
-## 19. "only N GB free, need 45 GB"
+## 19. Not enough free disk
 
 ### What you see
+
+One of two messages. Before the download:
 
 ```
 error: only 22 GB free, need 45 GB
        git-lfs keeps a second copy under .git/lfs until step 5 reclaims it,
 ```
 
-Your number will differ.
+Or, when you start the server:
+
+```
+REFUSING TO START — not enough free disk for the prefix cache.
+  available : 6.1 GB on the volume holding ~/.mlx-serve
+  required  : 15 GB (PREFIX_CACHE_DISK 10GB + 5 GB spare for macOS)
+```
+
+Your numbers will differ: both are worked out for the build you selected and the
+cache you configured, not typed into the script.
 
 ### What it means
 
-The model is about 20 GB on disk. During the download, the tool that fetches large files
-keeps a second copy of everything, so the folder is about 40 GB while it works.
-The download script asks for 45 GB up front so it cannot run out partway.
+**The first one** is the download. The model is about 20 GB on disk, and while it
+works the tool that fetches large files keeps a second copy of everything, so the
+folder is about 40 GB at its peak. The script asks for that up front so it cannot
+run out partway.
 
 After the download, a step called dedup reclaims the duplicate. That step copies
 no data and loses none — it checks each file first, so it takes a minute or two
 on modern Macs. The disk ends up with about 20 GB more free than it had at the
 peak.
+
+**The second one** is the prefix cache. `PREFIX_CACHE_DISK` tells the server it
+may keep up to that much of its cache on the SSD, under `~/.mlx-serve/kv-cache`,
+so a restart does not throw away work already done. Nothing used to check that
+the disk could hold it: 6 GB free passed every check and then a server was
+started that had been told it could write 10 GB. That is now a refusal, measured
+on the volume `~/.mlx-serve` is on — which is not this checkout's volume if you
+keep the repository on an external disk.
 
 This is a **FIX THIS** problem.
 
@@ -1579,9 +1603,23 @@ disk     512.3 GB free (need 45 GB)
 
 Output trimmed.
 
+**For the server's message, there is a second fix that is often the right one:**
+ask for a smaller cache instead of more disk. The disk tier is a speed feature,
+not a requirement — the memory tier keeps working without it.
+
+```bash
+PREFIX_CACHE_DISK=2GB ./bin/serve.sh    # a smaller tier
+PREFIX_CACHE_DISK=0 ./bin/serve.sh      # no disk tier at all
+```
+
+Put the value in `config.env` to keep it. [07 §5](07-tuning.md) explains what
+the two tiers do.
+
 ### How to know it is fixed
 
-`./bin/download-model.sh` gets past the `disk` line and starts the transfer.
+`./bin/download-model.sh` gets past the `disk` line and starts the transfer, and
+`./bin/doctor.sh` prints `PASS   disk` with the number it needs beside the number
+you have.
 
 ---
 
@@ -1806,7 +1844,9 @@ machine and is the reason this repository binds it to your Mac alone.
 You should see something like this:
 
 ```
+stopping pid 41288 (mlx-serve) — it holds the model lock: serve.sh, port 11234
 stopped.
+cleared the model lock (its holder, pid 41288, is gone).
 memory: 12.4 GB -> 31.8 GB available
 ```
 
@@ -1859,8 +1899,35 @@ Run these three in order, from the repository folder.
 ./bin/stop.sh
 ```
 
-You should see `stopped.` followed by a `memory:` line showing memory returned. If
-it says `nothing running on port 11234.`, nothing was running, which is also fine.
+You should see a line naming each thing it stopped, then `stopped.`, then a
+`memory:` line showing memory returned. If it says `nothing is holding the
+weights`, nothing was running, which is also fine.
+
+It asks three questions rather than one, because the port alone gives the wrong
+answer twice over:
+
+- **the model lock**, which is the only thing that knows about a holder with no
+  port — a `./bin/bench.sh` run passes no `--port` at all, and used to be
+  invisible to the stop button while holding about 20 GB. Its children are
+  stopped with it, or the child would keep the weights after the parent is gone.
+- **who is listening on the port**, read with `lsof`. A program there that is
+  **not** ours is reported and left alone:
+
+  ```
+  nothing of ours is running, but port 11234 is held by node (pid 4821).
+    That is not this repo's server, so it was left alone.
+  ```
+
+  That used to read `nothing running on port 11234.`, which was the opposite of
+  the truth. See [entry 10](#port-in-use).
+- **any `mlx-serve` this repo started on that port**, for the moments around
+  startup and shutdown when it is not answering `lsof`.
+
+When there was nothing to stop and the last server did **not** shut down
+cleanly, `stop.sh` prints the last 8 lines the server wrote — the one artifact
+that says why it is gone. `mlx-serve` rotates that log at 32 MB, so it is the
+tail of the current file rather than of everything ever written. `./bin/doctor.sh`
+shows the same lines under a server check that fails.
 
 ## How to undo everything
 

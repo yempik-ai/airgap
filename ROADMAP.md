@@ -80,8 +80,11 @@ Shipped code, unshipped evidence. Nothing here is a feature.
 ## Phase 0.5 — the audit backlog
 
 From the 2026-08-17 audit against `antirez/ds4`. These are small, they are
-independent of every abstraction below, and four of the six make the repository
-able to prove things it currently only asserts. Ordered as in `AUDIT.md`.
+independent of every abstraction below, and most of them make the repository
+able to prove things it previously only asserted. Ordered as in `AUDIT.md`.
+Complete as of 2026-08-18: every audit item that needs neither the 27B loaded
+nor a measurement is shipped. What is left in `AUDIT.md` is named at the end
+of its "Order of work".
 
 - [x] `A1` — an instance lock in `serve.sh`. The repository enforced "no two
       model loads" in `bench.sh` and not in the script that loads the model.
@@ -127,6 +130,27 @@ able to prove things it currently only asserts. Ordered as in `AUDIT.md`.
       unmeasured. **Shipped 2026-08-18** — passed through by
       `claude-local.sh`, guarded, on the banner; the server log confirms the
       request changes (`thinking=false`) through Claude Code 2.1.234.
+- [x] `D1`, `D2` — the download is verified for real. A shard cut short by a
+      full disk kept its header, so every count agreed and `verify PASS` was
+      printed over weights that load as garbage; and three of the four "is the
+      model here?" checks read one shard, so an interrupted multi-shard pull
+      reported "already here" and skipped its own resume.
+      **Shipped 2026-08-18** — `verify-model.sh` measures each shard against
+      its own header and against the index; `model_state` in `env.sh` is the
+      one answer every script reads. `tests/verify-truncation.sh`,
+      `tests/model-state.sh`.
+- [x] `A4`, `A6`, `A2` — three refusals `serve.sh` did not have: a `CTX_SIZE`
+      above the model's own maximum, an `mlx-serve` older than the build every
+      flag was verified against, and a disk that cannot hold the prefix cache
+      the server is about to be told to write. **Shipped 2026-08-18** — the
+      guard list in its help went from eight to eleven, and `MIN_DISK_GB` is
+      now computed by the same function as the new disk refusal.
+      `tests/serve-guards.sh`.
+- [x] `D4`, `C3` — the stop button stops what holds the weights (the model
+      lock's holder and its children, not a `--port` pattern a `bench.sh` run
+      never matches), names a foreign holder instead of calling it "nothing
+      running", and shows the last lines of the log when a server is gone and
+      did not say goodbye. **Shipped 2026-08-18** — `tests/stop-targets.sh`.
 
 Deliberately **not** in this list, and recorded in `AGENT.md` so it is not
 proposed again: a server-side reasoning budget. The flag exists, and it was

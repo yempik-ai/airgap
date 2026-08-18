@@ -204,23 +204,20 @@ echo "      Press Ctrl-C to stop. Running this command again resumes it."
          "Nothing is corrupted. Run this command again to continue:" \
          "./bin/download-model.sh"
 
-# Prove it. A weights file under 1 MB is a pointer file, not weights.
-bad=""
-while IFS= read -r shard; do
-  [ -n "$shard" ] || continue
-  sz="$(stat -f%z "$shard" 2>/dev/null || echo 0)"
-  if [ "$sz" -lt 1000000 ]; then
-    bad="$shard"
-    break
-  fi
-done < <(find "$MODEL_DIR" -name '*.safetensors' 2>/dev/null)
-
+# Prove it, over every shard: one still a pointer, or one the checkpoint's own
+# index names and that never arrived. Same two questions, same helpers, as
+# serve.sh, start.sh, models.sh and doctor.sh (bin/env.sh, AUDIT.md D2).
+bad="$(model_pointer_shard "$MODEL_DIR" || true)"
 if [ -n "$bad" ]; then
-  sz="$(stat -f%z "$bad" 2>/dev/null || echo 0)"
-  die "$(basename "$bad") is still a git-lfs pointer (${sz} bytes, expected >1 MB)" \
+  die "${bad% *} is still a git-lfs pointer (${bad##* } bytes, expected >1 MB)" \
       "run: cd '$MODEL_DIR' && git lfs pull"
 fi
-printf '[4/5] %-22s ok — no pointer files left\n' "git lfs pull"
+gone="$(model_missing_shards "$MODEL_DIR" | tr '\n' ' ')"
+if [ -n "${gone// /}" ]; then
+  die "the index names shards that are not here: ${gone% }" \
+      "run this command again — it resumes:  ./bin/download-model.sh"
+fi
+printf '[4/5] %-22s ok — every shard the index names is real\n' "git lfs pull"
 
 # --- 5. Reclaim the duplicate ------------------------------------------------
 # git-lfs keeps a second copy of every large file under .git/lfs. `git lfs

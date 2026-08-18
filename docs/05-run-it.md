@@ -581,12 +581,14 @@ cd ~/dev/local-llms/airgap && ./bin/stop.sh
 You should see something like this:
 
 ```
+stopping pid 41288 (mlx-serve) — it holds the model lock: serve.sh, port 11234
 stopped.
+cleared the model lock (its holder, pid 41288, is gone).
 memory: 12.4 GB -> 31.8 GB available
 ```
 
-Both figures are yours. If nothing was running you get `nothing running on port
-11234.` instead, followed by the same memory line. The command is safe to run
+Both figures are yours. If nothing was running you get `nothing is holding the
+weights` instead, followed by the same memory line. The command is safe to run
 when nothing is running.
 
 **If you do not see that.** If it says it is sending a stronger signal because the

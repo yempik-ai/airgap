@@ -149,8 +149,21 @@ fi
 # Homebrew's own, and skipping it produces an error that looks like a broken
 # tap rather than a missing permission.
 STEP=3
+# Installed is not the whole question: serve.sh refuses below MLX_SERVE_MIN, so
+# say it here, where a `brew upgrade` is one line away, rather than at the first
+# attempt to load a model (AUDIT.md A6).
+mlx_min_note() {
+  _v="$(mlx_serve_version)"
+  if [ -z "$_v" ]; then
+    echo "installed (version not reported in a shape this script knows; ${MLX_SERVE_MIN} or newer is needed)"
+  elif version_lt "$_v" "$MLX_SERVE_MIN"; then
+    echo "${_v} — OLDER than the ${MLX_SERVE_MIN} this repo needs. Run: brew update && brew upgrade mlx-serve"
+  else
+    echo "ok (${_v})"
+  fi
+}
 if command -v mlx-serve >/dev/null 2>&1; then
-  say "mlx-serve" "ok ($(mlx-serve --version 2>/dev/null | awk '{print $NF}' | head -1))"
+  say "mlx-serve" "$(mlx_min_note)"
 else
   if [ "$SKIP_BREW" = "1" ]; then
     say "mlx-serve" "missing, and SKIP_BREW=1 — not installing"
@@ -163,7 +176,7 @@ else
   say "mlx-serve" "brew install mlx-serve"
   brew install mlx-serve >/dev/null || fail "mlx-serve"
   command -v mlx-serve >/dev/null 2>&1 || fail "mlx-serve"
-  say "mlx-serve" "ok ($(mlx-serve --version 2>/dev/null | awk '{print $NF}' | head -1))"
+  say "mlx-serve" "$(mlx_min_note)"
 fi
 
 # --- 4. Claude Code ----------------------------------------------------------

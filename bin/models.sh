@@ -63,8 +63,9 @@ WHAT YOU SHOULD SEE
   `list` prints one row per model. The marks mean:
       ->  selected right now        ok    fits this Mac
       *   downloaded already        TIGHT close everything else first
-                                    NO    serve.sh would refuse: the weights do
-                                          not fit under this Mac's GPU ceiling
+      ~   part downloaded — a       NO    serve.sh would refuse: the weights do
+          shard is missing or a           not fit under this Mac's GPU ceiling
+          pointer; `pull` resumes it
 
 READ NEXT
   docs/03-get-the-model.md
@@ -88,17 +89,12 @@ resolve_repo() {
   printf '%s\n' "$line" | cut -d'|' -f2
 }
 
-# Is a model directory present and actually populated (not lfs pointers)?
-is_downloaded() {
-  d="$ROOT/$(basename "$1")"
-  [ -f "$d/config.json" ] || return 1
-  for f in "$d"/*.safetensors; do
-    [ -f "$f" ] || return 1
-    [ "$(stat -f%z "$f" 2>/dev/null || echo 0)" -gt 1000000 ] && return 0
-    return 1
-  done
-  return 1
-}
+# Is a model directory present and whole? absent, partial or complete, from the
+# one helper in bin/env.sh that every other script asks (AUDIT.md D2). This
+# used to look at the first shard only and answer "downloaded" for a five-shard
+# build with one shard in it.
+repo_state() { model_state "$ROOT/$(basename "$1")"; }
+is_downloaded() { [ "$(repo_state "$1")" = "complete" ]; }
 
 # --- subcommands -------------------------------------------------------------
 
@@ -114,7 +110,10 @@ cmd_list() {
     [ -z "$k" ] && continue
 
     mark="   "
-    is_downloaded "$repo" && mark="  *"
+    case "$(repo_state "$repo")" in
+      complete) mark="  *" ;;
+      partial)  mark="  ~" ;;
+    esac
     [ "$(basename "$MODEL_DIR")" = "$(basename "$repo")" ] && mark=" ->"
 
     # The same arithmetic serve.sh enforces, for this build on this Mac.
@@ -128,7 +127,7 @@ cmd_list() {
     printf '    %s\n\n' "$note"
   done
 
-  echo "  -> selected now      * already downloaded"
+  echo "  -> selected now      * already downloaded      ~ part downloaded (pull resumes)"
   echo
   echo "  ./bin/models.sh pull <key>     download one"
   echo "  ./bin/models.sh use  <key>     serve it from now on"
@@ -149,11 +148,18 @@ cmd_use() {
   repo="$(resolve_repo "$1")"
   dir="$ROOT/$(basename "$repo")"
 
-  if ! is_downloaded "$repo"; then
-    echo "models.sh: '$1' is not downloaded yet." >&2
-    echo "           get it first:  ./bin/models.sh pull $1" >&2
-    exit 1
-  fi
+  case "$(repo_state "$repo")" in
+    complete) : ;;
+    partial)
+      echo "models.sh: '$1' is only part downloaded — some shards are missing or" >&2
+      echo "           are still git-lfs pointers. Serving it would fail at load." >&2
+      echo "           finish it:  ./bin/models.sh pull $1   (it resumes)" >&2
+      exit 1 ;;
+    *)
+      echo "models.sh: '$1' is not downloaded yet." >&2
+      echo "           get it first:  ./bin/models.sh pull $1" >&2
+      exit 1 ;;
+  esac
 
   cfg="$ROOT/config.env"
   [ -f "$cfg" ] || { echo "# Written by ./bin/models.sh. Safe to edit by hand." > "$cfg"; }
@@ -187,11 +193,11 @@ cmd_which() {
   echo "selected  $(basename "$MODEL_DIR")"
   echo "repo      $MODEL_REPO"
   echo "folder    $MODEL_DIR"
-  if is_downloaded "$MODEL_REPO"; then
-    echo "state     downloaded"
-  else
-    echo "state     NOT downloaded — ./bin/models.sh pull $MODEL_REPO"
-  fi
+  case "$(model_state "$MODEL_DIR")" in
+    complete) echo "state     downloaded" ;;
+    partial)  echo "state     PART downloaded — ./bin/models.sh pull $MODEL_REPO resumes it" ;;
+    *)        echo "state     NOT downloaded — ./bin/models.sh pull $MODEL_REPO" ;;
+  esac
 }
 
 case "${1:-list}" in

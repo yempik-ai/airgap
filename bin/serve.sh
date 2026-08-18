@@ -32,15 +32,18 @@ BEFORE YOU RUN IT
       bash -c 'source bin/env.sh && echo "$(available_gb) GB available"'
 
 WHAT IT DOES
-  Checks eight things, then loads the model and waits for questions:
-    1. this Mac is Apple Silicon (MLX runs nowhere else)
-    2. weights plus conversation fit under Apple's GPU memory ceiling
-    3. the address it will listen on is this Mac and nothing else
-    4. EXTRA_ARGS contains no flag this repo refuses to pass
-    5. the model folder exists
-    6. the weights are real files, not 135-byte placeholders
-    7. nothing else on this Mac is already holding the weights
-    8. there is enough free memory (it refuses rather than stall your Mac)
+  Checks eleven things, then loads the model and waits for questions:
+     1. this Mac is Apple Silicon (MLX runs nowhere else)
+     2. mlx-serve is installed, and new enough for the flags used here
+     3. the conversation size fits what the model itself was built for
+     4. weights plus conversation fit under Apple's GPU memory ceiling
+     5. the address it will listen on is this Mac and nothing else
+     6. EXTRA_ARGS contains no flag this repo refuses to pass
+     7. the model folder exists
+     8. every shard is a real file, not a 135-byte placeholder
+     9. there is enough free disk for the cache the server is told to write
+    10. nothing else on this Mac is already holding the weights
+    11. there is enough free memory (it refuses rather than stall your Mac)
 
 WHAT IT COSTS
   Memory: the size of the selected model's weights while it is loaded — about
@@ -101,7 +104,72 @@ if [ "${HW_APPLE_SILICON:-no}" != "yes" ]; then
   exit 1
 fi
 
-# --- Guard 0b: do the weights fit under Apple's GPU memory ceiling? ----------
+# --- Guard 0a: is mlx-serve installed, and new enough? -----------------------
+# Every flag below was verified against MLX_SERVE_MIN (bin/env.sh), and nothing
+# older has been run here. A build that does not know one of them answers with
+# an argparse error AFTER every other guard in this file has passed, a minute
+# into a load — the exact shape of failure this script exists to pre-empt. A
+# version that cannot be read is not treated as too old: it is a shape this
+# repo does not know, and doctor's row says so.
+if ! command -v mlx-serve >/dev/null 2>&1; then
+  echo "REFUSING TO START — mlx-serve is not installed." >&2
+  echo >&2
+  echo "It is the server that loads the weights; nothing here works without it." >&2
+  echo >&2
+  echo "  install it: ./bin/setup.sh" >&2
+  echo >&2
+  echo "Read docs/02-install.md#mlx-serve." >&2
+  exit 1
+fi
+_have="$(mlx_serve_version)"
+if [ -n "$_have" ] && version_lt "$_have" "$MLX_SERVE_MIN"; then
+  echo "REFUSING TO START — mlx-serve ${_have} is older than the ${MLX_SERVE_MIN} this repo needs." >&2
+  echo "  installed : ${_have}" >&2
+  echo "  needed    : ${MLX_SERVE_MIN} or newer" >&2
+  echo >&2
+  echo "The flags this script passes — --kv-quant turbo4, --prefix-cache-disk," >&2
+  echo "--idle-evict-secs — were verified against ${MLX_SERVE_MIN}, and nothing older has" >&2
+  echo "been run here. A build that does not know one of them says so a minute" >&2
+  echo "from now, after every other check here has passed." >&2
+  echo >&2
+  echo "  update it: brew update && brew upgrade mlx-serve" >&2
+  echo >&2
+  echo "Read docs/02-install.md#mlx-serve." >&2
+  exit 1
+fi
+unset _have
+
+# --- Guard 0b: does the conversation size fit what the model was built for? --
+# CTX_SIZE is not free-form: every model states its own maximum in config.json,
+# and asking for more inflates MIN_FREE_GB, can trip the GPU-ceiling guard
+# below for the wrong reason, and otherwise fails one request at a time once
+# the server is up. Refuse here, where the number can still be changed.
+#
+# This runs BEFORE the ceiling guard on purpose — a wrong reason is worse than
+# no reason. It stays quiet when the model is not downloaded yet or python3 is
+# missing: Guard 1 refuses the first case, and doctor's "context" row is the
+# advisory copy of this check for the second.
+if [ -f "$MODEL_DIR/config.json" ]; then
+  _max="$(model_max_ctx "$MODEL_DIR")"
+  if [ -n "$_max" ] && [ "$CTX_SIZE" -gt "$_max" ] 2>/dev/null; then
+    echo "REFUSING TO START — CTX_SIZE is larger than this model's own maximum." >&2
+    echo "  CTX_SIZE      : ${CTX_SIZE} tokens" >&2
+    echo "  model maximum : ${_max} tokens ($(basename "$MODEL_DIR")/config.json)" >&2
+    echo >&2
+    echo "The server would size its conversation memory for a window the model" >&2
+    echo "cannot use, so this Mac would be asked for memory nothing will ever" >&2
+    echo "hold, and long turns would fail one request at a time." >&2
+    echo >&2
+    echo "  use the model's own maximum : CTX_SIZE=${_max} ./bin/serve.sh" >&2
+    echo "  or set CTX_SIZE in config.env to that number or less." >&2
+    echo >&2
+    echo "Read docs/07-tuning.md#2-the-one-setting-most-people-come-here-for-context-size." >&2
+    exit 1
+  fi
+  unset _max
+fi
+
+# --- Guard 0c: do the weights fit under Apple's GPU memory ceiling? ----------
 # GPU-wired memory cannot be swapped out. If the weights plus the conversation
 # do not fit under the ceiling Apple picks for this Mac, loading them is the one
 # thing in this stack that can leave the Mac unresponsive until you hold the
@@ -128,7 +196,7 @@ if [ "${HW_WIRED_OK:-yes}" = "no" ]; then
   exit 1
 fi
 
-# --- Guard 0c: is the server about to listen beyond this Mac? ----------------
+# --- Guard 0d: is the server about to listen beyond this Mac? ----------------
 # This checkpoint has had its refusal behavior removed and the server has no
 # password unless API_KEY is set. mlx-serve's own default address is 0.0.0.0,
 # which means every network this Mac is on. This repo overrides that to
@@ -149,7 +217,7 @@ case "$HOST" in
     ;;
 esac
 
-# --- Guard 0d: is EXTRA_ARGS trying to undo one of the guards? --------------
+# --- Guard 0e: is EXTRA_ARGS trying to undo one of the guards? --------------
 # EXTRA_ARGS is appended last and can therefore override anything above it.
 # Six flags are refused outright, because the help text above promises this
 # script never passes them and a promise the code does not keep is worthless.
@@ -184,19 +252,57 @@ if [ ! -f "$MODEL_DIR/config.json" ]; then
   exit 1
 fi
 
-# --- Guard 2: are the weights real files? ------------------------------------
+# --- Guard 2: is every shard a real file? ------------------------------------
 # git-lfs placeholder files are about 135 bytes of text. Ordinary git leaves
-# them behind and reports success. A "weights" file under 1 MB is one of them.
-while IFS= read -r shard; do
-  [ -n "$shard" ] || continue
-  if [ "$(stat -f%z "$shard" 2>/dev/null || echo 0)" -lt 1000000 ]; then
-    echo "error: $(basename "$shard") is still a git-lfs pointer, not weights." >&2
-    echo "       run: cd '$MODEL_DIR' && git lfs pull" >&2
-    exit 1
+# them behind and reports success. A "weights" file under 1 MB is one of them,
+# and a transfer that stopped between files leaves no file at all — which the
+# checkpoint's own index is the only record of. model_state (bin/env.sh) asks
+# both questions over every shard; the same answer is what start.sh, models.sh
+# and doctor report, so an interrupted download cannot be "already here" in one
+# script and missing in the next.
+if [ "$(model_state "$MODEL_DIR")" = "partial" ]; then
+  pointer="$(model_pointer_shard "$MODEL_DIR" || true)"
+  missing="$(model_missing_shards "$MODEL_DIR" | tr '\n' ' ')"
+  echo "error: the model at $MODEL_DIR is not completely downloaded." >&2
+  if [ -n "$pointer" ]; then
+    echo "       ${pointer% *} is still a git-lfs pointer (${pointer##* } bytes), not weights." >&2
   fi
-done < <(find "$MODEL_DIR" -name '*.safetensors' 2>/dev/null)
+  if [ -n "${missing// /}" ]; then
+    echo "       missing shards: ${missing% }" >&2
+  fi
+  echo "       run: ./bin/download-model.sh      (it resumes where it stopped)" >&2
+  echo "       or:  cd '$MODEL_DIR' && git lfs pull" >&2
+  exit 1
+fi
 
-# --- Guard 3: is something else already holding the weights? -----------------
+# --- Guard 3: is there enough free disk for the cache the server writes? -----
+# PREFIX_CACHE_DISK tells the server it may keep up to that much of the prefix
+# cache on the SSD, under ~/.mlx-serve/kv-cache. Nothing used to check that the
+# disk could hold it: 6 GB free passed every guard and then a server was told
+# to write 10 GB (AUDIT.md A2). The requirement comes from hw_disk_need_gb, the
+# same function MIN_DISK_GB comes from, and it is measured on the volume the
+# cache really goes to, which is $HOME and not always this checkout's volume.
+cache_gb="$(hw_size_gb "$PREFIX_CACHE_DISK")"
+need_disk="$(hw_disk_need_gb serve "$HW_WEIGHTS_GB" "$cache_gb")"
+free_home="$(free_disk_gb "$HOME")"
+if awk -v d="$free_home" -v m="$need_disk" 'BEGIN { exit !(d < m) }'; then
+  echo "REFUSING TO START — not enough free disk for the prefix cache." >&2
+  echo "  available : ${free_home} GB on the volume holding ~/.mlx-serve" >&2
+  echo "  required  : ${need_disk} GB (PREFIX_CACHE_DISK ${PREFIX_CACHE_DISK} + ${HW_DISK_SPARE_GB} GB spare for macOS)" >&2
+  echo >&2
+  echo "The server would be told it may write ${cache_gb} GB of cache onto a disk that" >&2
+  echo "cannot hold it. A Mac driven to zero free disk fails in ways a refusal" >&2
+  echo "here does not." >&2
+  echo >&2
+  echo "  smaller cache : PREFIX_CACHE_DISK=2GB ./bin/serve.sh" >&2
+  echo "  no disk cache : PREFIX_CACHE_DISK=0 ./bin/serve.sh   (the memory tier still works)" >&2
+  echo "  or free some disk and run this again." >&2
+  echo >&2
+  echo "Read docs/06-troubleshooting.md#disk-space." >&2
+  exit 1
+fi
+
+# --- Guard 4: is something else already holding the weights? -----------------
 # This comes BEFORE the memory guard on purpose. The memory guard is a snapshot,
 # and a snapshot is blind to a second server that is about to load but has not
 # allocated anything yet — and blinder still after the first server has
@@ -222,7 +328,7 @@ if ! acquire_model_lock "serve.sh, port $PORT"; then
   exit 1
 fi
 
-# --- Guard 4: is there enough free memory? -----------------------------------
+# --- Guard 5: is there enough free memory? -----------------------------------
 # Loading the weights into a Mac that is already tight is how you get a machine
 # that stalls, spins its fans, and stops responding to clicks. Refuse instead,
 # and say exactly what to close.
@@ -243,7 +349,7 @@ if [ "${MIN_FREE_GB}" != "0" ]; then
   echo "memory   ${avail} GB available (need ${MIN_FREE_GB} GB) — ok"
 fi
 
-# --- Guard 5: has Apple's GPU memory ceiling been raised? --------------------
+# --- Guard 6: has Apple's GPU memory ceiling been raised? --------------------
 # This is a warning, not a refusal. GPU-wired memory cannot be swapped out, so
 # raising this ceiling is the one change in this whole stack that can leave a
 # Mac unresponsive until you hold the power button. Apple's automatic value is

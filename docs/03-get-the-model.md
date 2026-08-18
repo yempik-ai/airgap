@@ -170,7 +170,7 @@ disk     460.4 GB free (need 45 GB)
 [3/5] cloning metadata       GIT_LFS_SKIP_SMUDGE=1 (pointers now, weights next)
 [4/5] git lfs pull           about 20.0 GB — this is the long part
       Press Ctrl-C to stop. Running this command again resumes it.
-[4/5] git lfs pull           ok — no pointer files left
+[4/5] git lfs pull           ok — every shard the index names is real
       checking each file, then sharing its blocks — a minute or two on 20 GB
 [5/5] git lfs dedup          reclaimed 20.1 GB (462.5 GB free before, 482.6 GB after)
 
@@ -227,7 +227,10 @@ only tell you the same thing more slowly.
 
 ## 5. Why 45 GB of disk for a 20 GB model
 
-This surprises people, so here is the whole story.
+This surprises people, so here is the whole story. (45 GB is the figure for the
+5-bit 27B. The number is worked out for the build **you** selected — 20 GB for
+the 9B, for instance — so the one your screen shows may differ from the one
+here. `./bin/doctor.sh` prints it in its `disk` row.)
 
 git-lfs writes each large file **twice**: once into the model folder where you
 can see it, and once into a hidden store inside the folder's `.git` directory.
@@ -301,6 +304,11 @@ description at the front of it, and reports what is inside. It reads a few
 hundred kilobytes in total. It never loads the 20 GB, never uses meaningful
 memory, and never starts the server. It finishes in under a second.
 
+Three questions, and the first two are the ones a half-finished download fails:
+is every shard the checkpoint's index names actually here, is each one as long
+as its own description says it is, and do the contents match the publisher's
+manifest.
+
 ```
 ./bin/verify-model.sh
 ```
@@ -332,12 +340,21 @@ same 5-bit build. It describes the files, not your machine. If your Mac was
 recommended the 4-bit or 8-bit build, the `model`, `quant`, `shards`, `tensors`
 and `size` lines describe that build instead.
 
-**If you do not see that.** Three failures are possible.
+**If you do not see that.** Five failures are possible.
 
 - `verify FAIL: <file> is 135 bytes — git-lfs pointer, not weights` — FIX THIS.
   This is the trap from Section 1. Run the command the message names, then run
   `./bin/verify-model.sh` again. Full entry:
   [06 — troubleshooting](06-troubleshooting.md#lfs-pointers).
+- `verify FAIL: <file> is N bytes, but its own table of contents describes M --
+  it is truncated` — FIX THIS by running `./bin/download-model.sh` again. A file
+  cut short by a full disk or a killed transfer keeps its table of contents,
+  because that is written first, so every count in the report above agrees and
+  only the byte comparison notices. The weights would load and answer nonsense.
+- `verify FAIL: the index names N shard(s) that are not here` — FIX THIS the
+  same way. A transfer that stopped **between** files leaves nothing behind to
+  inspect, so the checkpoint's own index is the only record that the file was
+  ever meant to be there.
 - `verify FAIL: expected 2207 tensors, found <n> — download is incomplete` —
   FIX THIS by running `./bin/download-model.sh` again. It continues where it
   stopped.
@@ -479,7 +496,8 @@ fits **your** Mac:
 ```
 
 It marks each row `ok`, `TIGHT` or `NO` against your own memory, `*` if you have
-already downloaded it, and `->` for the one selected right now. To change build:
+already downloaded it, `~` if a download of it stopped part way (`pull` resumes
+it), and `->` for the one selected right now. To change build:
 
 ```
 ./bin/stop.sh

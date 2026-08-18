@@ -894,12 +894,14 @@ First, stop the server. This is always the first move, and it is always safe.
 You should see something like this:
 
 ```
+stopping pid 41288 (mlx-serve) — it holds the model lock: serve.sh, port 11234
 stopped.
+cleared the model lock (its holder, pid 41288, is gone).
 memory: 12.4 GB -> 31.8 GB available
 ```
 
 Both numbers will differ on your Mac. If it prints
-`nothing running on port 11234.`, the server was already down and the problem is
+`nothing is holding the weights`, the server was already down and the problem is
 something else.
 
 Then confirm the memory came back.
@@ -981,7 +983,9 @@ This ends the server and returns the memory. Run it from the repository folder.
 You should see something like this:
 
 ```
+stopping pid 41288 (mlx-serve) — it holds the model lock: serve.sh, port 11234
 stopped.
+cleared the model lock (its holder, pid 41288, is gone).
 memory: 12.4 GB -> 31.8 GB available
 ```
 
