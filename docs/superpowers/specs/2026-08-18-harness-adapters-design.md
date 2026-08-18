@@ -158,32 +158,45 @@ carries today's `mcp`, `thinking` and `note` lines (the rest are common).
 
 ## `harness/codex.sh`
 
-`HARNESS_DIALECT=openai`, `HARNESS_BIN="$CODEX_BIN"`, `HARNESS_ONESHOT=(exec)`
-plus, if the 0.147.0 binary has it, the flag that lets `exec` run outside a
-git checkout (the probe may run from any folder).
+`HARNESS_DIALECT=openai`, `HARNESS_BIN="$CODEX_BIN"`,
+`HARNESS_ONESHOT=(exec --skip-git-repo-check)` (the probe may run from any
+folder; the flag is exec-only, so a hand-typed `run.sh codex exec …` outside
+a checkout types it too — documented, not a contract gap).
 Wiring is `-c key=value` overrides only — no file under `~/.codex` is
 written or read differently, no login required, `--oss` not used (Codex's
 own provider path can list and pull models by itself, which is a second
-actor in the middle). Keys, each to be confirmed present in the 0.147.0
-binary before use, and recorded in AGENT.md:
+actor in the middle).
+
+What the 0.147.0 binary was measured to accept (2026-08-18; each key checked
+with `codex exec --strict-config`, with a deliberate typo refused as the
+negative control; recorded in AGENT.md "Verified environment facts"):
 
 - `model_provider`, `model_providers.<id>.base_url` (`$BASE_URL/v1`),
-  `model_providers.<id>.wire_api` (`chat` — mlx-serve serves
-  `/v1/chat/completions`, not Responses), `-m "$MODEL_ID"`.
+  `model_providers.<id>.wire_api = "responses"` — `"chat"` is **refused**
+  by 0.147.0 ("no longer supported"); mlx-serve 26.8.8 serves
+  `/v1/responses`, and that pairing is what the probe verified.
+  `-m "$MODEL_ID"`.
 - `model_context_window=$CTX_SIZE`.
-- Per-provider retry and idle-timeout keys → 0 retries,
-  `client_timeout_ms` idle.
-- Whatever key disables auth requirement for a custom provider, if one is
-  needed for `exec` to run unauthenticated (to be found by running it).
-- `LEAN_MCP=1` → the override that empties `mcp_servers` (`-c
-  'mcp_servers={}'` if the TOML parser accepts it; else `--ignore-user-config`
-  is *not* an acceptable substitute — it drops the user's approvals too —
-  and the adapter says MCP cannot be switched off from the command line).
-- Telemetry/update-check keys, if any exist in 0.147.0.
+- Per-provider retry and stream-idle keys → 0 retries, `client_timeout_ms`
+  idle.
+- Auth: `exec` runs with no credentials, but left alone Codex sends the
+  ChatGPT OAuth token and account id to `base_url`. The adapter exports
+  `CODEX_API_KEY` (`$API_KEY`, or the placeholder `mlx-serve`), measured to
+  win; `OPENAI_API_KEY` is ignored by 0.147.0.
+- `LEAN_MCP=1` → `-c features.plugins=false` (10 → 4 MCP servers on the
+  test machine; the 4 declared in the user's `config.toml` cannot be
+  switched off from the command line — the banner, help and AGENT.md say
+  so). `-c 'mcp_servers={}'` parses and is ignored (overrides merge into
+  tables). `--ignore-user-config` is not used: it drops the user's approvals
+  too. Measured: 9,336 prompt tokens with `LEAN_MCP=1` vs 10,271 with
+  `LEAN_MCP=0` on the probe turn (935 per turn, 9B, two runs).
+- Telemetry/update-check keys, where 0.147.0 has them.
 
 Unknown or unverifiable keys are left unset with a comment saying so.
 
-`config.env.example` gains a `# --- Codex CLI ---` section with `#CODEX_BIN=codex`.
+`config.env.example` gains a `# --- Codex CLI ---` section with
+`#CODEX_BIN=codex`; `LEAN_MCP` moves to a harness-neutral `# --- Harnesses
+---` section with the Claude Code and Codex measurements each labelled.
 
 ## `bin/doctor.sh`
 
