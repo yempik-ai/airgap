@@ -29,7 +29,9 @@ WHAT IT DOES
                       server's own log and counters — see docs/07-tuning.md §5),
                       and whether the model can make a tool call — plainly and
                       streamed, the way Claude Code needs it
-    claude code       whether Claude Code will be pointed at your Mac
+    harness wiring    one row per harness/*.sh — installed, and which endpoint
+                      it targets — plus whether Claude Code specifically will
+                      be pointed at your Mac
 
   Each line starts with one of four words:
     PASS   this is fine
@@ -690,8 +692,47 @@ else
 fi
 
 # =============================================================================
-section "claude code wiring"
+section "harness wiring"
 # =============================================================================
+
+# The endpoint family HARNESS_DIALECT names, for the harness rows below — the
+# dialect's one consumer besides run.sh's own banner. An adapter whose real
+# endpoint disagrees with its dialect's default (harness/codex.sh: dialect
+# openai, but wired to /v1/responses, not /v1/chat/completions) says so itself
+# through an optional HARNESS_ENDPOINT, which the loop below prefers when set.
+harness_endpoint() {
+  case "$1" in
+    anthropic) echo "/v1/messages" ;;
+    openai)    echo "/v1/chat/completions" ;;
+    ollama)    echo "/api/chat" ;;
+    *)         echo "" ;;
+  esac
+}
+
+# One row per harness/*.sh — everything ./bin/run.sh can start, not just
+# Claude Code. Each adapter is sourced in a subshell so that HARNESS_DIALECT,
+# HARNESS_BIN and the rest, which every adapter sets at file scope, never leak
+# into doctor's own variables or into the next adapter's row; harness_wire is
+# never called, so nothing runs. env.sh is already sourced above, and its
+# variables reach the subshell without sourcing it again.
+for _h in "$ROOT"/harness/*.sh; do
+  [ -f "$_h" ] || continue
+  _hname="$(basename "$_h" .sh)"
+  read -r _dialect _bin _endpoint <<< "$(
+    (
+      # shellcheck source=/dev/null
+      source "$_h"
+      printf '%s\t%s\t%s\n' "$HARNESS_DIALECT" "$HARNESS_BIN" "${HARNESS_ENDPOINT:-}"
+    )
+  )"
+  [ -n "$_endpoint" ] || _endpoint="$(harness_endpoint "$_dialect")"
+  if command -v "$_bin" >/dev/null 2>&1; then
+    row PASS "$_hname" "$("$_bin" --version 2>/dev/null | awk '{print $1}') -> ${BASE_URL}${_endpoint}"
+  else
+    row WARN "$_hname" "'${_bin}' not found — run.sh will refuse" "docs/10-other-harnesses.md"
+  fi
+done
+unset _h _hname _dialect _bin _endpoint
 
 # A real key in your shell would take priority over the local server and send
 # your questions to Anthropic instead. claude-local.sh blanks it, but if you

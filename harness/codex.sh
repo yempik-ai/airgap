@@ -29,6 +29,11 @@
 # both; only one of them is still reachable from this harness.
 HARNESS_DIALECT=openai
 HARNESS_BIN="$CODEX_BIN"
+# bin/doctor.sh's harness row would otherwise print the openai dialect's
+# default endpoint, /v1/chat/completions — a lie for this adapter, which is
+# wired to wire_api="responses" above. This override, which doctor.sh prefers
+# over the dialect default when set, points that row at the truth.
+HARNESS_ENDPOINT=/v1/responses
 # One question, one answer, then exit. The prompt is the last argument.
 # --skip-git-repo-check because run.sh may be run from any folder, and
 # `codex exec` otherwise stops with "Not inside a trusted directory and
