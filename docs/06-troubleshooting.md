@@ -134,6 +134,13 @@ until something later fails strangely.
 
 This is a **FIX THIS** problem. Nothing is broken and nothing is lost.
 
+The same pointer files are what an **interrupted** download leaves behind for
+the parts it had not reached yet, even with git-lfs working perfectly. If that
+is your case — you stopped it, or the machine slept — the fix is simply to run
+it again, and
+[03 — get the model](03-get-the-model.md#resume) shows what each command says
+about a half-finished download.
+
 ### What to do
 
 **Step 1.** This checks whether git-lfs is installed at all.

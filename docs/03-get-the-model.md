@@ -223,6 +223,90 @@ If the command stopped anywhere earlier, fix the failure it named and run it
 again. Do not continue to Step 6 with a partial download; the checks there will
 only tell you the same thing more slowly.
 
+<a id="resume"></a>
+### If it stopped part way, and you come back later
+
+This is the ordinary case, not a disaster: you pressed Control-C, the laptop
+slept, or the wifi dropped. **Nothing is corrupted, and nothing already fetched
+is downloaded twice.** The model arrives as five separate files, and an
+interrupted transfer leaves the ones it had not reached as the 135-byte pointer
+files Section 1 describes, or missing altogether.
+
+Every command in this repository knows the difference between "here" and "all
+here", and each one says the same thing about it. Whichever you happen to run
+next, you are told to resume, and how.
+
+**`./start.sh`** — it offers the resume instead of starting over:
+
+```
+== 2 of 4: the model ==
+Half here: Qwen3.8-27B-Uncensored-OrcaRouter-MLX-4bit was downloaded part way and stopped.
+About to resume it. Nothing already fetched is downloaded twice.
+
+Resume it now? [y/N]
+```
+
+**`./bin/download-model.sh`** — the same thing, without the question. Step 3
+reports `already cloned — resuming at step 4` and the transfer picks up where it
+stopped.
+
+**`./bin/models.sh list`** — the build is marked `~` rather than `*`:
+
+```
+  ~ 27b-4bit        16.9 GB   needs 20 GB free   ok
+    OrcaRouter 4-bit. The default on a 32 GB Mac.
+```
+
+and `./bin/models.sh use` on it refuses, because selecting it would only move
+the failure to the server:
+
+```
+models.sh: '27b-4bit' is only part downloaded — some shards are missing or
+           are still git-lfs pointers. Serving it would fail at load.
+           finish it:  ./bin/models.sh pull 27b-4bit   (it resumes)
+```
+
+**`./bin/verify-model.sh`** — it names each file and what is wrong with it:
+
+```
+verify FAIL: model-00002-of-00005.safetensors is 132 bytes -- git-lfs pointer, not weights
+             run: cd '<your model folder>' && git lfs pull
+verify FAIL: the index names 1 shard(s) that are not here: model-00005-of-00005.safetensors
+             run: ./bin/download-model.sh   (it resumes)
+```
+
+**`./bin/doctor.sh`** — one FAIL row, in the `model` group:
+
+```
+FAIL  weights           model-00002-of-00005.safetensors is a 132-byte pointer, not weights  -> docs/06-troubleshooting.md#lfs-pointers
+```
+
+**`./bin/serve.sh`** — it refuses before it loads anything, which is the point:
+a half-downloaded model does not fail at the guard, it fails a minute later
+inside the loader with a message about tensors.
+
+```
+error: the model at <your model folder> is not completely downloaded.
+       model-00002-of-00005.safetensors is still a git-lfs pointer (132 bytes), not weights.
+       missing shards: model-00005-of-00005.safetensors
+       run: ./bin/download-model.sh      (it resumes where it stopped)
+```
+
+Your file names and byte counts will differ; a git-lfs pointer is about 135
+bytes and the shard numbering follows the build you chose. **The fix is the same
+line in every one of those messages**, and it is safe to run as many times as
+you like:
+
+```bash
+./bin/download-model.sh
+```
+
+Until 2026-08-18 three of those commands looked at the first file only, and a
+folder holding one shard of five reported itself downloaded — so the download
+was skipped and you met the problem two steps later, in `verify-model.sh`. If
+you are reading an older copy of this repository, that is the behaviour to
+expect.
+
 ---
 
 ## 5. Why 45 GB of disk for a 20 GB model
@@ -354,7 +438,8 @@ and `size` lines describe that build instead.
 - `verify FAIL: the index names N shard(s) that are not here` — FIX THIS the
   same way. A transfer that stopped **between** files leaves nothing behind to
   inspect, so the checkpoint's own index is the only record that the file was
-  ever meant to be there.
+  ever meant to be there. [Section 4 — if it stopped part way](#resume) walks
+  through what every other command says about the same folder.
 - `verify FAIL: expected 2207 tensors, found <n> — download is incomplete` —
   FIX THIS by running `./bin/download-model.sh` again. It continues where it
   stopped.
