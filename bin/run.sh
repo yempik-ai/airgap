@@ -208,6 +208,13 @@ fi
 # Run it in the background and poll: macOS ships no timeout(1). Input is
 # closed, so a harness that would rather have a conversation gives up instead
 # of waiting for a person who is not there.
+# bash announces a job it had to kill on the SHELL's own stderr ("Terminated:
+# 15", with the whole command line), which would land in the middle of the
+# report; `2>/dev/null` on `wait` does not catch it, because the notice is not
+# that builtin's output. So the shell's own stderr is put aside for exactly as
+# long as this job exists, and restored the moment it has been reaped.
+exec 3>&2 2>/dev/null
+
 started_ms="$(now_ms)"
 "$HARNESS_BIN" ${HARNESS_ARGS[@]+"${HARNESS_ARGS[@]}"} "${HARNESS_ONESHOT[@]}" \
   'Reply with exactly: AIRGAP OK' >"$probe_out" 2>"$probe_err" </dev/null &
@@ -229,7 +236,8 @@ while kill -0 "$probe_pid" 2>/dev/null; do
   sleep 1
   waited=$((waited + 1))
 done
-wait "$probe_pid" 2>/dev/null || true
+wait "$probe_pid" || true
+exec 2>&3 3>&-
 elapsed_ms=$(( $(now_ms) - started_ms ))
 took="$(awk -v ms="$elapsed_ms" 'BEGIN { printf "%.1f", ms / 1000 }')"
 
