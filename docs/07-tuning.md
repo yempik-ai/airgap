@@ -319,6 +319,28 @@ survives a restart of the server rather than being recomputed. The default here
 is 1536MB of memory and 10GB of disk: memory is the scarce resource on a 36 GB
 Mac, and the disk tier recovers most of the benefit for free.
 
+**What the memory tier holds, in tokens.** `PREFIX_CACHE_MEM` is set in bytes;
+the unit you think in is tokens. The two are joined by the per-token cost of the
+KV cache in Section 3 — for the 27B at `turbo4`, 16 KiB per token — so:
+
+```
+prompt tokens the memory tier can hold  ≤  PREFIX_CACHE_MEM ÷ KiB per token
+                                        =  1536 MB × 1024 ÷ 16  =  98,304 tokens
+```
+
+That is about four and a half copies of the 20,909-token block Claude Code sends
+(MEASURED, Section 2) — room for a few projects' instructions at once. For the
+9B, at 8 KiB per token, the same 1536 MB holds twice as many. `./bin/serve.sh`
+prints your own figure on its `prefix` banner line, and `./bin/doctor.sh` on
+its `prefix cache` row, worked out for the model and `KV_QUANT` you selected.
+It is a ceiling, not a promise: the state photographs the hybrid design needs
+([08 §8](08-how-it-works.md#8-prefix-caching-and-the-problem-the-hybrid-design-creates))
+share the same budget, and the server also caps the tier at **32 entries** by
+its own default (printed at load as `Hot prefix cache: ENABLED (capacity=32,
+…)`), one entry per distinct prompt prefix. Whether that cap binds before the
+byte budget when several projects are open has NOT been measured here; the flag
+that raises it, `--prefix-cache-entries`, is in [Section 12](#extra-args).
+
 If your Mac has memory to spare, raising the memory tier is the single most
 useful thing you can do with it.
 
@@ -326,7 +348,8 @@ useful thing you can do with it.
 PREFIX_CACHE_MEM=3GB ./bin/serve.sh
 ```
 
-You should see `prefix 3GB` on the banner's `budget` line.
+You should see `prefix 3GB` on the banner's `budget` line, and the `prefix`
+line under it saying how many tokens that is.
 
 **If you do not see that.** If the server refuses to start after this, you have
 taken memory the free-memory guard was counting on. Lower the value.
@@ -736,6 +759,33 @@ this refusal off, and that is deliberate.
 something to compare against. That is the only place in this repository where
 they appear.
 
+### <a id="hot-path-flags"></a>The flags that move this workload, none of them measured here
+
+The server has more knobs than this stack names. These are the ones that act on
+exactly what Claude Code does — a 20,000-token instruction block on every turn,
+and file edits that repeat text the model has just read — and until 2026-08-18
+no document here named them (`AUDIT.md` E2, E3). They are **not settings**:
+none has been measured on any machine, and a speed knob whose effect is unknown
+does not earn a name of its own (the same rule that made Section 7's thinking
+switch opt-in). Pass them through `EXTRA_ARGS`; the defaults are what
+`mlx-serve --help` states at 26.8.8, and are what you get if you pass nothing.
+
+| Flag | Server default | What it moves | Why it matters here |
+|---|---|---|---|
+| `--mtp-depth <n>` | adaptive — the server plans the depth per round, up to 6 (8 on M5-class chips); an explicit `n` hard-caps it | How many tokens the built-in guessing head drafts per round ([08 §6](08-how-it-works.md#6-speculative-decoding-writing-several-tokens-for-the-price-of-one)) | Only the OrcaRouter builds ship the head; on the 9B this does nothing. |
+| `--mtp-history-window <n>` | `0` = full history | Above 16,384 prompt tokens, the head builds its history only for the last `n`; the help text says windowing costs acceptance on stock Qwen heads | Every Claude Code turn is above 16,384 tokens (Section 2), so this always applies here. Whether a window helps or hurts is NOT MEASURED. |
+| `--pld-draft-len <n>` | `5` | Longest run of tokens prompt lookup will propose from text it has already seen ([08 §7](08-how-it-works.md#7-prompt-lookup-why-editing-files-is-fast)) | Prompt lookup is what makes file editing fast; a longer draft pays off only if the guesses keep landing. NOT MEASURED. |
+| `--pld-key-len <n>` | `3` | How many tokens must match before prompt lookup makes a proposal | Shorter keys propose more often and miss more often. NOT MEASURED. |
+| `--ssm-checkpoint-stride <n>` | `256` | How often, in tokens, the hybrid model's fixed-size state is photographed during prefill so a later turn can resume mid-prompt ([08 §8](08-how-it-works.md#8-prefix-caching-and-the-problem-the-hybrid-design-creates)); `0` disables capture, and with it prefix caching on hybrid models | A finer stride resumes closer to where the prompts diverge and costs cache memory; a coarser one the reverse. NOT MEASURED. |
+| `--ssm-checkpoint-max <n>` | `32` per cache entry | Cap on those photographs kept per entry; `0` = unlimited, bounded only by `PREFIX_CACHE_MEM` | Section 5. NOT MEASURED. |
+| `--prefix-cache-entries <n>` | `32` | Cap on distinct prefixes the memory tier keeps, independent of `PREFIX_CACHE_MEM`; `0` disables the cache | Section 5: with several projects open, this may evict a still-wanted prefix before the byte budget does. NOT MEASURED. |
+
+To try one and know whether it helped, change one flag at a time and read the
+server's own counters (Section 11) across the same task before and after.
+`./bin/bench.sh` does not pass `EXTRA_ARGS`, on purpose: its rows are comparable
+only because every load has the same shape, and a column for extra flags is
+part of the context-sweep work in `ROADMAP.md`, not this table.
+
 ---
 
 ## 13. <a id="never"></a>Settings deliberately left alone
@@ -758,7 +808,10 @@ the two most-recommended settings on the internet are both wrong here.
 
 Every setting this stack understands, with its default. All of them can go in
 `config.env` or in front of a command. The commented file `config.env.example`
-carries the same list with a longer explanation each.
+carries the same list with a longer explanation each. The server itself
+understands more flags than this stack names; the ones that act on this
+workload are listed, with their server defaults, in
+[Section 12](#hot-path-flags), and reach the server through `EXTRA_ARGS`.
 
 **Which model**
 

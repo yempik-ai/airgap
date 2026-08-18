@@ -31,7 +31,11 @@ two ever disagree, `AUDIT.md` is right.*
   per model — `model_kv_kib` reads it from `config.json`, the catalog's new
   `kv KiB/token` column stands in before download — and per `KV_QUANT`;
   the 9B's term halved, `KV_QUANT=off` is finally seen by the guards, the
-  reference budget is unchanged). Details and numbers:
+  reference budget is unchanged) · the offline halves of `E2` (`hw_kv_tokens`
+  — the prefix memory tier stated in prompt tokens on the banner, doctor's row
+  and `docs/07` §5, with the 32-entry cap named) and `E3` (`docs/07` §12's
+  table of the hot-path flags with server defaults, all labelled unmeasured,
+  none made a setting). Details and numbers:
   `CHANGELOG.md`; status per item: `AUDIT.md`.
   Two things a later session must not undo: the `docs/07` renumbering (a new
   §7; 7–13 → 8–14, cross-refs updated everywhere but `AUDIT.md`'s
@@ -50,10 +54,11 @@ two ever disagree, `AUDIT.md` is right.*
   — both need the model loaded at length, and the 9B is enough to start
   (it loads here with ~14 GB free; proven 2026-08-18). Only `A3`'s missing
   number, and `ROADMAP.md` Phase 0's first item, actually need the 27B.
-  **Still offline, and the slice to take when the machine is busy:** the
-  exposure-and-label half of `E3`, and the tokens-per-MB half of `E2` (the
-  per-token KV figure it needs, `HW_KV_KIB`, now exists — `F5` landed
-  2026-08-18).
+  **Nothing offline is left in the audit backlog** (2026-08-18): the halves
+  of `E2` and `E3` that remain are measurements (does the 32-entry cap bind
+  first; does any hot-path flag move this workload), and `bench.sh` would
+  need an `extra_args` column to take the second one — a `bench/` contract
+  change that belongs with `B2`.
 - **Blocked on memory, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `serve.sh` needs 22 GB free for
   it and a working day leaves ~14 (2026-08-18: a 3.2 GB VM, a browser,

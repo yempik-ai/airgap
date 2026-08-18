@@ -262,6 +262,29 @@ First public release.
   so: the per-group scale a quantized cache carries — mlx-serve does not
   publish its group size. The reference configuration is unchanged
   (22 / 21GB / 1536MB on 36 GB). `tests/kv-figure.sh`. Closes `AUDIT.md` F5.
+- **The prefix cache's memory tier is stated in tokens, and its other cap is
+  named.** `PREFIX_CACHE_MEM` is set in bytes and thought about in tokens;
+  `hw_kv_tokens` (`bin/detect-hardware.sh`) joins the two at the selected
+  model's per-token KV cost — 1536 MB is at most 98,304 prompt tokens for the
+  27B at `turbo4`, about four and a half of Claude Code's 20,909-token block,
+  twice that for the 9B. `serve.sh` prints it on a new `prefix` banner line,
+  doctor's `prefix cache` row carries it, `docs/07` §5 works it, always as an
+  upper bound: SSM checkpoints share the budget, and the server's own
+  32-entry cap (printed at load as `capacity=32`) may bind first — a
+  possibility now stated rather than absent. `hw_size_gb` keeps four decimal
+  places so 1000 MB no longer reads as 1 GB. Closes the tokens half of
+  `AUDIT.md` E2; whether the entry cap binds is a measurement and stays open.
+- **The server flags that act on this workload are named, with their
+  defaults, and labelled unmeasured.** `docs/07` §12 lists `--mtp-depth`,
+  `--mtp-history-window` (which applies to every Claude Code turn — all are
+  above its 16,384-token threshold), `--pld-draft-len`, `--pld-key-len`,
+  `--ssm-checkpoint-stride`, `--ssm-checkpoint-max` and
+  `--prefix-cache-entries`, each with the default `mlx-serve --help` states at
+  26.8.8, and says NOT MEASURED where it is. They reach the server through
+  `EXTRA_ARGS` and were deliberately not made settings: no effect is measured,
+  and an unmeasured speed knob does not earn a name (the rule that made
+  thinking-off opt-in). `config.env.example` and `docs/07` §14 point at the
+  table. Closes the label half of `AUDIT.md` E3.
 - `bin/verify-model.sh`, `bin/stop.sh`.
 - Nine documents, `docs/01` to `docs/09`, written for readers who have never
   opened a terminal, plus a glossary of every technical term used.

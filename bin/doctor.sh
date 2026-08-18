@@ -609,14 +609,19 @@ if server_up; then
     row SKIP "prefix cache" "no log at $(shortpath "$LOG_FILE") — was the server started by ./bin/serve.sh?"
   else
     { read -r cache_state; read -r cache_hit; read -r cache_hits; } <<< "$(cache_log_evidence "$LOG_FILE")"
+    # The memory tier in tokens (AUDIT.md E2): the byte budget the setting
+    # names, converted at this model's per-token KV cost. An upper bound —
+    # SSM checkpoints share it, and the server's own 32-entry cap may bind
+    # first (docs/07 §5).
+    cache_tokens="${PREFIX_CACHE_MEM} holds at most $(hw_kv_tokens "$PREFIX_CACHE_MEM" "$HW_KV_KIB") prompt tokens (arithmetic)"
     case "$cache_state" in
       "")
         row SKIP "prefix cache" "this server version does not report it in the log" ;;
       ENABLED*)
         if [ -n "$cache_hit" ]; then
-          row PASS "prefix cache" "log: ${cache_hit} — the biggest of ${cache_hits} hit(s) this run"
+          row PASS "prefix cache" "log: ${cache_hit} — the biggest of ${cache_hits} hit(s) this run; ${cache_tokens}"
         else
-          row PASS "prefix cache" "log: ${cache_state}; no repeated prompt served yet this run"
+          row PASS "prefix cache" "log: ${cache_state}; no repeated prompt served yet this run; ${cache_tokens}"
         fi ;;
       *)
         row WARN "prefix cache" "the server reports '${cache_state}' — every turn re-reads the whole prompt. See docs/07-tuning.md §5" ;;

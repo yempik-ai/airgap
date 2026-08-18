@@ -10,6 +10,8 @@
 #   - the reader on hybrid, dense, derived-head_dim, unfamiliar and broken shapes
 #   - every catalog entry carries a numeric figure
 #   - env.sh's cascade: config.json first, then the catalog, then "assumed"
+#   - hw_kv_tokens: a PREFIX_CACHE_MEM value as the prompt tokens it holds at
+#     that cost (AUDIT.md E2), and 1000MB not converting as 1 GB
 #
 # Usage, from the repo root:  bash tests/kv-figure.sh
 # Needs bash and python3. No server, no weights, no network. The env.sh cases
@@ -57,6 +59,19 @@ check "dense 64-layer, off"   "16.00"               "$(hw off    19.1 65536 256 
 # No figure at all is a loud failure, never a silent zero-cost conversation.
 got="$(HW_KV_QUANT=turbo4 HW_RAM_GB=36 bash -c "source '$ROOT/bin/detect-hardware.sh' && hw_rebudget 19.1 65536 '' 2>/dev/null; echo \"rc=\$?\"")"
 check "empty figure refused"   "rc=1"                "$got"
+
+# --- the memory tier in tokens (AUDIT.md E2) ---------------------------------
+# hw_kv_tokens turns a PREFIX_CACHE_MEM value into the prompt tokens it can
+# hold at this per-token cost: 1536 MB at 16 KiB/token (27B, turbo4) is 98,304.
+tok() { HW_KV_QUANT="$1" bash -c "source '$ROOT/bin/detect-hardware.sh' && hw_kv_tokens '$2' '$3'"; }
+check "1536MB, 27B, turbo4"    98304  "$(tok turbo4 1536MB 64)"
+check "3GB, 27B, turbo4"       196608 "$(tok turbo4 3GB 64)"
+check "1536MB, 9B, turbo4"     196608 "$(tok turbo4 1536MB 32)"
+check "1536MB, 27B, off"       24576  "$(tok off 1536MB 64)"
+check "1000MB is not 1 GB"     64002  "$(tok turbo4 1000MB 64)"
+check "budget 0"               0      "$(tok turbo4 0 64)"
+check "budget off"             0      "$(tok turbo4 off 64)"
+check "no per-token figure"    0      "$(tok turbo4 1536MB '')"
 
 # --- the reader ---------------------------------------------------------------
 # model_kv_kib from a shell that has sourced env.sh. LOCK_DIR is emptied so

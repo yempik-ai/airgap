@@ -272,6 +272,19 @@ hw_rebudget() {
   }')"
 }
 
+# hw_kv_tokens <size> <kv_kib_per_token>  — how many tokens of conversation a
+# KV budget of <size> (a settings value like 1536MB or 3GB) holds for a model
+# with this per-token cost at HW_KV_QUANT. The unit PREFIX_CACHE_MEM is set in
+# is bytes; the unit the user thinks in is tokens (AUDIT.md E2). Whole tokens,
+# rounded down. The same reader hw_size_gb uses handles the suffix.
+hw_kv_tokens() {
+  awk -v gb="$(hw_size_gb "$1")" -v kib="${2:-0}" \
+      -v bits="$(hw_kv_bits "${HW_KV_QUANT:-}")" 'BEGIN {
+    if (kib <= 0) { print 0; exit }
+    printf "%d\n", gb * 1048576 / (kib * bits / 16)
+  }'
+}
+
 hw_recommend() {
   HW_RAM_GB="$(hw_total_ram_gb)"
   HW_CHIP="$(hw_chip)"
@@ -427,8 +440,10 @@ EOF
 # (download-model.sh, serve.sh) and doctor's row read it from this function.
 
 # hw_size_gb <size> — a settings value like 10GB, 512MB, 2G, off or 0, as GB.
-# Prints a decimal. Anything unrecognised reads as 0, which is the safe
-# direction: it never inflates a requirement out of a value nobody understands.
+# Prints a decimal (four places: every caller either rounds up or converts
+# on, and 1000MB must not read as 1.0). Anything unrecognised reads as 0,
+# which is the safe direction: it never inflates a requirement out of a value
+# nobody understands.
 hw_size_gb() {
   awk -v s="${1:-0}" 'BEGIN {
     t = tolower(s)
@@ -437,7 +452,7 @@ hw_size_gb() {
     if (t ~ /kb?$/) n = n / 1048576
     else if (t ~ /mb?$/) n = n / 1024
     else if (t ~ /tb?$/) n = n * 1024
-    printf "%.1f", n
+    printf "%.4f", n
   }'
 }
 

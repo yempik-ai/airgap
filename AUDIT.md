@@ -54,6 +54,8 @@ marks *never measured*.
 | ✅ | `A2` a disk refusal for the prefix cache, from one function — **DONE** | small | high |
 | ✅ | `C3` say the log rotates; show its tail when a server is gone — **DONE** | small | medium |
 | ✅ | `F5` the KV figure per model (from `config.json`) and per `KV_QUANT` — **DONE** | small | high |
+| ✅ | `E2` the memory tier stated in tokens; the entry cap named — **DONE, tokens half** | small | high |
+| ✅ | `E3` the hot-path flags named, with server defaults, labelled unmeasured — **DONE, label half** | small | high |
 
 No numbered item is left that neither a loaded model nor a second machine is
 needed for. `F5` was the last: arithmetic over each checkpoint's own
@@ -64,8 +66,10 @@ not a default. Everything else in §F is roadmap sequencing, not code —
 absorbed into `ROADMAP.md` Phases 2–3 (revised 2026-08-17), nothing left to do
 until Phase 2 starts. Still open, and why: `B2` (a context sweep) and `B6` (a
 quality suite — also the only way `E4`'s quality cost becomes a number) need
-the model loaded at length; `C4`, `E2`, `E3` need a measurement to say
-anything honest. Of the measurements, only `A3`'s missing number needs the
+the model loaded at length; `C4` needs a measurement to say anything honest,
+and so do the halves of `E2` and `E3` that are still open — whether the
+32-entry cap binds before the byte budget, and whether any of the named flags
+moves this workload (their exposure-and-label halves landed 2026-08-18). Of the measurements, only `A3`'s missing number needs the
 27B; `B2`, `B6` and `E5`'s two questions are answerable on the 9B — `E5`'s
 own note says "needs the 27B loaded", and that is over-stated: what it has
 to compare is two `[hot-cache]` lines and how Claude Code's `-p` mode renders
@@ -968,7 +972,28 @@ printed in this repository's history, because airgap always passes the flag. If
 the engine picks ~4096 on 36 GB anyway, this collapses to a docs-and-measurement
 change with no behaviour delta on the test machine.
 
-### E2 — the prefix cache is tuned by bytes only
+### E2 — the prefix cache is tuned by bytes only — **DONE, the tokens half**
+
+> **Shipped 2026-08-18.** The conversion the audit asked for exists once,
+> `hw_kv_tokens <size> <kv_kib>` in `bin/detect-hardware.sh`, and it is per
+> model and per `KV_QUANT` because it is built on `F5`'s figure — 1536 MB at
+> the 27B's 16 KiB/token is 98,304 prompt tokens, about four and a half of
+> Claude Code's 20,909; the same budget holds twice that for the 9B. It is
+> quoted on a new `prefix` banner line in `serve.sh`, on doctor's `prefix
+> cache` row (verified against a live 9B: `5376MB holds at most 688128 prompt
+> tokens (arithmetic)`), and worked in `docs/07` §5, always as "at most":
+> SSM checkpoints share the budget and the server's own 32-entry cap —
+> which it prints at load as `capacity=32`, and which `docs/07` §5 now names
+> — may bind first. `hw_size_gb` prints four places instead of one so
+> 1000 MB does not convert as 1 GB. `--prefix-cache-entries` and
+> `--ssm-checkpoint-max` are named, with their server defaults, in the
+> `docs/07` §12 table (see `E3`) and reachable through `EXTRA_ARGS`.
+>
+> **Still open, and why:** whether the entry cap binds before the byte budget
+> for a user with several projects open is a measurement — two or three
+> Claude Code folders, the `/metrics.json` hit ratio and the log's
+> `[hot-cache]` lines before and after `--prefix-cache-entries 64`. Nothing
+> here claims it does; nothing here makes it a setting until it is known to.
 
 `serve.sh:252-253` passes `--prefix-cache-mem` and `--prefix-cache-disk`.
 `mlx-serve` also caps the cache **by entry count** (`--prefix-cache-entries`,
@@ -985,7 +1010,25 @@ though the repository owns the constant one section earlier: 1536 MB at
 16 KiB/token (`docs/07-tuning.md:137`) is roughly 98,000 tokens — about four
 Claude Code system prompts.
 
-### E3 — the hot-path speculative-decoding knobs are undocumented
+### E3 — the hot-path speculative-decoding knobs are undocumented — **DONE, the label half**
+
+> **Shipped 2026-08-18.** `docs/07` §12 gained a table, "The flags that move
+> this workload, none of them measured here": `--mtp-depth`,
+> `--mtp-history-window`, `--pld-draft-len`, `--pld-key-len`,
+> `--ssm-checkpoint-stride`, plus `E2`'s `--ssm-checkpoint-max` and
+> `--prefix-cache-entries` — each with the default `mlx-serve --help` states
+> at 26.8.8, what it moves, why it bears on this workload, and NOT MEASURED
+> where that is the truth. `config.env.example`'s `EXTRA_ARGS` comment and
+> `docs/07` §14's "every setting" claim both point at it. They were **not**
+> made settings, deliberately: no effect has been measured, and an unmeasured
+> speed knob does not earn a name — the rule that made `E4` opt-in. The
+> §14 claim stays true because it is about settings.
+>
+> **Still open, and why:** whether any of them helps is a measurement, and
+> `bench.sh` cannot take it yet — it does not pass `EXTRA_ARGS`, on purpose,
+> because its rows are comparable only while every load has the same shape.
+> An `extra_args` column is a `bench/` contract change and belongs with the
+> `B2` context sweep, not here.
 
 `docs/07` §13 claims to list *"every setting this stack understands"*. Grepped
 `docs/`, `bin/` and `config.env.example` for

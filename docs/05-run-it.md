@@ -143,6 +143,7 @@ model    /Users/<YOUR_USER_NAME>/dev/local-llms/airgap/Qwen3.8-27B-Uncensored-Or
 endpoint http://127.0.0.1:11234   (Anthropic: http://127.0.0.1:11234/v1/messages)
 context  65536 tokens, kv-quant turbo4
 budget   weights<=21GB, prefix 1536MB, idle-evict 900s
+prefix   1536MB in memory holds at most 98304 prompt tokens at this model's KV cost (arithmetic), 10GB on disk
 timeout  300s without a token before a question is given up on
 log      ~/.mlx-serve/logs/mlx-serve-11234.log
 

@@ -448,6 +448,12 @@ echo "model    $MODEL_DIR"
 echo "endpoint $BASE_URL   (Anthropic: $BASE_URL/v1/messages)"
 echo "context  $CTX_SIZE tokens, kv-quant $KV_QUANT"
 echo "budget   weights<=$MAX_RESIDENT_MEM, prefix $PREFIX_CACHE_MEM, idle-evict ${IDLE_EVICT_SECS}s"
+# The prefix budget in the unit the user thinks in (AUDIT.md E2): at most this
+# many prompt tokens fit in the memory tier at this model's per-token KV cost
+# — at most, because the SSM checkpoints a hybrid model keeps share the same
+# budget, and the server also caps the tier at 32 entries of its own default
+# (it prints "capacity=32" at load). Arithmetic; hw_kv_tokens says how.
+echo "prefix   $PREFIX_CACHE_MEM in memory holds at most $(hw_kv_tokens "$PREFIX_CACHE_MEM" "$HW_KV_KIB") prompt tokens at this model's KV cost (arithmetic), ${PREFIX_CACHE_DISK} on disk"
 if [ "$SERVE_TIMEOUT" = "0" ]; then
   echo "timeout  none — a stalled question is never given up on"
 else
