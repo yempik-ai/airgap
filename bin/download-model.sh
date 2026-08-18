@@ -168,7 +168,7 @@ if [ -n "$repo_gb" ]; then
   if [ "$(hw_wired_fits "$fit_gb" "$HW_KV_GB")" = "no" ]; then
     die "${MODEL_REPO} cannot be loaded on this Mac, so it is not worth downloading." \
         "weights + conversation : ${fit_gb} + ${HW_KV_GB} GB" \
-        "GPU wired ceiling      : ${HW_WIRED_AUTO_GB} GB (the value Apple picks for ${HW_RAM_GB} GB of memory)" \
+        "GPU wired ceiling      : ${HW_WIRED_AUTO_GB} GB (arithmetic — the rule Apple applies to ${HW_RAM_GB} GB of memory)" \
         "./bin/serve.sh would refuse to start it, for the reason docs/04-memory-safety.md#wired-limit gives." \
         "Pick a build that fits: ./bin/models.sh list" \
         "(To fetch it anyway, for a different Mac, clone it by hand:" \

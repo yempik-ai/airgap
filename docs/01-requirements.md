@@ -244,7 +244,7 @@ You should see something like this:
 chip           Apple M3 Max (30 GPU cores)
 memory         36 GB total, 24.3 GB available now
 compressor     8.3 GB  (pressure signal, NOT free memory)
-wired ceiling  27.0 GB  (auto — GPU-wired memory cannot be swapped)
+wired ceiling  27.0 GB  (auto — arithmetic; the server logs the real one at load)
 
 verdict        workable  --  The reference configuration. Fits, but you must close memory-hungry apps first.
 

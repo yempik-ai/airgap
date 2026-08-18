@@ -513,8 +513,11 @@ lock down.
 your Mac stall badly enough to need a force restart. Locked memory cannot be
 moved aside, so raising this too high leaves macOS itself with nowhere to go.
 The recommendation in this repository is to leave it at 0, which means Apple
-chooses. It resets on reboot. See [wired memory](#wired-memory) and
-[sysctl](#sysctl).
+chooses. What it chooses is estimated by the scripts (two thirds of memory to
+32 GB, three quarters above — arithmetic) and printed for real by the server at
+every load, as `[wired] mode=max limit=N MB` in its log; the two are 27.0 and
+28.1 GB on the 36 GB test machine. It resets on reboot. See
+[wired memory](#wired-memory) and [sysctl](#sysctl).
 
 ---
 

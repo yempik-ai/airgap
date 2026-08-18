@@ -18,7 +18,7 @@ environment facts established along the way. Read that file first — it exists 
 these findings are not researched twice.
 
 Items are referenced by id from [`ROADMAP.md`](ROADMAP.md). All are **OPEN**
-except `A1`, `A5`, `C1`, `B1`, `D3`, `E1` and `E4`, marked **DONE** below.
+except `A1`, `A5`, `C1`, `B1`, `D3`, `E1`, `E4` and `A7`, marked **DONE** below.
 
 Evidence is cited as `file:line` at the time of the audit. Line numbers drift;
 the greps are given where the reader will need to re-locate something.
@@ -41,6 +41,7 @@ marks *never measured*.
 | ✅ | `D3` doctor probes a streamed tool call — **DONE** | medium | high |
 | ✅ | `E1` stop overriding the engine's prefill sizing — **DONE** | small | medium |
 | ✅ | `E4` thinking off, opt-in — **DONE** | small | high |
+| ✅ | `A7` label the wired ceiling; doctor quotes the measured one — **DONE** | small | high |
 
 No numbered item is left. `E4` carried the largest measured speed-up in this
 audit and shipped opt-in, as required: a behavioural change with an unmeasured
@@ -230,7 +231,23 @@ argparse error after passing every guard — the exact failure doctor exists to
 pre-empt. `doctor.sh:320` already anticipates version drift for `mtp_loaded`;
 nothing generalises it.
 
-### A7 — the wired ceiling is arithmetic presented as fact
+### A7 — the wired ceiling is arithmetic presented as fact — **DONE**
+
+*Shipped 2026-08-18. Labelled ARITHMETIC at every statement — the function
+comment in `detect-hardware.sh`, its report line, both refusals (`serve.sh`,
+`download-model.sh`), doctor's two rows, `docs/04` §8, `docs/01`, the
+glossary. And the real number turned out to be reachable from Bash after all:
+`mlx-serve` prints Metal's ceiling at every load, `[wired] mode=max
+limit=28753 MB` on the test machine — 28.1 GB MEASURED against the 27.0 GB
+the rule gives (MLX's `max_recommended_working_set_size` reads the same
+28.08 GiB), so the arithmetic erred on the refusing side by 1.1 GB, n=1, and
+the rule is not corrected from one sample. `doctor.sh`'s `gpu ceiling` row
+now quotes the measured value beside the estimate whenever the log has one and
+FAILs a build that fits the estimate but not the measurement — the direction
+that stalls a Mac. The guards keep the estimate on purpose: it exists before
+any load and cannot go stale the way a log can. `tests/wired-log.sh` holds the
+reader.*
+
 
 `bin/detect-hardware.sh:119-127` computes the GPU ceiling as
 `g <= 32 ? g*2/3 : g*3/4`, and `docs/04-memory-safety.md:577-580` states it

@@ -142,6 +142,19 @@ cache_log_evidence() {
   ' "$1"
 }
 
+# The GPU wired ceiling the server measured at its last load, in GB, from the
+# "[wired] mode=max limit=N MB" line of the log's most recent run (scoped past
+# the last "Logging to" banner, like the cache reader above). This is Metal's
+# own number; the figure detect-hardware.sh computes is arithmetic that only
+# estimates it. Prints nothing when there is no log or no such line.
+log_wired_gb() {
+  awk '
+    /^Logging to /                    { v = "" }
+    /^\[wired\] .*limit=[0-9]+ MB/  { v = $0; sub(/^.*limit=/, "", v); sub(/ MB.*$/, "", v) }
+    END                               { if (v != "") printf "%.1f", v / 1024 }
+  ' "$1"
+}
+
 # The one capability Claude Code cannot do without is a tool call the server
 # hands back as a tool_use block — and it must arrive that way on the STREAMED
 # path, which is the one Claude Code uses, and which is assembled by different
@@ -322,10 +335,24 @@ case "${HW_VERDICT:-unknown}" in
     row WARN "ram tier" "could not work out this Mac's memory size" ;;
 esac
 
-if [ "${HW_WIRED_OK:-yes}" = "no" ]; then
-  row FAIL "gpu ceiling" "$(basename "$MODEL_DIR"): weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) do not fit under Apple's ${HW_WIRED_AUTO_GB} GB ceiling. Pick a smaller build: ./bin/models.sh list" "docs/04-memory-safety.md#wired-limit"
+# The ceiling the guards enforce is arithmetic (detect-hardware.sh says why).
+# When the server has run here, its log holds the number Metal actually gave,
+# so the row shows both and judges the build against both: the estimate can
+# err in either direction, and admitting a build the real ceiling cannot hold
+# is the failure that stalls a Mac.
+wired_measured=""
+[ -f "$LOG_FILE" ] && wired_measured="$(log_wired_gb "$LOG_FILE")"
+if [ -n "$wired_measured" ]; then
+  ceiling_note="Apple's ${HW_WIRED_AUTO_GB} GB ceiling (arithmetic; the server measured ${wired_measured} GB at its last load)"
 else
-  row PASS "gpu ceiling" "weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) fit under Apple's ${HW_WIRED_AUTO_GB} GB ceiling"
+  ceiling_note="Apple's ${HW_WIRED_AUTO_GB} GB ceiling (arithmetic — the server logs the real one at load)"
+fi
+if [ "${HW_WIRED_OK:-yes}" = "no" ]; then
+  row FAIL "gpu ceiling" "$(basename "$MODEL_DIR"): weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) do not fit under ${ceiling_note}. Pick a smaller build: ./bin/models.sh list" "docs/04-memory-safety.md#wired-limit"
+elif [ -n "$wired_measured" ] && ! awk -v w="$HW_WEIGHTS_GB" -v kv="$HW_KV_GB" -v lim="$wired_measured" 'BEGIN { exit !(w + kv <= lim) }'; then
+  row FAIL "gpu ceiling" "$(basename "$MODEL_DIR"): weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) fit the ${HW_WIRED_AUTO_GB} GB estimate but not the ${wired_measured} GB the server measured at its last load. Pick a smaller build: ./bin/models.sh list" "docs/04-memory-safety.md#wired-limit"
+else
+  row PASS "gpu ceiling" "weights + conversation (${HW_WEIGHTS_GB} + ${HW_KV_GB} GB) fit under ${ceiling_note}"
 fi
 
 avail="$(available_gb)"
@@ -342,7 +369,7 @@ fi
 wired="$(sysctl -n iogpu.wired_limit_mb 2>/dev/null || echo 0)"
 danger="$(hw_wired_danger_mb)"
 if [ "$wired" = "0" ]; then
-  row PASS "wired limit" "iogpu.wired_limit_mb=0 (auto, about ${HW_WIRED_AUTO_GB} GB) — recommended"
+  row PASS "wired limit" "iogpu.wired_limit_mb=0 (auto — about ${HW_WIRED_AUTO_GB} GB by arithmetic) — recommended"
 elif [ "$wired" -gt "$danger" ] 2>/dev/null; then
   row FAIL "wired limit" "iogpu.wired_limit_mb=${wired} — over 80% of ${HW_RAM_GB} GB. Run: sudo sysctl iogpu.wired_limit_mb=0" "docs/04-memory-safety.md#wired-limit"
 else

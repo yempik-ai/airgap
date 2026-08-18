@@ -591,10 +591,20 @@ a ceiling on how much of the pool can be wired for graphics work. That ceiling i
 a system setting named `iogpu.wired_limit_mb` (see
 [Glossary](09-glossary.md#iogpu-wired-limit-mb)).
 
-By default the setting reads `0`, which means "let macOS choose". macOS chooses
-roughly two thirds of your memory at 32 GB and below, and roughly three quarters
-above that. On the test machine that automatic value is about 27 GB out of 36 GB,
-leaving about 9 GB that can never be taken by the graphics processor.
+By default the setting reads `0`, which means "let macOS choose". What macOS
+chooses is not printed anywhere you can read from a shell, so this repository
+**estimates** it — ARITHMETIC, the commonly reported rule: two thirds of your
+memory at 32 GB and below, three quarters above. On the test machine that comes
+to 27 GB out of 36 GB, leaving about 9 GB the graphics processor can never take.
+
+The real number is Metal's own, and the server prints it every time it loads,
+as a line in its log: `[wired] mode=max limit=28753 MB` on the test machine —
+**28.1 GB, MEASURED**, against the 27.0 GB the arithmetic gives, so the estimate
+erred on the safe side there by 1.1 GB. That is one machine, and the rule is not
+corrected from one sample. `./bin/doctor.sh`'s `gpu ceiling` row quotes the
+measured value beside the estimate once a server has run here, and judges your
+build against both. The scripts' refusals use the estimate on purpose: it exists
+before anything is loaded, and it cannot go stale the way a log can.
 
 This checks the current value. It changes nothing.
 
@@ -623,7 +633,7 @@ this stack for three reasons.
 
 1. **This configuration does not need it.** The peak the arithmetic in Section 3
    gives for the test machine is about 23 GB, and the automatic ceiling there is
-   about 27 GB. There is already headroom. Raising the ceiling does not make the
+   27 GB by the estimate, 28.1 GB as measured. There is already headroom. Raising the ceiling does not make the
    model smaller.
 2. **What you take, you take from macOS.** Raising the ceiling to 30 GB on a 36 GB
    Mac leaves macOS about 6 GB of memory it can never reclaim. macOS is not a

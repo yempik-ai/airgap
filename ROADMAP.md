@@ -65,9 +65,14 @@ Shipped code, unshipped evidence. Nothing here is a feature.
       correct anything the docs promise that the fresh run does not show.
 - [ ] Run the small-Mac path for real (`HW_FORCE_RAM_GB=16` is arithmetic; a
       16 GB Mac is evidence).
-- [ ] Label the GPU wired ceiling, or replace it with the number MLX reports
+- [x] Label the GPU wired ceiling, or replace it with the number MLX reports
       (`AUDIT.md` A7). It is the figure behind the hardest refusal in the stack
-      and the only one carrying no label at all.
+      and the only one carrying no label at all. **Done 2026-08-18** — labelled
+      ARITHMETIC everywhere; the server prints Metal's real number at load
+      (`[wired] … limit=28753 MB`, 28.1 GB MEASURED against 27.0 estimated on
+      the test machine) and `doctor.sh` now quotes it beside the estimate and
+      judges the build against both. The guards keep the estimate, which
+      exists before any load.
 - [ ] Settle the two stall-timeout unknowns in one experiment (`A5`). It also
       produces the first real 27B prefill timing, which closes the first item
       above from a different direction.

@@ -109,7 +109,7 @@ fi
 if [ "${HW_WIRED_OK:-yes}" = "no" ]; then
   echo "REFUSING TO START — the weights do not fit under this Mac's GPU memory ceiling." >&2
   echo "  weights + conversation : ${HW_WEIGHTS_GB} + ${HW_KV_GB} GB" >&2
-  echo "  GPU wired ceiling      : ${HW_WIRED_AUTO_GB} GB (the value Apple picks for ${HW_RAM_GB} GB of memory)" >&2
+  echo "  GPU wired ceiling      : ${HW_WIRED_AUTO_GB} GB (arithmetic — the rule Apple applies to ${HW_RAM_GB} GB of memory)" >&2
   echo >&2
   echo "Memory reserved for the GPU cannot be swapped out, so loading this would" >&2
   echo "make this Mac stall until you force a restart." >&2

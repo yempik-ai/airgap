@@ -116,6 +116,17 @@ First public release.
   key already in the shell cannot take priority, declares the real context
   window, and switches off telemetry, error reporting, the auto-updater,
   marketplace auto-install and background tasks.
+- **The GPU wired ceiling is labelled, and doctor quotes the measured one.**
+  The 2/3-of-RAM (to 32 GB) / 3/4-above rule behind the stack's hardest
+  refusal was stated as fact; it is now labelled ARITHMETIC in
+  `detect-hardware.sh`, both refusals, doctor's rows, `docs/04` §8, `docs/01`
+  and the glossary. `mlx-serve` prints Metal's real number at every load
+  (`[wired] mode=max limit=N MB`); `doctor.sh`'s `gpu ceiling` row reads it
+  from the current run's log, shows it beside the estimate, and FAILs a build
+  that fits the estimate but not the measurement. MEASURED on the test
+  machine: 28753 MB = 28.1 GB against 27.0 estimated (n=1; the rule is not
+  changed). The guards keep the estimate, which exists before any load.
+  `tests/wired-log.sh` holds the reader. Closes `AUDIT.md` A7.
 - **Thinking can be turned off, opt-in** (`MAX_THINKING_TOKENS=0`, Claude
   Code's own name; `claude-local.sh` passes it through, refuses anything that
   is not a whole number, and reports it on a new `thinking` banner line).

@@ -74,9 +74,9 @@ airgap doctor
 PASS  macos             26.5.2 (arm64)
 PASS  apple silicon     Apple M3 Max, 30 GPU cores
 PASS  ram tier          36 GB total — workable, default build 27b-5bit at 65536 tokens
-PASS  gpu ceiling       weights + conversation (19.1 + 1.00 GB) fit under Apple's 27.0 GB ceiling
+PASS  gpu ceiling       weights + conversation (19.1 + 1.00 GB) fit under Apple's 27.0 GB ceiling (arithmetic — the server logs the real one at load)
 PASS  memory            36 GB total, 24.3 GB available (need 22)
-PASS  wired limit       iogpu.wired_limit_mb=0 (auto, about 27.0 GB) — recommended
+PASS  wired limit       iogpu.wired_limit_mb=0 (auto — about 27.0 GB by arithmetic) — recommended
 PASS  disk              460.4 GB free
 ── tools ────────────────────────────────────
 PASS  homebrew          6.0.17

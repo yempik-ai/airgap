@@ -14,7 +14,12 @@ against the installed binaries, and what has already been tried and found false.
 not a record — [`AUDIT.md`](AUDIT.md) holds the status of every item, and if the
 two ever disagree, `AUDIT.md` is right.*
 
-- **Last landed:** `E4` (thinking off, opt-in), 2026-08-18. `MAX_THINKING_TOKENS`
+- **Last landed:** `A7`, 2026-08-18 — the wired ceiling is labelled
+  ARITHMETIC everywhere it is stated, and `doctor.sh`'s `gpu ceiling` row
+  quotes the number the server measured (`[wired] mode=max limit=N MB` in
+  the log's current run; 28.1 GB here against 27.0 estimated — fact below)
+  and FAILs a build the measured one cannot hold. `tests/wired-log.sh` holds
+  the reader. Before it, same day, `E4` (thinking off, opt-in). `MAX_THINKING_TOKENS`
   — Claude Code's own name — is on `ENV_KEYS`, has no default, and
   `claude-local.sh` exports it only when set, refuses a value that is not a
   whole number, and reports it on a `thinking` banner line (so the banner is
@@ -29,19 +34,14 @@ two ever disagree, `AUDIT.md` is right.*
   `bench.sh` lock release, `tests/` and CI (green on GitHub, run
   `32121837232`; pin any new action at a Node-24 major).
 - **Roadmap position:** Phase 0.5 (the audit backlog) is complete, 7 of 7.
-  Phase 0 (credibility gaps, "before publishing") is 0 of 5 — four of them
+  Phase 0 (credibility gaps, "before publishing") is 1 of 5 — the four left
   need hardware this machine cannot give while in use (the 27B loaded, a
   fresh user account, a 16 GB Mac, the `A5` stall experiment on the 27B);
-  the fifth, `A7` — label the GPU wired ceiling as ARITHMETIC in
-  `detect-hardware.sh` and `docs/04` — needs nothing but this repo (the
-  real number is Metal's `recommendedMaxWorkingSetSize`; `sysctl
-  iogpu.wired_limit_mb` reads `0` = auto here and does not reveal it, and
-  asking MLX is Python, out of scope — so label, do not replace). Phases
-  1–4 are not started.
+  the fifth, `A7`, is done. Phases 1–4 are not started.
 - **Next, in order of value:** the 27B measurement (`AUDIT.md` A3, E5,
   `ROADMAP.md` Phase 0), which every "9B only" figure in this file is
-  waiting on; `A7`, the one Phase 0 item an agent can close alone; the
-  quality cost of `E4`, which needs `B1`'s suite to become a number; §F
+  waiting on; the quality cost of `E4`, which needs a quality suite
+  (`AUDIT.md` B6) to become a number; §F
   (roadmap sequencing, no code). Nothing here is blocked on a decision.
 - **Blocked on memory, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `serve.sh` needs 22 GB free for
@@ -95,8 +95,8 @@ two ever disagree, `AUDIT.md` is right.*
   captured shape renders; `load-shape.sh` holds the `LOAD_SHAPE_ARGS`
   contract; `thinking-knob.sh` holds `claude-local.sh`'s `MAX_THINKING_TOKENS`
   guard (it points `PORT` at a closed port, so "past the guard" shows as the
-  no-server error). Rename one of those functions and the test says so by
-  name.
+  no-server error); `wired-log.sh` holds doctor's `log_wired_gb` reader.
+  Rename one of those functions and the test says so by name.
   `tests/run.sh` runs all; `.github/workflows/ci.yml` runs it on a macOS
   runner and shellcheck on Ubuntu, on every push and pull request.
 
@@ -333,6 +333,20 @@ locally (600000 in SDK client construction). A related
 code, including the literal path `/tmp/ds4.lock` and the refusal string
 `ds4: another ds4 process is already running (pid %ld)`. airgap's own lock must
 not use that path. `flock(1)` does not exist on macOS; `/usr/bin/shlock` does.
+
+**The GPU wired ceiling on this machine is 28.1 GB, and the server prints it.**
+Every `mlx-serve` load logs `[wired] mode=max limit=28753 MB` (28.08 GiB;
+MLX's `mx.device_info()['max_recommended_working_set_size']` agrees), against
+the 27.0 GB the 2/3–3/4 rule in `detect-hardware.sh` computes for 36 GB. The
+rule is ARITHMETIC and labelled as such; it stays the guards' number (exists
+before any load, cannot go stale) and doctor quotes the measured one beside
+it. `sysctl iogpu.wired_limit_mb` reads `0` (auto) and does not reveal the
+value. One machine — do not "correct" the rule from this sample.
+
+```
+$ grep '^\[wired\]' ~/.mlx-serve/logs/mlx-serve-11234.log | tail -1
+[wired] mode=max limit=28753 MB
+```
 
 **Claude Code always sends `thinking.budget_tokens`.** It derives one from
 `max_tokens` and clamps it. Confirmed both in the binary and in live traffic:

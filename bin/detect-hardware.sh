@@ -117,10 +117,20 @@ hw_compressor_gb() {
 }
 
 # The GPU wired-memory ceiling that Apple would pick on its own, in GB.
-# Roughly 2/3 of RAM at 32 GB and below, ~3/4 above. This is the number the
-# safety check below is measured against, ALWAYS — never the hand-set value.
-# Checking against a hand-set value would make the check quieter exactly as the
-# machine gets more dangerous, because raising the ceiling is the dangerous act.
+# ARITHMETIC: the commonly reported rule, 2/3 of RAM at 32 GB and below, 3/4
+# above. It is not read from the machine — the real number is Metal's
+# recommendedMaxWorkingSetSize, which only a Metal or MLX call returns, and
+# this file is Bash. mlx-serve prints that real number at every load as
+# "[wired] mode=max limit=N MB"; doctor.sh quotes it beside this estimate and
+# judges the selected build against both. MEASURED once, 36 GB M3 Max:
+# 28753 MB = 28.1 GB against the 27.0 GB computed here, so the arithmetic
+# erred on the refusing side by 1.1 GB. One machine; the rule is not corrected
+# from n=1. The guards use this estimate on purpose: it exists before any load
+# and cannot go stale the way a log line from another day can.
+# This is the number the safety check below is measured against, ALWAYS —
+# never the hand-set value. Checking against a hand-set value would make the
+# check quieter exactly as the machine gets more dangerous, because raising the
+# ceiling is the dangerous act.
 hw_wired_auto_gb() {
   awk -v g="$(hw_total_ram_gb)" \
     'BEGIN { printf "%.1f", (g <= 32 ? g * 2 / 3 : g * 3 / 4) }'
@@ -368,7 +378,7 @@ hw_report() {
   if [ "$HW_WIRED_MANUAL" = "yes" ]; then
     echo "wired ceiling  ${HW_WIRED_LIMIT_GB} GB  SET BY HAND (Apple would pick ${HW_WIRED_AUTO_GB} GB)"
   else
-    echo "wired ceiling  ${HW_WIRED_LIMIT_GB} GB  (auto — GPU-wired memory cannot be swapped)"
+    echo "wired ceiling  ${HW_WIRED_LIMIT_GB} GB  (auto — arithmetic; the server logs the real one at load)"
   fi
   echo
   echo "verdict        ${HW_VERDICT}  --  ${HW_REASON}"
