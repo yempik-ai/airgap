@@ -40,6 +40,7 @@ A bash file `bin/run.sh` sources after `bin/env.sh`. It reads `BASE_URL`,
 | `HARNESS_ONESHOT` | array | the arguments that make the harness answer one prompt and exit; the prompt is always the last argument (`(-p)`, `(exec)`) |
 | `harness_wire` | function | exports environment variables and/or appends flags to the `HARNESS_ARGS` array so that every request goes to `BASE_URL` for `MODEL_ID` with `CTX_SIZE` declared. Refuses (exit 1, fix named) on an invalid harness-specific setting. Prints nothing; harness-specific banner lines go into the `HARNESS_NOTES` array |
 | `harness_usage` | function, optional | the harness-specific `--help` text |
+| `HARNESS_ENDPOINT` | variable, optional | the path the harness will actually hit when the dialect's default is wrong for it (Codex 0.147.0: `/v1/responses`). Read only by `doctor.sh` |
 
 An adapter does not: check the server, parse `run.sh` options, compute
 timeouts, print the common banner, or run the probe. Those live once in
@@ -93,8 +94,11 @@ Sequence:
    before the server check, so a typo in a harness setting is refused
    whether or not the server is up (`tests/thinking-knob.sh` relies on
    this order).
-6. `server_up` or refuse with the message `claude-local.sh` prints today
-   (open another window, `cd $ROOT`, `./bin/serve.sh`).
+6. `command -v "$HARNESS_BIN"` or refuse, naming the binary and its `*_BIN`
+   setting (before the server check, so it fires without a server, like the
+   thinking guard). Then `server_up` or refuse with the message
+   `claude-local.sh` prints today (open another window, `cd $ROOT`,
+   `./bin/serve.sh`).
 7. Common banner, from `env.sh` values only:
    `<name>  -> BASE_URL  model MODEL_ID  (DIALECT)`, `context CTX_SIZE
    tokens declared`, `timeout` line (client vs server, as today); then
@@ -117,7 +121,9 @@ One implementation, harness-agnostic:
    with exactly: AIRGAP OK'` with stdin closed, stdout+stderr captured, wall
    clock measured, bounded by `client_timeout_ms` (a cold first turn reloads
    the weights; no new number). macOS ships no `timeout` binary: the bound
-   is a background run polled with `sleep`, killed on expiry.
+   is a background run polled with `sleep 0.2`, killed on expiry — the poll
+   interval is the wall clock's granularity, and a figure labelled measured
+   must not carry a hidden second of it.
 3. Read the counter again. Delta = prompt tokens the harness sent for one
    turn, all requests included.
 4. Print one line and exit with the verdict:
@@ -205,8 +211,11 @@ stay. One new row per `harness/*.sh`, evaluated in a subshell that sources
 `env.sh` and the adapter (no `harness_wire` call — nothing runs):
 
 - `PASS <name>  <version>  → BASE_URL/<endpoint>` where endpoint is
-  `/v1/messages`, `/v1/chat/completions` or `/api/chat` by `HARNESS_DIALECT`
-  (a `case` in doctor, the dialect's one consumer besides the banner);
+  `HARNESS_ENDPOINT` when the adapter sets it, else `/v1/messages`,
+  `/v1/chat/completions` or `/api/chat` by `HARNESS_DIALECT` (a `case` in
+  doctor, the dialect's one consumer besides the banner); version is the
+  first numeric field of `--version` (`codex --version` prints
+  `codex-cli 0.147.0`);
 - `WARN <name>  '<bin>' not found — run.sh will refuse` otherwise.
 
 The `claude code` row under "tools" is unchanged.
@@ -231,7 +240,11 @@ The `claude code` row under "tools" is unchanged.
   `client_timeout_ms`, `metrics_counter`, `CODEX_BIN`) and Verified
   environment facts (Codex 0.147.0 keys).
 - Proof that nothing else changed: `git diff --stat` on `docs/0[1-9]*.md`
-  shows only 05.
+  shows 05 (the sentence), and otherwise only quoted-output hunks (the
+  banner and doctor samples in 02 and 06) plus 07's settings reference,
+  which stops calling `LEAN_MCP` a Claude Code setting and gains the
+  `CODEX_BIN` row. Any other prose change would mean something else was
+  harness-specific.
 
 ## Tests (`tests/`, no server, no weights)
 
@@ -263,4 +276,5 @@ The `claude code` row under "tools" is unchanged.
 
 `harness/`, the names `claude-code` and `codex`, `CODEX_BIN`, and the
 contract surface. Kept minimal (two variables, one array, one function, one
-optional function) so it can grow without breaking adapters written against it.
+optional function, one optional variable) so it can grow without breaking
+adapters written against it.
