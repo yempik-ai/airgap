@@ -160,7 +160,7 @@ Prefill chunk: 1024 tokens (memory-sized down from 8192; --prefill-chunk overrid
 
 That is the server choosing how much of a long prompt to read at a time, from
 the memory free at that moment; the number differs run to run and Mac to Mac,
-and this repository leaves it to the server ([07 §12](07-tuning.md#never)).
+and this repository leaves it to the server ([07 §13](07-tuning.md#never)).
 
 Six of those values differ on your Mac: the two memory figures, the path (it
 contains your account name), the context size, the two budget figures, and the
@@ -230,13 +230,14 @@ That is one action expressed as two commands, because the script needs to be
 found and the folder it starts in becomes the folder Claude Code works on. To
 work on a different project, see Section 8.
 
-You should see these five lines before Claude Code's own screen appears:
+You should see these six lines before Claude Code's own screen appears:
 
 ```
 claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 context  65536 tokens declared to the harness, 8192 max output
 timeout  client gives up after 360s of silence, the server after 300s — so the server reports it
 mcp      strict (LEAN_MCP=1) — MCP servers off, saves ~17k prompt tokens per turn
+thinking on, as the model ships — MAX_THINKING_TOKENS=0 turns it off (measured 3x faster on the 9B; quality cost not measured)
 note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
          "claude.ai connectors are disabled" — that is this script keeping it local
 ```
@@ -251,6 +252,11 @@ web-search tool, and so on. This setup switches them off, because the
 *descriptions* of those tools alone cost about 17,000 tokens of the model's
 limited memory on **every single turn**. Section 7 has the measured numbers and
 how to turn them back on.
+
+The `thinking` line says whether the model reasons before it answers. It does,
+as it ships; `MAX_THINKING_TOKENS=0` turns that off and was measured 3× faster
+on the 9B on one prompt, at a quality cost nobody has measured —
+[07 §7](07-tuning.md#thinking) before you set it.
 
 **If you do not see that.**
 

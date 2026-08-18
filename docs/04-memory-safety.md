@@ -213,7 +213,7 @@ refuses to start below this number.
 
 **The "~1 GB" working-space row has measurements against it, and which one
 applies depends on who sizes the read chunk.** `./bin/bench.sh` puts
-mlx-serve's own peak next to this arithmetic ([07 §9](07-tuning.md#bench)).
+mlx-serve's own peak next to this arithmetic ([07 §10](07-tuning.md#bench)).
 MEASURED on the test machine with the **9B**, single samples, a 16,377–16,408
 token prompt: **2.6 GB** above weights + conversation at a pinned
 `PREFILL_CHUNK=4096` (what this repository passed until 2026-08-18), **1.1 GB**
@@ -223,7 +223,7 @@ free when it loads, the context size and the resident cap (14.9 GB free →
 512, 19.5 GB free → 1024, both under `MAX_RESIDENT_MEM=6GB`) and printing
 `Prefill chunk: N tokens (memory-sized down from 8192; --prefill-chunk
 overrides)` in its log. Prefill speed did not track the chunk in those samples
-(single samples; the table in 07 §9). So with the pin gone the row is about
+(single samples; the table in 07 §10). So with the pin gone the row is about
 right on the 9B, and it is right *because* the server sizes the chunk to the
 memory it actually has. Not measured on the 27B, whose working set is likely
 larger. That is `AUDIT.md` A3, and it is open.
@@ -774,7 +774,7 @@ size when it starts, from the memory free at that moment, the context size and
 the resident cap, printing what it chose in its log. This repository used to
 pin that to 4096; on the test machine the server picks 512 or 1024 for itself,
 and the temporary spike while reading a 16,000-token prompt was 0.7–1.1 GB
-there against 2.6 GB pinned (MEASURED, 9B, [07 §9](07-tuning.md#bench)). `PREFILL_CHUNK=` still pins it, and the server still
+there against 2.6 GB pinned (MEASURED, 9B, [07 §10](07-tuning.md#bench)). `PREFILL_CHUNK=` still pins it, and the server still
 caps a pinned value lower when it would not fit.
 
 **6. A stop button.** `./bin/stop.sh` ends the server and reports how much memory

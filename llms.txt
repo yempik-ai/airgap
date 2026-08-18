@@ -42,6 +42,10 @@
   262,144-token context arithmetically possible.
 - Measured: Claude Code's system prompt is 38,054 tokens with MCP servers loaded,
   20,909 tokens with `--strict-mcp-config`.
+- Thinking is on in every build as shipped; `MAX_THINKING_TOKENS=0` turns it off
+  (opt-in). Measured on the 9B, one prompt: 376 vs 1156 output tokens, 7.2 s vs
+  20.9 s. The quality cost is not measured. The server-side `--reasoning-budget`
+  flag was measured inert and is not exposed.
 - The scripts refuse rather than warn: on a non-loopback host, on a build that
   would not fit under Apple's GPU wired ceiling, below a free-memory floor, and
   on a second attempt to load the weights while another process already holds

@@ -14,31 +14,32 @@ against the installed binaries, and what has already been tried and found false.
 not a record — [`AUDIT.md`](AUDIT.md) holds the status of every item, and if the
 two ever disagree, `AUDIT.md` is right.*
 
-- **Last landed:** `E1` (`PREFILL_CHUNK` defaults to empty and the flag is
-  passed only when set; the server sizes the chunk itself — 512 or 1024 on
-  this machine for the 9B by what was free at load, against the 4096 airgap
-  pinned — and `bench.sh` says plainly that its one-shot load reads at the
-  8192 ceiling instead), 2026-08-18. Running it showed one-shot mode does not
-  memory-size — see the facts below. Same day, found by running it:
-  `bench.sh` never released the model lock after a full run (fixed); and the
-  `D3` reader checks moved from a scratch directory into `tests/`, with a CI
-  workflow that runs shellcheck and the tests on every push (the repo is
-  public and will stay so, where hosted runners are free; jobs are capped at
-  ten minutes and superseded runs cancelled). It has since run on GitHub —
-  both jobs green, 17 s (lint) and 11 s (tests), MEASURED on run
-  `32121837232`. That run annotated `actions/checkout@v4` as declaring the
-  deprecated Node 20 (the runner forced it onto Node 24 anyway); both steps
-  are on `@v5`, which declares Node 24. Pin any action added later at a
-  Node-24 major.
-- **Next:** the numbered list in `AUDIT.md` is empty. What is left, in
-  order of value: the 27B measurement (hardware-blocked — `AUDIT.md` A3, E5,
-  `ROADMAP.md` Phase 0), which every "9B only" figure in this file is
-  waiting on; `E4` (thinking off — opt-in or not at all, quality cost
-  unmeasured); §F (roadmap sequencing, no code). Nothing here is blocked on a
-  decision.
-- **Blocked on hardware, not on decisions:** anything needing the 27B loaded.
-  It has never been served on this machine. `AUDIT.md` E5 and A5 both stop short
-  of a measurement for this reason, and `ROADMAP.md` Phase 0 names it.
+- **Last landed:** `E4` (thinking off, opt-in), 2026-08-18. `MAX_THINKING_TOKENS`
+  — Claude Code's own name — is on `ENV_KEYS`, has no default, and
+  `claude-local.sh` exports it only when set, refuses a value that is not a
+  whole number, and reports it on a `thinking` banner line (so the banner is
+  six lines now; the three doc snapshots and `docs/05` say so).
+  `tests/thinking-knob.sh` holds the guard. Proven through the harness on
+  Claude Code 2.1.234: the server log reads `thinking=false` under `0`,
+  `thinking=true` otherwise (facts below). Nothing server-side moved.
+  `docs/07` gained a §7 for it and its later sections renumbered (7–13 →
+  8–14); every cross-reference by number was updated (`README`, `docs/02`,
+  `04`, `05`, `08`) — `AUDIT.md`'s own `docs/07 §N` citations are
+  audit-time snapshots and were left. Before that, the same day: `E1`, the
+  `bench.sh` lock release, `tests/` and CI (green on GitHub, run
+  `32121837232`; pin any new action at a Node-24 major).
+- **Next:** the numbered list in `AUDIT.md` is empty. What is left, in order
+  of value: the 27B measurement (`AUDIT.md` A3, E5, `ROADMAP.md` Phase 0),
+  which every "9B only" figure in this file is waiting on; the quality cost
+  of `E4`, which needs `B1`'s suite to become a number; §F (roadmap
+  sequencing, no code). Nothing here is blocked on a decision.
+- **Blocked on memory, not on decisions:** anything needing the 27B loaded.
+  It has never been served on this machine. `serve.sh` needs 22 GB free for
+  it and a working day leaves ~14 (2026-08-18: a 3.2 GB VM, a browser,
+  WhatsApp and three Claude Code sessions were the difference). An agent
+  cannot free that — it means closing the user's apps — so ask, do not kill.
+  `AUDIT.md` E5 and A5 both stop short of a measurement for this reason, and
+  `ROADMAP.md` Phase 0 names it.
 
 ## Scope
 
@@ -59,9 +60,12 @@ two ever disagree, `AUDIT.md` is right.*
 - `bin/env.sh` — settings resolution and shared helpers. A new setting needs
   **three** edits here: the `ENV_KEYS` list, the default assignment, and the
   export list. Missing `ENV_KEYS` means the setting works in `config.env` but
-  not from the command line. Settings only `bench.sh` reads (`TOKENS`,
-  `PROMPT`, `PROMPT_FILE`) are the one exception: on `ENV_KEYS`, defaulted in
-  `bench.sh`, not exported. `LOAD_SHAPE_ARGS` is also here — the flags
+  not from the command line. Settings a single script reads are the one
+  exception: on `ENV_KEYS`, defaulted and exported (if at all) in that script
+  — `TOKENS`, `PROMPT`, `PROMPT_FILE` in `bench.sh`;
+  `CLAUDE_CODE_MAX_OUTPUT_TOKENS` and `MAX_THINKING_TOKENS` (no default:
+  unset means "as the model ships") in `claude-local.sh`. `LOAD_SHAPE_ARGS`
+  is also here — the flags
   that shape a load's memory footprint (context size, KV format, vision
   switch, and the prefill chunk only when `PREFILL_CHUNK` pins one), passed by
   both `serve.sh` and `bench.sh`; a memory-relevant flag belongs in that list,
@@ -79,7 +83,10 @@ two ever disagree, `AUDIT.md` is right.*
   of `doctor.sh` by their `name() {`…`}` ranges (doctor cannot be sourced; it
   runs at load), stubs `srv_curl` to print a fixture, and checks the row each
   captured shape renders; `load-shape.sh` holds the `LOAD_SHAPE_ARGS`
-  contract. Rename one of those functions and the test says so by name.
+  contract; `thinking-knob.sh` holds `claude-local.sh`'s `MAX_THINKING_TOKENS`
+  guard (it points `PORT` at a closed port, so "past the guard" shows as the
+  no-server error). Rename one of those functions and the test says so by
+  name.
   `tests/run.sh` runs all; `.github/workflows/ci.yml` runs it on a macOS
   runner and shellcheck on Ubuntu, on every push and pull request.
 
@@ -352,7 +359,11 @@ side budgets behave identically (128 → 501 chars, 1024 → 2238 chars, both at
 without the flag — capping the budget does not rescue a truncated answer.
 
 The real lever is client-side and is an on/off switch, not a budget:
-`thinking: {type: "disabled"}`, reachable via `MAX_THINKING_TOKENS=0`.
+`thinking: {type: "disabled"}`, reachable via `MAX_THINKING_TOKENS=0` —
+verified through the harness on Claude Code 2.1.234 (`-p`, 9B, 2026-08-18):
+the server log line reads `thinking=false` under `0`, `thinking=true` under
+`1024` and unset; 3 output tokens against 33 and 47 for a one-number answer.
+`grep 'thinking=' ~/.mlx-serve/logs/mlx-serve-11234.log` is the check.
 Measured on the same server, same prompt: **376 output tokens, 7.2 s, complete
 answer** against 1156 tokens and 20.9 s — 3.1× fewer tokens, 2.9× faster.
 *(MEASURED, single sample, Qwen3.8-9B-mlx-4Bit, M3 Max 36 GB, `mlx-serve`

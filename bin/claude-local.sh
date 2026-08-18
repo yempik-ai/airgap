@@ -44,12 +44,18 @@ SETTINGS
                   prompt tokens on every turn, so the default is 1 (off).
   CLAUDE_BIN      the command that starts Claude Code. Default: claude
   CLAUDE_CODE_MAX_OUTPUT_TOKENS   longest single answer. Default: 8192
+  MAX_THINKING_TOKENS   0 turns the model's thinking off; unset (the default)
+                  leaves it on, as the model ships. Off is 3x fewer output
+                  tokens and 3x faster on the one prompt measured (9B, n=1);
+                  what it costs in answer quality has NOT been measured. A
+                  positive number caps only the thinking text stored per turn,
+                  not the time — measured: 128, 1024 and unset all took ~21 s.
   SERVE_TIMEOUT   seconds of silence before a question is given up on. Read
                   here so the client waits slightly longer than the server and
                   the server is the side that reports a stall. Default: 300
 
 WHAT YOU SHOULD SEE
-  Five lines starting with "claude", then Claude Code's normal startup, then
+  Six lines starting with "claude", then Claude Code's normal startup, then
   one line about an "unrecognized_model", and possibly one saying claude.ai
   connectors are disabled because an auth source is set. Both are EXPECTED.
   Neither is an error and nothing is wrong. Claude Code has simply never heard
@@ -68,6 +74,20 @@ EOF
 case "${1:-}" in
   -h|--help) usage; exit 0 ;;
 esac
+
+# Thinking is on by default in every catalog build (the 27B at "xhigh" effort),
+# and Claude Code sends a thinking budget on every request. MAX_THINKING_TOKENS
+# is Claude Code's own name for that budget: 0 sends thinking:{type:"disabled"};
+# a positive value caps the thinking TEXT the harness stores and replays, but
+# not the tokens the model generates before answering (MEASURED, 9B: 128, 1024
+# and unset all produced 1156 tokens in ~21 s; 0 produced 376 in 7.2 s). Unset
+# leaves the model as it ships. Anything else is a typo, refused here rather
+# than silently ignored by Claude Code.
+if [ -n "${MAX_THINKING_TOKENS:-}" ] && ! [[ "$MAX_THINKING_TOKENS" =~ ^[0-9]+$ ]]; then
+  echo "error: MAX_THINKING_TOKENS=$MAX_THINKING_TOKENS is not a whole number" >&2
+  echo "fix:   MAX_THINKING_TOKENS=0 (thinking off), a positive number, or leave it unset (on)" >&2
+  exit 1
+fi
 
 # A dead server makes Claude Code fail in confusing ways much later, so check now.
 if ! server_up; then
@@ -138,6 +158,12 @@ export CLAUDE_CODE_MAX_OUTPUT_TOKENS
 # "Prompt exceeds maximum context length". Tell it the truth instead.
 export CLAUDE_CODE_MAX_CONTEXT_TOKENS="$CTX_SIZE"
 
+# Validated above. Exported only when set: env.sh does not export it, so a value
+# from config.env would otherwise never reach Claude Code.
+if [ -n "${MAX_THINKING_TOKENS:-}" ]; then
+  export MAX_THINKING_TOKENS
+fi
+
 # Both ends of this stack give up on a silent request after 300 seconds, and
 # they do it under two different names nobody set. A first turn on a cold model
 # has to reload ~19.1 GB and then read ~21,000 tokens before it produces a
@@ -178,6 +204,13 @@ else
   echo "timeout  client gives up after $((_client_timeout_ms / 1000))s of silence, the server after ${SERVE_TIMEOUT}s — so the server reports it"
 fi
 echo "mcp      $mcp_line"
+if [ "${MAX_THINKING_TOKENS:-}" = "0" ]; then
+  echo "thinking OFF (MAX_THINKING_TOKENS=0) — 3x fewer output tokens on the one prompt measured; quality cost not measured"
+elif [ -n "${MAX_THINKING_TOKENS:-}" ]; then
+  echo "thinking on, stored text capped at $MAX_THINKING_TOKENS tokens (MAX_THINKING_TOKENS) — measured no speed change; 0 turns it off"
+else
+  echo "thinking on, as the model ships — MAX_THINKING_TOKENS=0 turns it off (measured 3x faster on the 9B; quality cost not measured)"
+fi
 echo "note     an \"unrecognized_model\" line at startup is EXPECTED and cosmetic; so is"
 echo "         \"claude.ai connectors are disabled\" — that is this script keeping it local"
 echo

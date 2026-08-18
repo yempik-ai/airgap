@@ -110,11 +110,17 @@ able to prove things it currently only asserts. Ordered as in `AUDIT.md`.
       the 9B on the test machine (from what is free at load) and the working
       set while reading 16k tokens fell 2.6 → 0.7–1.1 GB (MEASURED, 9B).
       `bench.sh`'s one-shot load does not get that sizing and now says so.
+- [x] `E4` — thinking off, opt-in. The largest speed-up the audit measured
+      (9B, one prompt: 3× fewer output tokens, 3× faster) behind a client-side
+      switch, `MAX_THINKING_TOKENS=0`, with the quality cost stated as
+      unmeasured. **Shipped 2026-08-18** — passed through by
+      `claude-local.sh`, guarded, on the banner; the server log confirms the
+      request changes (`thinking=false`) through Claude Code 2.1.234.
 
 Deliberately **not** in this list, and recorded in `AGENT.md` so it is not
 proposed again: a server-side reasoning budget. The flag exists, and it was
 measured doing nothing. The real lever is client-side, is an on/off switch
-rather than a budget, and is `AUDIT.md` E4.
+rather than a budget, and is `E4` above.
 
 ## Phase 1 — any harness: `bin/run.sh <harness>`
 

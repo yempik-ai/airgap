@@ -251,7 +251,7 @@ at 4-bit, 5-bit or 8-bit from 32 GB up, the 9B below that — and
 `./bin/download-model.sh` downloads that one into a folder named after it. To
 choose differently, `./bin/models.sh list` shows every build with the free
 memory it needs on your Mac, and `./bin/models.sh use <key>` selects one; see
-[`07-tuning.md`](07-tuning.md#8-moving-to-a-different-build-of-the-model).
+[`07-tuning.md`](07-tuning.md#9-moving-to-a-different-build-of-the-model).
 
 The test machine used for every measured number in this repository is an Apple
 M3 Max with 30 graphics cores, 36 GB of unified memory, running macOS 26.5.2.
@@ -1655,6 +1655,7 @@ claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX
 context  65536 tokens declared to the harness, 8192 max output
 timeout  client gives up after 360s of silence, the server after 300s — so the server reports it
 mcp      strict (LEAN_MCP=1) — MCP servers off, saves ~17k prompt tokens per turn
+thinking on, as the model ships — MAX_THINKING_TOKENS=0 turns it off (measured 3x faster on the 9B; quality cost not measured)
 note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
          "claude.ai connectors are disabled" — that is this script keeping it local
 ```

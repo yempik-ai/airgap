@@ -11,7 +11,7 @@ measure the speed feature on your own Mac rather than trusting a published
 number.
 
 **How long it takes.** About 15 minutes of your attention to read. Changing a
-setting takes seconds. The benchmark in Section 9 takes a couple of minutes and
+setting takes seconds. The benchmark in Section 10 takes a couple of minutes and
 loads the model twice.
 
 **What it costs.** Nothing to read. Some settings cost memory, and every one that
@@ -247,16 +247,17 @@ Every one of these can go in `config.env` or in front of a command.
 | `MAX_RESIDENT_MEM` | 21GB | Hard ceiling on what the loaded weights may occupy | Almost never. |
 | `PREFIX_CACHE_MEM` | 1536MB | Memory kept for remembering repeated instructions | You have memory to spare. Section 5. |
 | `PREFIX_CACHE_DISK` | 10GB | The same thing on your SSD, so it survives a restart | Disk is short. Costs disk, not memory. |
-| `IDLE_EVICT_SECS` | 900 | Seconds of silence before the memory goes back to macOS | Section 7. |
+| `IDLE_EVICT_SECS` | 900 | Seconds of silence before the memory goes back to macOS | Section 8. |
 | `SERVE_TIMEOUT` | 300 | Seconds a question may produce **nothing** before it is given up on | A cold first turn is being cut off. Not a length limit. |
 | `LOCK_DIR` | `~/.airgap/model.lock` | Where the lock that stops two model loads lives | Almost never. Empty switches the lock off. |
-| `PREFILL_CHUNK` | empty — the server sizes it | How much text is read at a time on the first pass. Empty lets the server pick from the memory free when it loads (512 or 1024 on the test machine with the 9B, printed in its log). | Almost never. Pin it to reproduce a shape in `bench.sh`. Section 12. |
+| `PREFILL_CHUNK` | empty — the server sizes it | How much text is read at a time on the first pass. Empty lets the server pick from the memory free when it loads (512 or 1024 on the test machine with the 9B, printed in its log). | Almost never. Pin it to reproduce a shape in `bench.sh`. Section 13. |
 | `NO_VISION` | 1 | Skips loading the image-reading part | Only to feed the model pictures. |
 | `LEAN_MCP` | 1 | Starts Claude Code with optional tool servers off | Section 6. |
-| `MODEL_QUANT` | worked out from your memory | Which OrcaRouter build: `4bit`, `5bit`, `6bit`, `8bit` | Section 8. |
-| `MODEL_REPO` | worked out from your memory | Which model, by its huggingface.co address — any build, catalog or not | Section 8, or `./bin/models.sh use`. |
-| `METRICS` | 1 | Publishes speed and cache counters | Leave it on. Section 10. |
-| `EXTRA_ARGS` | empty | Passed to the server exactly as typed, last | A setting this repository has not named. Section 11. |
+| `MAX_THINKING_TOKENS` | unset — thinking on | `0` turns the model's thinking off; 3x faster on the one prompt measured, quality cost not measured | You want speed and will judge the answers yourself. Section 7. |
+| `MODEL_QUANT` | worked out from your memory | Which OrcaRouter build: `4bit`, `5bit`, `6bit`, `8bit` | Section 9. |
+| `MODEL_REPO` | worked out from your memory | Which model, by its huggingface.co address — any build, catalog or not | Section 9, or `./bin/models.sh use`. |
+| `METRICS` | 1 | Publishes speed and cache counters | Leave it on. Section 11. |
+| `EXTRA_ARGS` | empty | Passed to the server exactly as typed, last | A setting this repository has not named. Section 12. |
 
 The four memory settings — `CTX_SIZE`, `MIN_FREE_GB`, `MAX_RESIDENT_MEM` and
 `PREFIX_CACHE_MEM` — are worked out from your Mac's own size. On a 36 GB Mac they
@@ -348,7 +349,55 @@ tends to cost quality as well as room.
 
 ---
 
-## 7. Getting your Mac back between questions
+## 7. <a id="thinking"></a>Turning thinking off — the biggest speed lever after the cache
+
+Every build in the catalog thinks before it answers — the 27B at its highest
+effort — and Claude Code asks for that on every request. Thinking makes the
+answer better on hard problems and slower on all of them. `MAX_THINKING_TOKENS`
+is Claude Code's own name for the setting; `claude-local.sh` passes it through,
+checks it is a whole number, and says on its banner which way it is set.
+
+```
+MAX_THINKING_TOKENS=0 ./bin/claude-local.sh
+```
+
+You should see the banner's `thinking` line read `OFF (MAX_THINKING_TOKENS=0)`.
+
+MEASURED on the test machine, the 9B, one prompt (*"What is 17\*23? Think step
+by step."*, temperature 0, `max_tokens` 3000, `mlx-serve` 26.8.8), single
+samples:
+
+| | Output tokens | Wall | Answer |
+|---|--:|--:|---|
+| Thinking on (unset — the default) | 1156 | 20.9 s | correct |
+| `MAX_THINKING_TOKENS=0` | 376 | 7.2 s | correct, complete |
+
+Through Claude Code itself (`2.1.234`, `-p`, the same question), the server's
+log shows `thinking=false` with `0` and `thinking=true` otherwise, and 3 output
+tokens against 47 — the request really changes; this is not a client-side trim.
+
+**Three things to know before you set it.**
+
+- **The quality cost is not measured** — not on the 9B, not on the 27B. Turning
+  off the way the model reasons is a large change in how it behaves, not a
+  tuning nudge. Try it on your own work before trusting it; the default stays
+  on for that reason.
+- **A positive number does not make anything faster.** Claude Code sends it as
+  a *budget*, and the model reasons to the answer regardless: MEASURED, 128,
+  1024 and unset all produced 1156 tokens in ~21 s. What a positive value does
+  is cap the thinking text Claude Code stores and replays into later turns,
+  which slows the growth of the context — a second-order saving.
+- **The server has a `--reasoning-budget` flag. It does nothing here**, and
+  `serve.sh` will not grow a setting for it: Claude Code's request-level budget
+  overrides it on every real turn, and even when it applies it trims the
+  returned text after the fact. MEASURED, and recorded in `AGENT.md` so it is
+  not tried again.
+
+To make it permanent, `MAX_THINKING_TOKENS=0` in `config.env`.
+
+---
+
+## 8. Getting your Mac back between questions
 
 `IDLE_EVICT_SECS` is the setting that makes this usable on a Mac you are also
 working on. After that many seconds with no questions, the server hands the
@@ -370,7 +419,7 @@ You should see `idle-evict 0s` on the banner's `budget` line.
 
 ---
 
-## 8. Moving to a different build of the model
+## 9. Moving to a different build of the model
 
 The publisher offers the same checkpoint at 4, 5, 6 and 8 bits, and the catalog
 in `bin/catalog.sh` adds a 9B, a 2-bit and an AEON 27B, and the stock
@@ -415,7 +464,7 @@ file overriding it — `MODEL_REPO` always wins over `MODEL_QUANT`.
 
 ---
 
-## 9. <a id="bench"></a>Measure the speed feature yourself
+## 10. <a id="bench"></a>Measure the speed feature yourself
 
 The model carries a small extra piece that guesses several of the next chunks of
 text ahead of time, which the full model then checks in one pass. This is
@@ -585,7 +634,7 @@ TOKENS=400 ./bin/bench.sh
 
 ---
 
-## 10. Reading the server's own counters
+## 11. Reading the server's own counters
 
 With `METRICS=1`, which is the default, the server publishes counters while it
 runs. This is worth doing when you want to know *why* something feels slow rather
@@ -619,7 +668,7 @@ An HTTP 503 means `METRICS=0` — put `METRICS=1` back in `config.env`.
 
 ---
 
-## 11. <a id="extra-args"></a>The escape hatch, and its limits
+## 12. <a id="extra-args"></a>The escape hatch, and its limits
 
 `EXTRA_ARGS` is passed to the server exactly as you type it, after every other
 setting. It exists for settings this repository has not given a name to.
@@ -651,7 +700,7 @@ they appear.
 
 ---
 
-## 12. <a id="never"></a>Settings deliberately left alone
+## 13. <a id="never"></a>Settings deliberately left alone
 
 Reading this table is the fastest way to understand the design. The conclusion:
 the two most-recommended settings on the internet are both wrong here.
@@ -667,7 +716,7 @@ the two most-recommended settings on the internet are both wrong here.
 
 ---
 
-## 13. Full list of settings
+## 14. Full list of settings
 
 Every setting this stack understands, with its default. All of them can go in
 `config.env` or in front of a command. The commented file `config.env.example`
@@ -725,6 +774,7 @@ carries the same list with a longer explanation each.
 | `LEAN_MCP` | `1` |
 | `CLAUDE_BIN` | `claude` |
 | `CLAUDE_CODE_MAX_OUTPUT_TOKENS` | `8192` |
+| `MAX_THINKING_TOKENS` | unset — thinking on, as the model ships; `0` turns it off (Section 7) |
 
 **Tools and scripts**
 

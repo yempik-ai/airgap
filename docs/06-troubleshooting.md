@@ -716,6 +716,7 @@ claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX
 context  65536 tokens declared to the harness, 8192 max output
 timeout  client gives up after 360s of silence, the server after 300s — so the server reports it
 mcp      strict (LEAN_MCP=1) — MCP servers off, saves ~17k prompt tokens per turn
+thinking on, as the model ships — MAX_THINKING_TOKENS=0 turns it off (measured 3x faster on the 9B; quality cost not measured)
 note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
          "claude.ai connectors are disabled" — that is this script keeping it local
 ```

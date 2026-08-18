@@ -18,7 +18,7 @@ environment facts established along the way. Read that file first — it exists 
 these findings are not researched twice.
 
 Items are referenced by id from [`ROADMAP.md`](ROADMAP.md). All are **OPEN**
-except `A1`, `A5`, `C1`, `B1`, `D3` and `E1`, marked **DONE** below.
+except `A1`, `A5`, `C1`, `B1`, `D3`, `E1` and `E4`, marked **DONE** below.
 
 Evidence is cited as `file:line` at the time of the audit. Line numbers drift;
 the greps are given where the reader will need to re-locate something.
@@ -40,11 +40,12 @@ marks *never measured*.
 | ✅ | `B1` make `bench.sh` keep prefill and peak memory — **DONE** | medium | high |
 | ✅ | `D3` doctor probes a streamed tool call — **DONE** | medium | high |
 | ✅ | `E1` stop overriding the engine's prefill sizing — **DONE** | small | medium |
+| ✅ | `E4` thinking off, opt-in — **DONE** | small | high |
 
-No numbered item is left. `E4` (thinking off) carries the largest measured
-speed-up in this audit but is a behavioural change with an unmeasured quality
-cost; it ships opt-in or not at all. Everything in §F is roadmap sequencing,
-not code.
+No numbered item is left. `E4` carried the largest measured speed-up in this
+audit and shipped opt-in, as required: a behavioural change with an unmeasured
+quality cost is not a default. Everything in §F is roadmap sequencing, not
+code.
 
 ---
 
@@ -788,7 +789,19 @@ Claude Code system prompts.
 A user who wants more speed is told to use `EXTRA_ARGS` blind rather than being
 pointed at the four flags that move their workload.
 
-### E4 — no control over thinking, and the only real lever is client-side
+### E4 — no control over thinking, and the only real lever is client-side — **DONE**
+
+*Shipped 2026-08-18, exactly the shape below: `MAX_THINKING_TOKENS` on
+`ENV_KEYS` (so `config.env` can hold it and the command line can beat it), no
+default, exported by `claude-local.sh` only when set, refused if not a whole
+number, reported on a `thinking` banner line; `tests/thinking-knob.sh` holds
+the guard. Nothing server-side moved. Proven through the harness on Claude
+Code 2.1.234 (`-p`, the 9B): the server log reads `thinking=false` under `0`
+and `thinking=true` under `1024` and unset — 3 output tokens against 33 and
+47 for a one-number answer, all three correct (MEASURED, single samples). The
+quality cost stays unmeasured, on both builds, and the setting stays opt-in
+until `B1`'s suite puts a number on it.*
+
 
 The server-side flag is inert; that is settled and recorded in `AGENT.md`
 under *Falsified*. **Do not implement `--reasoning-budget` in `serve.sh`.**

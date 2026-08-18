@@ -116,6 +116,17 @@ First public release.
   key already in the shell cannot take priority, declares the real context
   window, and switches off telemetry, error reporting, the auto-updater,
   marketplace auto-install and background tasks.
+- **Thinking can be turned off, opt-in** (`MAX_THINKING_TOKENS=0`, Claude
+  Code's own name; `claude-local.sh` passes it through, refuses anything that
+  is not a whole number, and reports it on a new `thinking` banner line).
+  Unset leaves every build as it ships — thinking on, the 27B at `xhigh`.
+  MEASURED on the 9B, one prompt: off is 376 vs 1156 output tokens, 7.2 s vs
+  20.9 s; through Claude Code 2.1.234 the server log shows `thinking=false`.
+  A positive value caps only the stored thinking text, not the time (128, 1024
+  and unset all ~21 s). The quality cost is NOT MEASURED, on any build, which
+  is why it is opt-in. The server-side `--reasoning-budget` flag was measured
+  inert and is not exposed. `tests/thinking-knob.sh` holds the guard. Closes
+  `AUDIT.md` E4.
 - `bin/bench.sh` — loads the selected model twice, speed features on and off,
   compares the two answers byte for byte, and reports the three figures mlx-serve
   prints for each: prefill rate, decode rate and peak memory. It loads under the
