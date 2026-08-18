@@ -183,7 +183,8 @@ two ever disagree, `AUDIT.md` is right.*
 ## Verified environment facts — do not re-derive
 
 Established 2026-08-17 on the reference machine (M3 Max, 36 GB) against
-`mlx-serve 26.8.8`, `mlx 0.32.0`, `mlx_lm 0.31.3`, Claude Code `2.1.233`.
+`mlx-serve 26.8.8`, `mlx 0.32.0`, `mlx_lm 0.31.3`, Claude Code `2.1.233`,
+Codex CLI `0.147.0` (that one on 2026-08-18).
 Each line carries the command that reproduces it. Re-verify only when a version
 in this list moves.
 
@@ -434,6 +435,116 @@ behavioural change, not a tuning nudge.
 `model_type: qwen3_5_text`, `full_attention_interval: 4`, and no `num_experts`.
 Consequently: expert-streaming techniques have nothing to stream, and
 `--ssm-checkpoint-stride`'s MoE caveat does not apply to this build.
+
+### Codex CLI 0.147.0 — every key and flag `harness/codex.sh` uses
+
+Established 2026-08-18 against `codex-cli 0.147.0` (Homebrew cask,
+`/opt/homebrew/Caskroom/codex/0.147.0/bin/codex`, a 210 MB arm64 Mach-O).
+`command -v codex` on this machine can be a **cmux shim** in a temp folder
+that execs `/Applications/cmux.app/…/cmux-codex-wrapper`, which injects cmux's
+own hooks and `--dangerously-bypass-hook-trust` for that invocation. Resolve
+the real binary before drawing conclusions from `strings`; the probe figures
+below are identical through both.
+
+**0.147.0 validates `-c` overrides itself, by name.** `codex exec
+--strict-config -c <key>=<value>` refuses an unrecognised key with
+``unknown configuration field `<key>` in -c/--config override`` — nested paths
+included. That, not `strings`, is how every key below was checked: each one was
+accepted, and a deliberate typo in the same namespace was refused. Two
+subcommands do not take the flag (`Error: --strict-config is not supported for
+codex mcp` / `codex debug`), so the check has to be run through `exec`; a
+config error is raised before any request, so a dead `base_url` makes it cheap.
+
+```
+$ codex -c model_provider=airgap -c model_providers.airgap.name=airgap \
+    -c model_providers.airgap.base_url=http://127.0.0.1:9/v1 \
+    -c model_providers.airgap.wire_api=responses \
+    --strict-config -c model_providers.airgap.bogus=1 exec --skip-git-repo-check x
+Error loading config.toml: unknown configuration field `model_providers.airgap.bogus` in -c/--config override
+```
+
+Used by the adapter, each accepted by that validator, its typo refused:
+`model_provider`, `model_providers.<id>.name`, `.base_url`, `.wire_api`,
+`.request_max_retries`, `.stream_max_retries`, `.stream_idle_timeout_ms`,
+`model_context_window`, `analytics.enabled`, `otel.trace_exporter`,
+`check_for_update_on_startup`, `features.plugins`. Flags: `-c/--config`,
+`-m/--model` (both global, before the subcommand), and `exec`'s own
+`--skip-git-repo-check`.
+
+**`wire_api = "chat"` is refused by 0.147.0 — the local wire is Responses.**
+The design chose `chat` because `mlx-serve` serves `/v1/chat/completions`. The
+binary does not: it stops before any request with ``Error loading config.toml:
+`wire_api = "chat"` is no longer supported. How to fix: set `wire_api =
+"responses"` in your provider config.`` `mlx-serve 26.8.8` also serves
+`POST /v1/responses` (its own startup banner lists it), and that is the pairing
+that works. Verified by running both.
+
+**`codex exec` runs against a custom provider with no login and no key.**
+MEASURED with a throwaway `CODEX_HOME` (an empty folder, so no `auth.json` and
+no `config.toml`) and `CODEX_API_KEY`/`OPENAI_API_KEY` unset: the turn
+completed and answered `AIRGAP OK`, and the folder afterwards still held no
+`auth.json`. A provider with no `env_key` is not asked for one; adding
+`env_key` would make Codex *require* the named variable, so the adapter does
+not set it.
+
+**Left alone, Codex sends the ChatGPT sign-in token to whatever `base_url`
+names.** MEASURED by pointing the provider at a local Python listener that
+prints request headers: with nothing set, the request to `/v1/responses`
+carried `authorization: Bearer eyJhb…` (1773 bytes — the OAuth JWT from
+`~/.codex/auth.json`) and `chatgpt-account-id: <uuid>`. With `CODEX_API_KEY`
+exported, the same request carried exactly that value and **no**
+`chatgpt-account-id`. `OPENAI_API_KEY` was ignored in both runs. That is why
+`harness/codex.sh` exports `CODEX_API_KEY` (`API_KEY` when set, else the
+placeholder `mlx-serve`). The same capture shows Codex sends an
+`x-codex-turn-metadata` header carrying the installation id, the git remote URL
+and the current commit hash — to `base_url`, which here is this Mac.
+
+**MCP cannot be fully switched off from Codex's command line, and
+`-c 'mcp_servers={}'` is a trap.** The TOML parser accepts it and then does
+nothing: `-c` MERGES into a table rather than replacing it, so an empty table
+changes nothing. `codex mcp list` prints the same 10 servers with and without
+it. A *scalar* under the same table does apply — `-c
+mcp_servers.gitnexus.enabled=false` flips that row to `disabled` — but that
+needs the names out of somebody's own config.toml. What does work is
+`-c features.plugins=false` (equivalently `--disable plugins`): 10 servers
+become 4, and the 6 that go are every one that reaches the network. The 4 that
+remain are the ones written in `~/.codex/config.toml`. `--ignore-user-config`
+is not used: it would drop the person's approvals and provider trust with them.
+
+```
+$ codex mcp list | grep -cE 'enabled|disabled'                       # 10
+$ codex -c 'mcp_servers={}' mcp list | grep -cE 'enabled|disabled'   # 10
+$ codex -c features.plugins=false mcp list | grep -cE 'enabled|disabled'   # 4
+```
+
+**`--skip-git-repo-check` is an `exec` flag, not a global one.** Outside a git
+checkout `codex exec` stops with `Not inside a trusted directory and
+--skip-git-repo-check was not specified.`, and `codex --skip-git-repo-check
+exec` is refused by the argument parser (`tip: 'exec --skip-git-repo-check'
+exists`). It therefore lives in `HARNESS_ONESHOT`, which `run.sh` puts after
+the subcommand; a hand-typed `./bin/run.sh codex exec …` outside a checkout
+needs it typed too.
+
+**`otel.trace_exporter` takes one of four values.** A bad one is answered with
+``unknown variant `bogus`, expected one of `none`, `statsig`, `otlp-http`,
+`otlp-grpc``. The adapter sets `none`.
+
+**Codex's fixed cost per turn, MEASURED.** `./bin/run.sh --probe codex` on the
+9B (`Qwen3.8-9B-mlx-4Bit`, `mlx-serve 26.8.8`, `CTX_SIZE=65536`, M3 Max 36 GB,
+2026-08-18): **9,336 prompt tokens** with `LEAN_MCP=1` and **10,271** with
+`LEAN_MCP=0` — 935 tokens per turn for the plugins. Both figures reproduced to
+the token across two runs each and across the cmux shim and the Homebrew
+binary. Wall clock 21.3 s cold, 3.1 s warm. Not measured on the 27B. Claude
+Code's 17,000-token figure is a different harness's number and is never reused
+for this one.
+
+**Two lines at Codex startup against this server are cosmetic.**
+`ERROR codex_models_manager: failed to refresh available models: … missing
+field 'models'` — Codex asks `GET /v1/models?client_version=…` and mlx-serve
+answers the OpenAI `{"object":"list","data":[…]}` shape, which Codex's own
+catalog reader does not accept. And `warning: Model metadata for
+'Qwen3.8-9B-mlx-4Bit' not found` — Codex has never heard of a model that only
+exists on this Mac. Neither stops the turn.
 
 ## Falsified — do not retry
 
