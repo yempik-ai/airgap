@@ -35,17 +35,26 @@ two ever disagree, `AUDIT.md` is right.*
   — the prefix memory tier stated in prompt tokens on the banner, doctor's row
   and `docs/07` §5, with the 32-entry cap named) and `E3` (`docs/07` §12's
   table of the hot-path flags with server defaults, all labelled unmeasured,
-  none made a setting). Details and numbers:
+  none made a setting) · **`ROADMAP.md` Phase 1: `bin/run.sh <harness>`** —
+  the contract, `harness/claude-code.sh` and `harness/codex.sh` both verified
+  live with `--probe`, the `claude-local.sh` shim, doctor's per-adapter rows
+  and `docs/10-other-harnesses.md`. Details and numbers:
   `CHANGELOG.md`; status per item: `AUDIT.md`.
   Two things a later session must not undo: the `docs/07` renumbering (a new
   §7; 7–13 → 8–14, cross-refs updated everywhere but `AUDIT.md`'s
-  audit-time citations) and the six-line `claude-local.sh` banner.
+  audit-time citations) and the `claude-local.sh` banner, now eight lines —
+  the adapter and its dialect on line 1, the answer cap on an `output` line of
+  its own, quoted in `docs/02`, `docs/05` and `docs/06`.
 - **Roadmap position:** Phase 0.5 (the audit backlog) is complete, and so is
   every audit item that needs neither the 27B nor a measurement — 19 of 24.
   Phase 0 (credibility gaps, "before publishing") is 1 of 5 — the four left
   need hardware this machine cannot give while in use (the 27B loaded, a
   fresh user account, a 16 GB Mac, the `A5` stall experiment on the 27B);
-  the fifth, `A7`, is done. Phases 1–4 are not started.
+  the fifth, `A7`, is done. **Phase 1 is shipped for two harnesses**
+  (Claude Code, Codex CLI, 2026-08-18); what is left in it is adapters for
+  harnesses nobody here has installed — Pi, Hermes Agent, a DeepSeek harness,
+  OpenCode, Aider — and rule 1 (a live `AIRGAP OK` probe) has no shortcut.
+  Phases 2–4 are not started.
 - **Next, in order of value:** the 27B measurement (`AUDIT.md` A3, E5,
   `ROADMAP.md` Phase 0), which every "9B only" figure in this file is
   waiting on; `B2` (a context sweep — `bench.sh` already emits the row a
@@ -124,12 +133,42 @@ two ever disagree, `AUDIT.md` is right.*
   `serve.sh`'s disk refusal and doctor's `disk` row all read it.
 - `bin/serve.sh` — the only script that loads the model. Ends in `exec`, so
   nothing can run after the server is up.
+- `bin/run.sh` — the one dispatcher, for every harness. It sources `env.sh`,
+  lists `harness/*.sh` when it is given no name or a name that is not there,
+  sources the adapter, lets it wire itself, checks the server, prints the
+  banner, and then either `exec`s the harness or runs `--probe`. `--probe`
+  sends one question through the harness and reports the verdict, the wall
+  clock and the prompt tokens the *server* counted for that turn (read through
+  `metrics_counters`, so it is the harness's whole fixed cost, background
+  requests included). Order matters and a test holds it: `harness_wire` runs
+  **before** the server check, so a typo in a harness setting is refused
+  whether or not a server is up (`tests/thinking-knob.sh`).
+  `bin/claude-local.sh` is one `exec` line onto `run.sh claude-code` and stays
+  that way: the name is in ~58 places in these documents.
+- `harness/` — one file per harness, and the only place that knows what a
+  particular harness calls anything. The contract is four names —
+  `HARNESS_DIALECT` (`anthropic`/`openai`/`ollama`), `HARNESS_BIN`,
+  `HARNESS_ONESHOT`, `harness_wire` — plus two optional: `harness_usage`, and
+  `HARNESS_ENDPOINT` for an adapter whose real endpoint disagrees with its
+  dialect's usual one (`harness/codex.sh`: `/v1/responses`, because 0.147.0
+  refuses `wire_api = "chat"`). Only `doctor.sh` reads that last one. An
+  adapter never checks the server, parses `run.sh`'s options, computes a
+  timeout, prints the shared banner lines or runs the probe — those live once,
+  in `run.sh` and `env.sh`. Each adapter carries its harness's own settings
+  under that harness's own names, defaulted there and on `ENV_KEYS`:
+  `CLAUDE_BIN`, `CLAUDE_CODE_MAX_OUTPUT_TOKENS` and `MAX_THINKING_TOKENS` for
+  `claude-code.sh`; `CODEX_BIN` for `codex.sh` (the ordinary three edits in
+  `env.sh`, exactly as `CLAUDE_BIN` has them). No translation layer, and no
+  default without a measurement behind it. The rules an adapter meets before it
+  is listed are in `docs/10-other-harnesses.md`, and rule 1 is a live
+  `--probe` transcript.
 - `bin/doctor.sh` — checks, never changes. Every row carries a fix.
 - `bin/catalog.sh` — the one list of models. Seven columns; the `kv KiB/token`
   one is verified against each repository's `config.json`, and a new entry
   needs its own figure computed, not a neighbour's copied.
-- `docs/01`–`09` — user-facing, in reading order. Contributor material does not
-  go here.
+- `docs/01`–`10` — user-facing, in reading order (`10` is the harness page:
+  the contract, the six rules, and one verified probe line per adapter).
+  Contributor material does not go here.
 - `bench/` — one `.tsv` per Mac, one row per `bench.sh` run, header and
   columns fixed in `bench/README.md`. Never hand-edited; a row is a run.
 - `RELEASE.md` — what is re-run before a tag, on what, and what blocks it.
@@ -142,6 +181,11 @@ two ever disagree, `AUDIT.md` is right.*
   contract; `thinking-knob.sh` holds `claude-local.sh`'s `MAX_THINKING_TOKENS`
   guard (it points `PORT` at a closed port, so "past the guard" shows as the
   no-server error); `wired-log.sh` holds doctor's `log_wired_gb` reader;
+  `harness-contract.sh` holds the harness contract — for every `harness/*.sh`,
+  that the four names are declared and of the right kind, and that
+  `harness_wire` itself (not the ambient environment) names `BASE_URL` and
+  `MODEL_ID`; `run-dispatch.sh` holds `run.sh`'s dispatch — the list derived
+  from the folder, the refusals, and `<name> --help` without a server;
   `model-state.sh` holds the `absent`/`partial`/`complete` contract and the
   rule that only `env.sh` and `verify-model.sh` may enumerate shards;
   `verify-truncation.sh` holds `verify-model.sh`'s byte and index checks;
@@ -160,7 +204,8 @@ two ever disagree, `AUDIT.md` is right.*
   to be over 1 MB to get past the pointer test, and a 1 MB blob does not
   belong in git. Rename one of the lifted functions and the test says so by
   name. `tests/run.sh` runs all; `.github/workflows/ci.yml` runs it on a macOS
-  runner and shellcheck on Ubuntu, on every push and pull request.
+  runner and `bash -n` plus shellcheck on Ubuntu — over `start.sh`, `bin/`,
+  `harness/` and `tests/` — on every push and pull request.
 
 ## Quality rules
 
