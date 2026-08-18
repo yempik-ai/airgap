@@ -131,6 +131,9 @@ Any other MLX model works too — `./bin/download-model.sh <org>/<repo>`, then `
 "It is downloaded. How do I actually use it?"
    → docs/05-run-it.md                ⏱ 10 min
 
+"I use Codex / another harness, not Claude Code."
+   → docs/10-other-harnesses.md       ⏱ 5 min, one command per harness
+
 "Something broke."
    → docs/06-troubleshooting.md       symptom-first lookup table
 
