@@ -28,11 +28,21 @@ two ever disagree, `AUDIT.md` is right.*
   audit-time snapshots and were left. Before that, the same day: `E1`, the
   `bench.sh` lock release, `tests/` and CI (green on GitHub, run
   `32121837232`; pin any new action at a Node-24 major).
-- **Next:** the numbered list in `AUDIT.md` is empty. What is left, in order
-  of value: the 27B measurement (`AUDIT.md` A3, E5, `ROADMAP.md` Phase 0),
-  which every "9B only" figure in this file is waiting on; the quality cost
-  of `E4`, which needs `B1`'s suite to become a number; §F (roadmap
-  sequencing, no code). Nothing here is blocked on a decision.
+- **Roadmap position:** Phase 0.5 (the audit backlog) is complete, 7 of 7.
+  Phase 0 (credibility gaps, "before publishing") is 0 of 5 — four of them
+  need hardware this machine cannot give while in use (the 27B loaded, a
+  fresh user account, a 16 GB Mac, the `A5` stall experiment on the 27B);
+  the fifth, `A7` — label the GPU wired ceiling as ARITHMETIC in
+  `detect-hardware.sh` and `docs/04` — needs nothing but this repo (the
+  real number is Metal's `recommendedMaxWorkingSetSize`; `sysctl
+  iogpu.wired_limit_mb` reads `0` = auto here and does not reveal it, and
+  asking MLX is Python, out of scope — so label, do not replace). Phases
+  1–4 are not started.
+- **Next, in order of value:** the 27B measurement (`AUDIT.md` A3, E5,
+  `ROADMAP.md` Phase 0), which every "9B only" figure in this file is
+  waiting on; `A7`, the one Phase 0 item an agent can close alone; the
+  quality cost of `E4`, which needs `B1`'s suite to become a number; §F
+  (roadmap sequencing, no code). Nothing here is blocked on a decision.
 - **Blocked on memory, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `serve.sh` needs 22 GB free for
   it and a working day leaves ~14 (2026-08-18: a 3.2 GB VM, a browser,
