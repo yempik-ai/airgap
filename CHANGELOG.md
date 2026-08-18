@@ -97,7 +97,10 @@ First public release.
   free); each job capped at ten minutes, superseded runs cancelled. Every
   script is clean at that level;
   the four cross-file "unused" notes shellcheck cannot see through are
-  annotated in place.
+  annotated in place. Green on its first real run, MEASURED at 17 s (lint)
+  and 11 s (tests); `actions/checkout` is pinned at `@v5`, the first major
+  that declares Node 24, since `@v4` declares the Node 20 that GitHub-hosted
+  runners have deprecated.
 - `bin/serve.sh` — refuses, rather than warns, on a non-Apple-Silicon Mac, on a
   build that does not fit under the GPU wired ceiling, on a non-loopback host, on
   `--host`, `--lan-share`, `--lan-discover`, `--skip-mem-preflight`, `--no-mtp`

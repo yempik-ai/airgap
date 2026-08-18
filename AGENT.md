@@ -24,9 +24,12 @@ two ever disagree, `AUDIT.md` is right.*
   `D3` reader checks moved from a scratch directory into `tests/`, with a CI
   workflow that runs shellcheck and the tests on every push (the repo is
   public and will stay so, where hosted runners are free; jobs are capped at
-  ten minutes and superseded runs cancelled). It has run only as its local
-  equivalent so far — its first real run is the first push, and the first
-  thing to look at if it fails.
+  ten minutes and superseded runs cancelled). It has since run on GitHub —
+  both jobs green, 17 s (lint) and 11 s (tests), MEASURED on run
+  `32121837232`. That run annotated `actions/checkout@v4` as declaring the
+  deprecated Node 20 (the runner forced it onto Node 24 anyway); both steps
+  are on `@v5`, which declares Node 24. Pin any action added later at a
+  Node-24 major.
 - **Next:** the numbered list in `AUDIT.md` is empty. What is left, in
   order of value: the 27B measurement (hardware-blocked — `AUDIT.md` A3, E5,
   `ROADMAP.md` Phase 0), which every "9B only" figure in this file is
