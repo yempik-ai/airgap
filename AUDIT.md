@@ -279,7 +279,7 @@ limit airgap inherits*, not adding a mechanism.
 
 **Shape.** `SERVE_TIMEOUT` through all three lists in `bin/env.sh` (see
 `AGENT.md` § Layout), passed by `serve.sh`; explicit values for the two Claude
-Code variables in `harness/claude-code.sh:184-190` (the wiring that used to
+Code variables in `harness/claude-code.sh:185-191` (the wiring that used to
 live in `claude-local.sh`). Docs: `docs/06-troubleshooting.md`
 §12 already covers the slow-but-working case at `:981-1046` — do **not** add a
 second copy. The missing sentence is the *failure* case: what the abort looks
@@ -1094,7 +1094,7 @@ precisely what `B1`'s suite should turn into a real number.
 
 **Do not** claim the knob derives from `CLAUDE_CODE_MAX_OUTPUT_TOKENS` "so the
 two numbers come from one place": `env.sh:35` lists the name in `ENV_KEYS` but
-sets no default; the default lives in `harness/claude-code.sh:160`. `serve.sh`
+sets no default; the default lives in `harness/claude-code.sh:161`. `serve.sh`
 and the harness `bin/run.sh` starts are separate processes.
 
 ### E5 — nothing seeds the cache on purpose
@@ -1112,8 +1112,8 @@ prefills the rest (`ds4_server.c:11411-11470`). Its comment states the intent:
 
 airgap cannot split a prefill. What it can do is make the first request happen
 before the user's first question, using the genuine article rather than a
-reconstruction: `harness/claude-code.sh:44` already documents `-p` one-shot
-mode, and `HARNESS_ONESHOT` (`:21`) is the same thing as an array.
+reconstruction: `harness/claude-code.sh:45` already documents `-p` one-shot
+mode, and `HARNESS_ONESHOT` (`:22`) is the same thing as an array.
 
 **Shape.** `bin/warm.sh` that waits for `server_up` (`env.sh:321`), runs one
 real one-shot with a short output cap, and **prints the `[hot-cache] reused N/M`

@@ -26,9 +26,12 @@ knob() {
   fi
 }
 
-knob "unset"       '^error: no server at'                                       --
-knob "0 (off)"     '^error: no server at'                                       -- MAX_THINKING_TOKENS=0
-knob "1024"        '^error: no server at'                                       -- MAX_THINKING_TOKENS=1024
+# CLAUDE_BIN=/bin/echo: bin/run.sh now checks for the harness binary before
+# the server, so these three cases (which mean to observe the server check)
+# need a binary that exists on every machine, CI included.
+knob "unset"       '^error: no server at'                                       -- CLAUDE_BIN=/bin/echo
+knob "0 (off)"     '^error: no server at'                                       -- CLAUDE_BIN=/bin/echo MAX_THINKING_TOKENS=0
+knob "1024"        '^error: no server at'                                       -- CLAUDE_BIN=/bin/echo MAX_THINKING_TOKENS=1024
 knob "off (typo)"  '^error: MAX_THINKING_TOKENS=off is not a whole number.*fix:' -- MAX_THINKING_TOKENS=off
 knob "-1"          '^error: MAX_THINKING_TOKENS=-1 is not a whole number.*fix:'  -- MAX_THINKING_TOKENS=-1
 knob "1.5"         '^error: MAX_THINKING_TOKENS=1.5 is not a whole number.*fix:' -- MAX_THINKING_TOKENS=1.5

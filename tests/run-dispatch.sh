@@ -57,6 +57,10 @@ run "missing binary refuses" 1 "^error: '/nonexistent/claude-bin' is not install
 RUN_ENV=( CLAUDE_BIN=/nonexistent/claude-bin )
 run "missing binary names its help" 1 './bin/run.sh claude-code --help' -- claude-code
 
+# CLAUDE_BIN=/bin/echo: exists on every machine, so the binary check (which
+# now runs before the server check) passes and this case observes the server
+# check instead, as intended.
+RUN_ENV=( CLAUDE_BIN=/bin/echo )
 run "no server"          1 '^error: no server at'       -- claude-code
 run "adapter help"       0 'USAGE'                      -- claude-code --help
 run "adapter help names run.sh" 0 './bin/run.sh claude-code' -- claude-code --help
