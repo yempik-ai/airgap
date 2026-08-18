@@ -31,7 +31,7 @@ ROOT="$(cd "$(dirname "$_env_self")/.." && pwd)"
 ENV_KEYS="MODEL_QUANT MODEL_REPO MODEL_DIR MODEL_ID HOST PORT CTX_SIZE KV_QUANT NO_VISION \
 PREFIX_CACHE_MEM PREFIX_CACHE_DISK MAX_RESIDENT_MODELS MAX_RESIDENT_MEM \
 IDLE_EVICT_SECS SERVE_TIMEOUT PREFILL_CHUNK MIN_FREE_GB MIN_DISK_GB LOG_LEVEL LOG_FILE \
-LOCK_DIR API_KEY METRICS EXTRA_ARGS DEDUP LEAN_MCP CLAUDE_BIN PYTHON_BIN WITH_VENV \
+LOCK_DIR API_KEY METRICS EXTRA_ARGS DEDUP LEAN_MCP CLAUDE_BIN CODEX_BIN PYTHON_BIN WITH_VENV \
 CLAUDE_CODE_MAX_OUTPUT_TOKENS MAX_THINKING_TOKENS PROBE SKIP_BREW TOKENS PROMPT PROMPT_FILE ROW_FILE"
 
 # --- Step 1: remember exactly what the caller set ----------------------------
@@ -479,10 +479,14 @@ fi
 # 1 makes the download tool reclaim the duplicate copy at the end (~19 GB back).
 : "${DEDUP:=1}"
 
-# 1 starts Claude Code with its extra tool servers switched off. Measured on the
-# test machine: Claude Code's instructions are 20,909 tokens that way and 38,054
-# tokens with every tool server loaded. Those schemas cost about 17,000 tokens
-# on EVERY turn. Set LEAN_MCP=0 to load your normal configuration instead.
+# 1 starts the harness with its MCP/tool servers switched off. What that costs
+# is a fact about each harness, so each adapter states its own figure; no
+# harness reuses another's. Measured on the test machine: Claude Code's own
+# instructions are 20,909 tokens with LEAN_MCP=1 and 38,054 tokens with every
+# tool server loaded, so those schemas cost it about 17,000 tokens on EVERY
+# turn; the Codex CLI's plugins cost it 935 prompt tokens per turn (9,336
+# against 10,271, run.sh --probe on the 9B). Set LEAN_MCP=0 to load your normal
+# configuration instead.
 : "${LEAN_MCP:=1}"
 
 # --- Tools -------------------------------------------------------------------
@@ -495,6 +499,7 @@ fi
 MLX_SERVE_MIN="26.8.8"
 
 : "${CLAUDE_BIN:=claude}"
+: "${CODEX_BIN:=codex}"
 # PYTHON_BIN (default python3) is set above, with the config.json readers.
 # 1 makes setup.sh build the optional Python environment. Nothing in this repo
 # needs it; it exists for people who want to poke at the weights themselves.
@@ -522,7 +527,7 @@ export MODEL_QUANT
 export ROOT MODEL_REPO MODEL_DIR MODEL_ID HOST PORT CTX_SIZE KV_QUANT NO_VISION \
        PREFIX_CACHE_MEM PREFIX_CACHE_DISK MAX_RESIDENT_MODELS MAX_RESIDENT_MEM \
        IDLE_EVICT_SECS SERVE_TIMEOUT PREFILL_CHUNK MIN_FREE_GB MIN_DISK_GB LOG_LEVEL LOG_FILE \
-       LOCK_DIR API_KEY METRICS EXTRA_ARGS DEDUP LEAN_MCP CLAUDE_BIN PYTHON_BIN WITH_VENV \
+       LOCK_DIR API_KEY METRICS EXTRA_ARGS DEDUP LEAN_MCP CLAUDE_BIN CODEX_BIN PYTHON_BIN WITH_VENV \
        BASE_URL MLX_SERVE_MIN
 
 # =============================================================================
