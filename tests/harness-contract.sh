@@ -22,6 +22,13 @@ failures=0
 # harness_wire's own output goes to a file rather than through a command
 # substitution: a substitution would run it in a subshell, and everything it
 # exports would be thrown away before the check below could see it.
+#
+# The wiring is judged on what harness_wire ITSELF added, never on the
+# environment as a whole: env.sh exports BASE_URL and MODEL_ID before any
+# adapter is sourced, so an adapter that wires nothing at all would pass a
+# check made against `env`. The exports are snapshotted either side of the
+# call and only the lines that appear or change count, together with whatever
+# went into HARNESS_ARGS.
 inner='
 set -euo pipefail
 source "$2/bin/env.sh"
@@ -30,12 +37,16 @@ echo "dialect=${HARNESS_DIALECT:-}"
 echo "bin=${HARNESS_BIN:-}"
 echo "oneshot=${#HARNESS_ONESHOT[@]}"
 if declare -f harness_wire >/dev/null 2>&1; then echo "wire=function"; else echo "wire=missing"; fi
-said="$(mktemp)"
+said="$(mktemp)"; was="$(mktemp)"; now="$(mktemp)"
 HARNESS_ARGS=(); HARNESS_NOTES=()
+# `declare -x _=` is bash noting the last argument of the previous command,
+# not an adapter exporting anything, so it is never evidence.
+export -p | grep -v "^declare -x _=" > "$was"
 harness_wire > "$said" 2>&1
+export -p | grep -v "^declare -x _=" > "$now"
 echo "printed=$(wc -c < "$said" | tr -d " ")"
-rm -f "$said"
-wired="$( { printf "%s\n" ${HARNESS_ARGS[@]+"${HARNESS_ARGS[@]}"}; env; } )"
+wired="$( { printf "%s\n" ${HARNESS_ARGS[@]+"${HARNESS_ARGS[@]}"}; grep -Fxv -f "$was" "$now" || true; } )"
+rm -f "$said" "$was" "$now"
 case "$wired" in *"$BASE_URL"*) echo "url=yes" ;; *) echo "url=no" ;; esac
 case "$wired" in *"$MODEL_ID"*) echo "id=yes" ;; *) echo "id=no" ;; esac
 '
@@ -87,8 +98,8 @@ for adapter in "$ROOT"/harness/*.sh; do
       "HARNESS_ONESHOT carries $oneshot argument(s)"
   say "$name" "$wire" function "harness_wire is a function"
   say "$name" "$printed" 0 "harness_wire printed ${printed:-?} bytes"
-  say "$name" "$url" yes "the wiring names BASE_URL"
-  say "$name" "$id" yes "the wiring names MODEL_ID"
+  say "$name" "$url" yes "harness_wire itself names BASE_URL"
+  say "$name" "$id" yes "harness_wire itself names MODEL_ID"
 done
 
 if [ "$found" -eq 0 ]; then
