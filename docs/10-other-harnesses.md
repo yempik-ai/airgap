@@ -6,8 +6,8 @@ also the page to read before you write an adapter for an app this repository
 does not ship yet.
 
 **What you will have at the end.** One command that starts your app against your
-own Mac, a way to prove the wiring worked in about four seconds, and the exact
-list of things an adapter has to do before it is listed here.
+own Mac, one more that proves the wiring worked, and the exact list of things an
+adapter has to do before it is listed here.
 
 **How long it takes.** Five minutes to start the app you already have. A day, at
 most, to write an adapter for one that is not here yet — most of which is
@@ -23,9 +23,9 @@ No money. Nothing leaves your Mac.
   already running in another window.
 
 **If you only read one thing:** `./bin/run.sh --probe <name>` is the whole
-point. It sends one question through your app, and prints whether the answer
-came back, how long it took, and how much the app said before you typed
-anything.
+point. It sends one question through your app and prints whether the answer
+came back, how long it took, and how much text your app sent before you had
+typed anything.
 
 ---
 
@@ -52,10 +52,10 @@ in `harness/`. Adding a file adds a harness; nothing else in this repository
 has to change.
 
 ```text
-  you ─▶ your harness ─▶ bin/run.sh ─▶ 127.0.0.1:11234 ─▶ mlx-serve ─▶ your Mac
-                             │
-                    harness/<name>.sh — the only file that knows
-                    what your particular app calls each setting
+  you ─▶ your harness ─▶ 127.0.0.1:11234 ─▶ mlx-serve ─▶ MLX / Metal ─▶ your Mac
+              ▲
+              └── started by ./bin/run.sh <name>, wired by harness/<name>.sh —
+                  the only file that knows what your app calls each setting
 ```
 
 ---
@@ -230,7 +230,7 @@ probe  codex  AIRGAP OK  21.3 s  9,336 prompt tokens     (first turn, weights be
 probe  codex  AIRGAP OK  3.1 s   9,336 prompt tokens     (a later turn, model already in memory)
 ```
 
-Four things about Codex are worth knowing before you use it here.
+What is worth knowing about Codex here, before you use it:
 
 **Your ChatGPT sign-in is not sent.** Left alone, Codex falls back to the
 sign-in token in `~/.codex/auth.json` and sends it, with your account id, to
@@ -384,9 +384,10 @@ The order that works:
    environment variables; `harness/codex.sh` if it takes command-line
    overrides.
 2. **Check every setting name against the installed binary**, not against its
-   documentation and not against memory. Both shipped adapters were written
-   this way, and both found something that was not true any more — the exact
-   commands used are in `AGENT.md` under "Verified environment facts".
+   documentation and not against memory. That is how the Codex adapter was
+   written, and it is how the plan for it was found to be wrong: the format it
+   was going to use had been removed from the version installed here. The exact
+   commands are in `AGENT.md` under "Verified environment facts".
 3. **Meet the six rules above.**
 4. **Run the probe** and keep the output:
    `./bin/run.sh --probe <name>`.
