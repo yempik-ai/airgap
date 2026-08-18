@@ -317,6 +317,39 @@ First public release.
   per adapter — installed, and which endpoint it would be pointed at.
   `tests/harness-contract.sh` and `tests/run-dispatch.sh` hold the contract and
   the dispatch offline. `ROADMAP.md` Phase 1.
+- **Two more adapters: Pi and Hermes Agent** (`harness/pi.sh`,
+  `harness/hermes.sh`, 2026-08-18), both verified end to end on the 9B
+  (`Qwen3.8-9B-mlx-4Bit`, `mlx-serve 26.8.8`, M3 Max 36 GB, `LEAN_MCP=1`):
+  **Pi 0.84.2** — `AIRGAP OK`, 5.2 s on the first turn against a freshly
+  started server, 1.5 s warm, 2,024 prompt tokens per turn; **Hermes Agent
+  0.20.4** — `AIRGAP OK`, 36.7 s on its first turn (its own 15,060-token
+  prefix processed), 7.5 s warm, 15,060 prompt tokens per probe turn, plus a
+  311-token background title request that goes to the same server (all
+  MEASURED; each harness's token figure is its own cost). Neither harness has
+  an MCP figure: `LEAN_MCP=0` read identical tokens on both, because the test
+  machine has no Pi extensions and no Hermes MCP servers — stated as not
+  measured rather than borrowed. Each forced one honest addition. Pi reads
+  providers only from `~/.pi/agent/models.json`, so the adapter contract
+  gained an optional `harness_prepare` — run by `run.sh` after every refusal,
+  never in the wire-only tests — and `harness/pi.sh` uses it to upsert one
+  `airgap` provider into that file, keeping everything else and refusing (with
+  the block to paste) a file it cannot round-trip; `tests/pi-models-json.sh`
+  holds those rules, and it is the only file this repository writes under a
+  home folder. Hermes is wired through the environment alone
+  (`--provider custom`, `CUSTOM_BASE_URL`, stall limits a minute past the
+  server's, stream reconnects off) — but it loads `~/.hermes/.env` *over* the
+  process environment, so a `CUSTOM_BASE_URL` line there would silently beat
+  the wiring (MEASURED with a throwaway `HERMES_HOME`); the adapter refuses
+  that case by name and `tests/hermes-env-guard.sh` holds the refusal.
+  `LEAN_MCP` reaches each through that harness's own switch: Pi's
+  `--no-extensions`, Hermes's `HERMES_SAFE_MODE=1` (the variable, not the
+  `--safe-mode` flag, which would also drop the person's config and rules).
+  One limit stated rather than hidden: `hermes` checks for updates with a
+  `git fetch` of its own checkout and 0.20.4 has no switch for it. `PI_BIN`,
+  `HERMES_BIN` and `HERMES_MAX_TOKENS` join `ENV_KEYS`; doctor's version
+  column now strips a leading `v` (`hermes --version` prints `v0.20.4`); the
+  probe transcripts are in `docs/10-other-harnesses.md` §6–7. `ROADMAP.md`
+  Phase 1 now ships four harnesses.
 - `bin/verify-model.sh`, `bin/stop.sh`.
 - Ten documents, `docs/01` to `docs/10`, written for readers who have never
   opened a terminal, plus a glossary of every technical term used.

@@ -1333,8 +1333,10 @@ nothing is wrong, so the output is familiar later when something is.
 
 **A `WARN` on a `harness wiring` row is also EXPECTED** if you only use Claude
 Code. The sample above is from a Mac with both Claude Code and the Codex CLI
-installed; a row reading `WARN codex 'codex' not found` simply means that app
-is not on this Mac, which is not a problem and stops nothing.
+installed; your copy will show one row per adapter this repository ships
+(`claude-code`, `codex`, `pi`, `hermes`), and a row reading
+`WARN codex 'codex' not found` simply means that app is not on this Mac,
+which is not a problem and stops nothing.
 [`10-other-harnesses.md`](10-other-harnesses.md) is the page for the other
 apps, if you ever want one.
 

@@ -897,6 +897,19 @@ keep only the memory one.
 |---|---|
 | `CODEX_BIN` | `codex` |
 
+**Pi** ([10 — other harnesses](10-other-harnesses.md))
+
+| Name | Default |
+|---|---|
+| `PI_BIN` | `pi` |
+
+**Hermes Agent** ([10 — other harnesses](10-other-harnesses.md))
+
+| Name | Default |
+|---|---|
+| `HERMES_BIN` | `hermes` |
+| `HERMES_MAX_TOKENS` | unset — as Hermes decides; a number caps each answer |
+
 **Tools and scripts**
 
 | Name | Default | Used by |

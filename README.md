@@ -240,7 +240,7 @@ airgap/
 │   ├── stop.sh              ← hands the memory straight back
 │   ├── verify-model.sh      ← integrity check
 │   └── bench.sh             ← speculative decoding on versus off, tokens/s
-├── harness/                 ← one file per harness: claude-code, codex
+├── harness/                 ← one file per harness: claude-code, codex, pi, hermes
 ├── docs/                    ← 01 → 10, in reading order
 ├── tests/                   ← offline checks: doctor's readers against captured
 │                              lines, the load-shape contract, the thinking guard

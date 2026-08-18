@@ -77,6 +77,8 @@ error: which harness? Name one.
 This repo can start:
     claude-code
     codex
+    hermes
+    pi
 
 For example:  ./bin/run.sh claude-code
 ```
@@ -88,6 +90,8 @@ truth about your copy.
 |---|---|
 | `./bin/run.sh claude-code` | starts Claude Code in the current folder |
 | `./bin/run.sh codex` | starts the Codex CLI in the current folder |
+| `./bin/run.sh pi` | starts Pi in the current folder |
+| `./bin/run.sh hermes` | starts Hermes Agent in the current folder |
 | `./bin/run.sh claude-code -p "hello"` | one question, one answer, then exit |
 | `./bin/run.sh --probe codex` | sends one test question and reports |
 | `./bin/run.sh <name> --help` | the settings that apply to that one harness |
@@ -295,7 +299,186 @@ that only exists on your Mac. Neither stops the answer.
 
 ---
 
-## 6. What `./bin/doctor.sh` shows
+## 6. Pi — verified
+
+```
+./bin/run.sh pi
+```
+
+Six lines appear before Pi's own screen:
+
+```
+pi       -> http://127.0.0.1:11234   model Qwen3.8-9B-mlx-4Bit  (anthropic)
+context  65536 tokens declared to the harness
+timeout  client gives up after 360s of silence, the server after 300s — so the server reports it
+provider airgap in /Users/you/.pi/agent/models.json — the one file this script writes; your other providers there are kept
+retries  Pi's own (settings.json "retry", default 3) — not changed by this script; idle limit is Pi's httpIdleTimeoutMs (default 300s)
+mcp      extensions off (LEAN_MCP=1, Pi's --no-extensions) — saving not measured: none installed on the test machine
+```
+
+**The verified line.** MEASURED on the test machine (Apple M3 Max, 36 GB,
+macOS 26.5.2) on **2026-08-18**, with **Pi 0.84.2**, **mlx-serve 26.8.8**,
+the model **Qwen3.8-9B-mlx-4Bit**, `CTX_SIZE=65536`, `SERVE_TIMEOUT=300`,
+`LEAN_MCP=1`:
+
+```
+probe  pi  AIRGAP OK  5.2 s  2,024 prompt tokens     (first turn against a freshly started server)
+probe  pi  AIRGAP OK  1.5 s  2,024 prompt tokens     (a later turn)
+```
+
+The token figure was identical across four runs, and identical again with
+`LEAN_MCP=0` — the test machine has no Pi extensions installed, so their cost
+is honestly **not measured**, and the banner says so.
+
+What is worth knowing about Pi here, before you use it:
+
+**This adapter writes one file under your home folder, and says so.** Pi has
+no command-line or environment way to be told about a provider: its one route
+is `~/.pi/agent/models.json` (the alternative its docs offer is an extension —
+TypeScript that runs inside Pi, which this repository does not ship). So
+`run.sh pi` writes one provider, `airgap`, into that file, keeps every other
+provider and key in it exactly as they were, and rewrites it only when the
+address, model or context size changed. It is the only file this repository
+changes under a home folder, for any harness. If the file cannot be read back
+as plain JSON — Pi allows comments in it; this script does not rewrite what it
+cannot round-trip — the run refuses and prints the block for you to paste in
+yourself, once.
+
+**Pi is started offline.** `PI_OFFLINE=1` is Pi's own switch for every network
+thing it does at startup: the version check against pi.dev, the anonymous
+install ping, the package update check, and the model-catalog refresh for its
+built-in providers. All requests for the model go to your Mac; with the flag,
+nothing else is sent anywhere.
+
+**No key is written.** The provider carries the placeholder `mlx-serve`,
+because Pi treats a keyless model as unusable and its own docs say a local
+server should keep a dummy value. A real `API_KEY`, when you set one, is not
+copied into the file: the server does not ask a loopback client for it, and a
+real key does not belong in a file this repository rewrites.
+
+**Retries and the idle limit are Pi's own, and are not changed.** They live in
+`~/.pi/agent/settings.json` (`retry.*`, default 3 attempts with backoff, and
+`httpIdleTimeoutMs`, default 300 s) — your global Pi configuration for every
+provider you use, which this script does not touch. Two consequences the
+banner states: a stall may be retried before it is reported, and Pi's 300 s
+idle default is the same moment the server's `SERVE_TIMEOUT=300` fires, so if
+you want the server to always be the side that reports, raise
+`httpIdleTimeoutMs` to `360000` there yourself.
+
+**The dialect is Anthropic Messages.** Pi also speaks the OpenAI chat format,
+and that pairing was tried and answered — but Pi sends its system prompt under
+the OpenAI `developer` role there, which the server logged as an empty system
+prompt (`sys=0b`), and this repository does not ship wiring it cannot vouch
+for. On `/v1/messages` the system prompt lands as itself, and Pi's
+`--thinking` flag maps exactly onto the thinking switch the server
+understands: `--thinking off` was MEASURED to log `thinking=false` — though
+the one probe tried that way answered wrongly (n=1; the quality cost of
+thinking off is not measured on any harness here).
+
+Its own settings: `PI_BIN`, and the shared `LEAN_MCP` (Pi's
+`--no-extensions`). `./bin/run.sh pi --help` lists them. Pi gets **no**
+answer-length or thinking setting in this repository: `maxTokens` in
+models.json keeps Pi's own 16,384-token default, and `--thinking` is already
+Pi's own flag, typed after the name.
+
+---
+
+## 7. Hermes Agent — verified
+
+```
+./bin/run.sh hermes
+```
+
+Eight lines appear before Hermes's own screen:
+
+```
+hermes   -> http://127.0.0.1:11234   model Qwen3.8-9B-mlx-4Bit  (openai)
+context  65536 tokens declared to the harness
+timeout  client gives up after 360s of silence, the server after 300s — so the server reports it
+provider custom, CUSTOM_BASE_URL (environment only; your ~/.hermes is not changed)
+context  Hermes reads it from the server's /v1/models — the CTX_SIZE it was started with
+retries  stream reconnects off (HERMES_STREAM_RETRIES=0); Hermes's own whole-request retry (config.yaml agent.api_max_retries, default 3) stays
+mcp      MCP servers, plugins and shell hooks off (LEAN_MCP=1, HERMES_SAFE_MODE=1) — saving not measured: none configured on the test machine
+note     Hermes may say its "tirith" scanner is unavailable, and mention a TERMINAL_CWD line its
+         installer left in ~/.hermes/.env — both EXPECTED and cosmetic; `hermes` also runs a git fetch of its own checkout at start
+```
+
+**The verified line.** MEASURED on the test machine (Apple M3 Max, 36 GB,
+macOS 26.5.2) on **2026-08-18**, with **Hermes Agent 0.20.4**, **mlx-serve
+26.8.8**, the model **Qwen3.8-9B-mlx-4Bit**, `CTX_SIZE=65536`,
+`SERVE_TIMEOUT=300`, `LEAN_MCP=1`:
+
+```
+probe  hermes  AIRGAP OK  36.7 s  15,060 prompt tokens     (first Hermes turn: its own 15,060-token prefix processed)
+probe  hermes  AIRGAP OK  7.5 s   15,060 prompt tokens     (a later turn)
+```
+
+The token figure is the probe's `-z` turn. Two things about it, both seen at
+the server: Hermes also sends a small background request after a turn — the
+session title, 311 prompt tokens — which goes to your Mac like everything
+else, and lands inside the probe's counting window on some runs (one run read
+15,371 for exactly that reason). And an interactive `hermes chat` turn is
+bigger than a `-z` one: MEASURED once, 17,402 prompt tokens, with thinking on
+where `-z` runs with it off — Hermes's own difference between its two entry
+points, not a setting of this repository. `LEAN_MCP=0` read the same 15,060:
+the test machine has no MCP servers configured for Hermes, so their cost is
+honestly **not measured**.
+
+What is worth knowing about Hermes here, before you use it:
+
+**The wiring is environment-only, and one line in your `~/.hermes/.env` could
+beat it — so that case is refused.** Hermes's `custom` provider takes its
+address from `CUSTOM_BASE_URL`, which this script exports for the one run;
+nothing under `~/.hermes` is written. But Hermes loads `~/.hermes/.env` *over*
+the process environment (MEASURED: a throwaway `.env` naming a closed port
+won against the export), so a `CUSTOM_BASE_URL` line in that file would
+silently send every question wherever it says. `run.sh hermes` checks the file
+first and refuses, naming the line and the fix, unless it already names this
+server. `tests/hermes-env-guard.sh` holds exactly this.
+
+**No key is sent.** Hermes gates every key it knows on the host it belongs to
+(`OPENAI_API_KEY` on openai.com, and so on), so a loopback address is sent its
+own placeholder and nothing from your `.env`. No Hermes account is needed.
+
+**The context size is read from the server, not declared.** Hermes asks
+`GET /v1/models` before trusting any default, and mlx-serve answers with the
+`CTX_SIZE` it was started with — so Hermes sizes its own compression against
+the truth without being told. The `context` banner line states this; the
+declared-size rule (rule 6) is met by the server's own answer.
+
+**`LEAN_MCP=1` is `HERMES_SAFE_MODE=1`.** That is Hermes's one switch that
+skips its MCP servers, plugin discovery, shell hooks and outbound webhooks in
+one move — the environment variable alone, deliberately not the `--safe-mode`
+flag, which would also drop your `config.yaml` and `AGENTS.md`. Your
+configuration files are read as normal.
+
+**Two retry layers, one switched off.** Mid-stream reconnects
+(`HERMES_STREAM_RETRIES`, Hermes default 2) are off, so a broken stream is
+reported where it broke. Hermes's whole-request retry
+(`agent.api_max_retries` in `config.yaml`, default 3) has no flag or
+environment variable in 0.20.4, so it stays as you have it — the banner says
+so rather than pretending otherwise. The stall detectors are set a minute
+past the server's limit (`HERMES_LOCAL_STREAM_STALE_TIMEOUT` and
+`HERMES_API_CALL_STALE_TIMEOUT`), so the server reports first, as with every
+harness here.
+
+**One startup network operation has no switch.** The interactive `hermes`
+command checks for updates by running a `git fetch` of its own checkout under
+`~/.hermes`, cached for six hours. Hermes 0.20.4 has no way to turn that off;
+this repository found none in its sources, and says so rather than claiming
+an air gap it cannot enforce. Everything sent *for the model* goes to your
+Mac; Hermes's own tools (web search, browser, image generation) reach the
+internet only where you have set them up with keys, exactly as under any
+model.
+
+Its own settings: `HERMES_BIN`, `HERMES_MAX_TOKENS` (Hermes's own name for
+the answer cap; unset by default), and the shared `LEAN_MCP`.
+`./bin/run.sh hermes --help` lists them. Hermes's thinking level is its own
+`--reasoning` flag, typed after the name.
+
+---
+
+## 8. What `./bin/doctor.sh` shows
 
 `./bin/doctor.sh` prints one row per adapter, in a section called
 **harness wiring**:
@@ -304,6 +487,8 @@ that only exists on your Mac. Neither stops the answer.
 ── harness wiring ───────────────────────────
 PASS  claude-code       2.1.234 -> http://127.0.0.1:11234/v1/messages
 PASS  codex             0.147.0 -> http://127.0.0.1:11234/v1/responses
+PASS  hermes            0.20.4 -> http://127.0.0.1:11234/v1/chat/completions
+PASS  pi                0.84.2 -> http://127.0.0.1:11234/v1/messages
 ```
 
 Each row says the app is installed, and which address and endpoint
@@ -341,7 +526,7 @@ changes nothing, here as everywhere.
 
 ---
 
-## 7. The contract an adapter is written against
+## 9. The contract an adapter is written against
 
 `harness/<name>.sh` is a Bash file that `bin/run.sh` reads after the settings.
 It may read `BASE_URL`, `MODEL_ID`, `CTX_SIZE`, `LEAN_MCP`, `SERVE_TIMEOUT`,
@@ -350,21 +535,26 @@ It may read `BASE_URL`, `MODEL_ID`, `CTX_SIZE`, `LEAN_MCP`, `SERVE_TIMEOUT`,
 | Name | Kind | What it is |
 |---|---|---|
 | `HARNESS_DIALECT` | variable | `anthropic`, `openai` or `ollama` — which of the three request formats the server already speaks this app will use |
-| `HARNESS_BIN` | variable | the command that starts the app, from that harness's own setting (`CLAUDE_BIN`, `CODEX_BIN`) |
-| `HARNESS_ONESHOT` | array | the arguments that make the app answer one question and exit. The question is always the last argument (`(-p)` for Claude Code, `(exec --skip-git-repo-check)` for Codex) |
+| `HARNESS_BIN` | variable | the command that starts the app, from that harness's own setting (`CLAUDE_BIN`, `CODEX_BIN`, `PI_BIN`, `HERMES_BIN`) |
+| `HARNESS_ONESHOT` | array | the arguments that make the app answer one question and exit. The question is always the last argument (`(-p)` for Claude Code and Pi, `(exec --skip-git-repo-check)` for Codex, `(-z)` for Hermes) |
 | `harness_wire` | function | points every one of that app's model settings at `BASE_URL` for `MODEL_ID` with `CTX_SIZE` declared, by exporting variables and adding flags to `HARNESS_ARGS`. Refuses, and names the fix, on a setting that is not valid. Prints nothing: its banner lines go into `HARNESS_NOTES` |
 | `harness_usage` | function, optional | that harness's own `--help` text |
 | `HARNESS_ENDPOINT` | variable, optional | the exact path this wiring hits, when it is not the usual one for its dialect. `harness/codex.sh` sets `/v1/responses`, because it speaks the OpenAI family but not that family's usual endpoint. Only `./bin/doctor.sh` reads it, for its row |
+| `harness_prepare` | function, optional | for a harness that cannot be told about a provider on the command line or in the environment: writes the one file that harness reads. `harness/pi.sh` writes `~/.pi/agent/models.json`; the others do not define it. Runs after every refusal — the wiring guards, the binary check, the server check — and never in the offline contract test's wire-only pass. It may refuse too (a file it cannot round-trip), and prints nothing on success |
 
 An adapter does **not** check the server, parse `run.sh`'s options, work out a
 timeout, print the shared banner lines, or run the probe. Those live once, in
 `bin/run.sh` and `bin/env.sh`, for every harness. The surface is deliberately
-small — two variables, one array, one function, and two optional extras — so
+small — two variables, one array, one function, and three optional extras — so
 that it can grow without breaking the adapters already written against it.
+`harness_prepare` is the deliberate exception to "an adapter only sets
+variables": it exists because Pi reads providers from a file and from nowhere
+else, it is the last thing to run before the banner, and an adapter that can
+wire itself without touching a file must not define it.
 
 ---
 
-## 8. The six rules an adapter meets before it is listed
+## 10. The six rules an adapter meets before it is listed
 
 1. **Verified.** `./bin/run.sh --probe <name>` returned `AIRGAP OK` on a real
    machine against a real model, and the app version, the server version, the
@@ -399,7 +589,7 @@ adapter states its own measured cost.
 
 ---
 
-## 9. Adding one
+## 11. Adding one
 
 The order that works:
 
@@ -421,18 +611,25 @@ The order that works:
 
 Two offline tests already cover whatever you add, and they find your file by
 themselves: `tests/harness-contract.sh` checks that the adapter declares what
-the table in section 7 requires and that its wiring really names your Mac's
-address, and `tests/run-dispatch.sh` checks that `run.sh` lists and refuses
-correctly. Run them with `bash tests/run.sh`. Neither needs a server or the
-weights.
+the table in section 9 requires and that its wiring — together with anything
+its `harness_prepare` writes, run under a scratch `HOME` — really names your
+Mac's address, and `tests/run-dispatch.sh` checks that `run.sh` lists and
+refuses correctly. Run them with `bash tests/run.sh`. Neither needs a server
+or the weights. An adapter with behaviour of its own beyond the contract earns
+a test of its own beside them: `tests/pi-models-json.sh` holds the rules for
+the one file `harness/pi.sh` writes, and `tests/hermes-env-guard.sh` holds
+`harness/hermes.sh`'s refusal when a `~/.hermes/.env` line would beat its
+wiring.
 
-Harnesses people have asked for and that are **not shipped**: Pi, Hermes Agent,
-a DeepSeek harness, OpenCode, Aider. None of them is installed on the machine
-this repository is developed on, and rule 1 has no shortcut.
+Harnesses people have asked for and that are **not shipped**: Aider,
+OpenCode, mini-swe-agent, little-coder. None of them is installed on the
+machine this repository is developed on, and rule 1 has no shortcut. (Pi and
+Hermes Agent were on this list until 2026-08-18, and left it the only way
+anything does: installed, checked against their own binaries, and probed.)
 
 ---
 
-## 10. Where this stops
+## 12. Where this stops
 
 This repository wires one harness to one model on one Mac, under guards. That
 is the whole job.
@@ -453,5 +650,5 @@ out.
 [07 — tuning](07-tuning.md) for the settings every harness shares, or
 [06 — troubleshooting](06-troubleshooting.md) if something above did not
 happen. Contributors: [`AGENT.md`](../AGENT.md) for the verified facts behind
-both adapters, and [`ROADMAP.md`](../ROADMAP.md) for where the abstraction is
+every adapter, and [`ROADMAP.md`](../ROADMAP.md) for where the abstraction is
 going.

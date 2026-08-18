@@ -14,8 +14,8 @@ what the last one already proved.
 
 ## The problem this exists to remove
 
-People who already live in a coding harness — Claude Code today, Pi, Hermes,
-DeepSeek's or anyone else's tomorrow — want to point it at a model on their own
+People who already live in a coding harness — Claude Code, Codex, Pi and
+Hermes today, Aider's or anyone else's tomorrow — want to point it at a model on their own
 machine and get on with their work. What stands in the way is not the model. It
 is everything around it: which runtime, which build, which download tool, which
 memory setting will not stall the Mac, which environment variable the harness
@@ -23,8 +23,9 @@ reads, and which of the resulting failures are silent. Learning MLX or Ollama
 just to answer those questions, for one harness, is the friction. `airgap`
 exists to remove it fully.
 
-Today it does that for **two harnesses on one model family on one runtime**:
-Claude Code and the Codex CLI (both verified end to end on 2026-08-18), Qwen3.8
+Today it does that for **four harnesses on one model family on one runtime**:
+Claude Code, the Codex CLI, Pi and Hermes Agent (each verified end to end on
+2026-08-18), Qwen3.8
 in MLX format, `mlx-serve` on Apple Silicon. The rest of this page is the path
 from there to *any harness, any runtime, one abstraction*,
 without giving up the three things that make the current version worth using:
@@ -170,8 +171,10 @@ the server (that stays `serve.sh`, one window, one job).
       it answer one question and exit, and how to point it at the base URL,
       model id and context size. **Shipped 2026-08-18** — four names
       (`HARNESS_DIALECT`, `HARNESS_BIN`, `HARNESS_ONESHOT`, `harness_wire`),
-      plus two optional ones: `harness_usage`, and `HARNESS_ENDPOINT` for an
-      adapter whose real endpoint disagrees with its dialect's usual one.
+      plus three optional ones: `harness_usage`, `HARNESS_ENDPOINT` for an
+      adapter whose real endpoint disagrees with its dialect's usual one, and —
+      since the Pi adapter needed it (2026-08-18) — `harness_prepare`, for a
+      harness that can only be told about a provider through a file it reads.
       Checking the server, the banner, the timeout arithmetic and the probe
       live once in `bin/run.sh` and `bin/env.sh`, never in an adapter.
       `bin/run.sh [--probe] <name>` dispatches; `tests/harness-contract.sh` and
@@ -215,12 +218,35 @@ the server (that stays `serve.sh`, one window, one job).
       than one harness. Captured output and settings tables are the parts of a
       document that a refactor touches; that is worth knowing before Phases 2
       and 3 make the same bet.
-- [ ] Candidates, in the order people asked: Pi, Hermes Agent, a DeepSeek
-      harness, OpenCode, Aider — each verified end to end before it is listed,
-      the way Claude Code and Codex were. **Not shipped**: none of these
-      adapters exists, none of those harnesses is installed on the machine this
-      repository is developed on, and which config surface each one exposes has
-      to be checked against its current release, not remembered.
+- [x] **Pi, verified end to end.** **Shipped 2026-08-18** —
+      `./bin/run.sh --probe pi` → `AIRGAP OK`, 5.2 s on the first turn against
+      a freshly started server and 1.5 s warm, 2,024 prompt tokens per turn
+      (MEASURED; Pi 0.84.2, mlx-serve 26.8.8, `Qwen3.8-9B-mlx-4Bit`, M3 Max
+      36 GB; identical tokens at `LEAN_MCP=0` — no Pi extensions installed
+      here, so their cost is not measured). Pi forced the contract's first
+      growth: it reads providers only from `~/.pi/agent/models.json`, so the
+      adapter surface gained an optional `harness_prepare` — runs after every
+      refusal, writes the one file, held by `tests/pi-models-json.sh` — rather
+      than letting a file write hide inside `harness_wire`.
+- [x] **Hermes Agent, verified end to end.** **Shipped 2026-08-18** —
+      `./bin/run.sh --probe hermes` → `AIRGAP OK`, 36.7 s on its first turn
+      (its own 15,060-token prefix) and 7.5 s warm, 15,060 prompt tokens per
+      probe turn (MEASURED; Hermes Agent 0.20.4, same server, model and
+      machine; identical at `LEAN_MCP=0` — no MCP servers configured for it
+      here, so their cost is not measured). Wiring is environment-only
+      (`CUSTOM_BASE_URL` + `--provider custom`), and one discovery was worth a
+      guard: Hermes loads `~/.hermes/.env` *over* the process environment, so
+      a `CUSTOM_BASE_URL` line there would silently win — the adapter refuses
+      that case, and `tests/hermes-env-guard.sh` holds it. One honest limit:
+      `hermes` checks for updates with a `git fetch` of its own checkout, and
+      0.20.4 has no switch for it.
+- [ ] Candidates, in the order asked (2026-08-18): Aider, OpenCode,
+      mini-swe-agent, little-coder — each verified end to end before it is
+      listed, the way the four shipped ones were. **Not shipped**: none of
+      these adapters exists, none of those harnesses is installed on the
+      machine this repository is developed on, and which config surface each
+      one exposes has to be checked against its current release, not
+      remembered.
 
 ## Phase 2 — the catalog as a first-class thing
 

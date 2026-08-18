@@ -38,7 +38,12 @@ two ever disagree, `AUDIT.md` is right.*
   none made a setting) · **`ROADMAP.md` Phase 1: `bin/run.sh <harness>`** —
   the contract, `harness/claude-code.sh` and `harness/codex.sh` both verified
   live with `--probe`, the `claude-local.sh` shim, doctor's per-adapter rows
-  and `docs/10-other-harnesses.md`. Details and numbers:
+  and `docs/10-other-harnesses.md` · **two more adapters, Pi 0.84.2 and
+  Hermes Agent 0.20.4** (`harness/pi.sh`, `harness/hermes.sh`, both installed
+  here now and probed live the same day; the contract gained an optional
+  `harness_prepare` for Pi's models.json, Hermes's `.env`-override discovery
+  became a guard, and `tests/pi-models-json.sh` plus
+  `tests/hermes-env-guard.sh` hold both). Details and numbers:
   `CHANGELOG.md`; status per item: `AUDIT.md`.
   Two things a later session must not undo: the `docs/07` renumbering (a new
   §7; 7–13 → 8–14, cross-refs updated everywhere but `AUDIT.md`'s
@@ -50,11 +55,12 @@ two ever disagree, `AUDIT.md` is right.*
   Phase 0 (credibility gaps, "before publishing") is 1 of 5 — the four left
   need hardware this machine cannot give while in use (the 27B loaded, a
   fresh user account, a 16 GB Mac, the `A5` stall experiment on the 27B);
-  the fifth, `A7`, is done. **Phase 1 is shipped for two harnesses**
-  (Claude Code, Codex CLI, 2026-08-18); what is left in it is adapters for
-  harnesses nobody here has installed — Pi, Hermes Agent, a DeepSeek harness,
-  OpenCode, Aider — and rule 1 (a live `AIRGAP OK` probe) has no shortcut.
-  Phases 2–4 are not started.
+  the fifth, `A7`, is done. **Phase 1 is shipped for four harnesses**
+  (Claude Code, Codex CLI, Pi, Hermes Agent — all 2026-08-18); what is left
+  in it is adapters for harnesses nobody here has installed — Aider,
+  OpenCode, mini-swe-agent, little-coder, in the order asked (2026-08-18) —
+  and rule 1 (a live `AIRGAP OK` probe) has no shortcut. Phases 2–4 are not
+  started.
 - **Next, in order of value:** the 27B measurement (`AUDIT.md` A3, E5,
   `ROADMAP.md` Phase 0), which every "9B only" figure in this file is
   waiting on; `B2` (a context sweep — `bench.sh` already emits the row a
@@ -148,20 +154,27 @@ two ever disagree, `AUDIT.md` is right.*
 - `harness/` — one file per harness, and the only place that knows what a
   particular harness calls anything. The contract is four names —
   `HARNESS_DIALECT` (`anthropic`/`openai`/`ollama`), `HARNESS_BIN`,
-  `HARNESS_ONESHOT`, `harness_wire` — plus two optional: `harness_usage`, and
+  `HARNESS_ONESHOT`, `harness_wire` — plus three optional: `harness_usage`;
   `HARNESS_ENDPOINT` for an adapter whose real endpoint disagrees with its
   dialect's usual one (`harness/codex.sh`: `/v1/responses`, because 0.147.0
-  refuses `wire_api = "chat"`). Only `doctor.sh` reads that last one. An
+  refuses `wire_api = "chat"` — only `doctor.sh` reads it); and
+  `harness_prepare`, for a harness that can only be told about a provider
+  through a file it reads. `run.sh` calls that last one after every refusal
+  (the wiring guards, the binary check, the server check), and the wire-only
+  tests never do. `harness/pi.sh` is the one adapter that defines it — Pi
+  reads providers from `~/.pi/agent/models.json` and from nowhere else — and
+  an adapter that can wire itself without touching a file must not. An
   adapter never checks the server, parses `run.sh`'s options, computes a
   timeout, prints the shared banner lines or runs the probe — those live once,
   in `run.sh` and `env.sh`. Each adapter carries its harness's own settings
   under that harness's own names, defaulted there and on `ENV_KEYS`:
   `CLAUDE_BIN`, `CLAUDE_CODE_MAX_OUTPUT_TOKENS` and `MAX_THINKING_TOKENS` for
-  `claude-code.sh`; `CODEX_BIN` for `codex.sh` (the ordinary three edits in
-  `env.sh`, exactly as `CLAUDE_BIN` has them). No translation layer, and no
-  default without a measurement behind it. The rules an adapter meets before it
-  is listed are in `docs/10-other-harnesses.md`, and rule 1 is a live
-  `--probe` transcript.
+  `claude-code.sh`; `CODEX_BIN` for `codex.sh`; `PI_BIN` for `pi.sh`;
+  `HERMES_BIN` and `HERMES_MAX_TOKENS` for `hermes.sh` (each the ordinary
+  three edits in `env.sh`, exactly as `CLAUDE_BIN` has them). No translation
+  layer, and no default without a measurement behind it. The rules an adapter
+  meets before it is listed are in `docs/10-other-harnesses.md`, and rule 1
+  is a live `--probe` transcript.
 - `bin/doctor.sh` — checks, never changes. Every row carries a fix.
 - `bin/catalog.sh` — the one list of models. Seven columns; the `kv KiB/token`
   one is verified against each repository's `config.json`, and a new entry
@@ -186,7 +199,16 @@ two ever disagree, `AUDIT.md` is right.*
   `harness-contract.sh` holds the harness contract — for every `harness/*.sh`,
   that the four names are declared and of the right kind, and that
   `harness_wire` itself (not the ambient environment) names `BASE_URL` and
-  `MODEL_ID`; `run-dispatch.sh` holds `run.sh`'s dispatch — the list derived
+  `MODEL_ID`; an adapter with `harness_prepare` runs it under a scratch
+  `HOME`, must print nothing, and what it wrote there counts as wiring;
+  `pi-models-json.sh` holds the rules for the one file `harness/pi.sh`
+  writes — created, merged around other providers, unchanged means not
+  rewritten, comments refused with the block to paste printed — against a
+  scratch `PI_CODING_AGENT_DIR`; `hermes-env-guard.sh` holds
+  `harness/hermes.sh`'s refusal when a `CUSTOM_BASE_URL` line in
+  `$HERMES_HOME/.env` would beat the wiring, reached through `run.sh` with
+  `HERMES_BIN=/bin/echo` and a scratch `HERMES_HOME`;
+  `run-dispatch.sh` holds `run.sh`'s dispatch — the list derived
   from the folder, the refusals, and `<name> --help` without a server;
   `model-state.sh` holds the `absent`/`partial`/`complete` contract and the
   rule that only `env.sh` and `verify-model.sh` may enumerate shards;
@@ -231,7 +253,8 @@ two ever disagree, `AUDIT.md` is right.*
 
 Established 2026-08-17 on the reference machine (M3 Max, 36 GB) against
 `mlx-serve 26.8.8`, `mlx 0.32.0`, `mlx_lm 0.31.3`, Claude Code `2.1.233`,
-Codex CLI `0.147.0` (that one on 2026-08-18).
+Codex CLI `0.147.0`, Pi `0.84.2` and Hermes Agent `0.20.4` (those three on
+2026-08-18).
 Each line carries the command that reproduces it. Re-verify only when a version
 in this list moves.
 
@@ -631,6 +654,138 @@ answers the OpenAI `{"object":"list","data":[…]}` shape, which Codex's own
 catalog reader does not accept. And `warning: Model metadata for
 'Qwen3.8-9B-mlx-4Bit' not found` — Codex has never heard of a model that only
 exists on this Mac. Neither stops the turn.
+
+### Pi 0.84.2 — what `harness/pi.sh` relies on
+
+Established 2026-08-18 against Pi 0.84.2
+(`npm install -g --ignore-scripts @earendil-works/pi-coding-agent`,
+`/opt/homebrew/bin/pi`). Checked in the installed `dist/` sources and Pi's own
+docs, then proven live with `./bin/run.sh --probe pi`.
+
+**Providers come from `~/.pi/agent/models.json` and from nowhere else.** Pi has
+no `--base-url` flag and reads no base-URL environment variable for a custom
+provider (`grep` over `dist/` finds only `LLAMA_BASE_URL`, which belongs to its
+bundled llama.cpp extension — a different, server-managing path this repo does
+not use). Its docs' alternative is an extension, i.e. TypeScript run inside Pi.
+That is why the adapter contract gained `harness_prepare`: the file is the
+interface. `PI_CODING_AGENT_DIR` overrides the folder (`dist/config.js`:
+`ENV_AGENT_DIR`), which is what `tests/pi-models-json.sh` uses. Pi strips
+comments before parsing (`stripJsonComments` in `dist/core/model-config.js`),
+so a commented file is legal for Pi and unreadable for `json.loads` — the
+adapter refuses to rewrite what it cannot round-trip rather than eat comments.
+
+**The provider shape the adapter writes was proven live.** `api:
+"anthropic-messages"` with `baseUrl` set to the server root (no `/v1`; Pi's
+Anthropic client appends `/v1/messages`), a placeholder `apiKey` (Pi treats a
+keyless model as unavailable; its docs say local servers should keep a dummy
+value), `reasoning: true`, `contextWindow` = `CTX_SIZE`. `maxTokens` is left
+to Pi's default 16384. MEASURED on the 9B: `AIRGAP OK`, 2,024 prompt tokens,
+identical across four probe runs; the server logged `thinking=true`, and
+`--thinking off` flipped it to `thinking=false` (that one answer was wrong —
+n=1). The OpenAI pairing (`api: "openai-completions"`, `baseUrl` with `/v1`)
+also answered, but the server logged `sys=0b` — Pi sends the system prompt as
+the `developer` role there — so the shipped dialect is Anthropic.
+
+**`PI_OFFLINE=1` is the whole startup-network switch.** It covers the pi.dev
+version check, the install/update telemetry ping, package update checks and
+the built-in model-catalog refresh (README "Telemetry and update checks";
+`PI_SKIP_VERSION_CHECK` and `PI_TELEMETRY=0` are each a subset). READ in
+`dist/`, 27 call sites; not separately measured with a packet capture.
+
+**Retries and the idle limit are settings.json keys, not flags.**
+`retry.enabled` (default true, 3 attempts, backoff), `retry.provider.maxRetries`
+(default 0) and `httpIdleTimeoutMs` (default 300000) live in
+`~/.pi/agent/settings.json` (docs/settings.md). There is no per-run override
+on the command line, and the adapter does not rewrite the person's
+settings.json — so rule 5 is met only partially for Pi, and the banner and
+docs/10 say so instead of hiding it. Pi's 300 s idle default equals
+`SERVE_TIMEOUT`'s default, so both sides give up together unless the person
+raises `httpIdleTimeoutMs`.
+
+**`--no-extensions` is the whole tool-server switch.** Pi ships no MCP of its
+own ("build an extension that adds MCP support"); extensions are the only
+route, and the flag disables discovery of all of them (explicit `-e` paths
+still load). MEASURED: probe tokens identical (2,024) with and without —
+no Pi extensions are installed on this machine, so the saving is honestly
+unmeasured.
+
+### Hermes Agent 0.20.4 — what `harness/hermes.sh` relies on
+
+Established 2026-08-18 against Hermes Agent 0.20.4 (2026.8.18, install.sh →
+`~/.hermes/hermes-agent`, git 9664e386). Checked in the installed Python
+sources (`hermes_cli/`, `agent/`), then proven live with
+`./bin/run.sh --probe hermes`.
+
+**The `custom` provider takes its address from `CUSTOM_BASE_URL`.** Resolution
+order in `hermes_cli/runtime_provider.py`: explicit CLI value (a code path
+`hermes chat` does not expose) → `CUSTOM_BASE_URL` → config.yaml `base_url` →
+OpenRouter. `--provider custom` is the documented name for a local
+OpenAI-compatible server, and the aliases `ollama`, `vllm`, `llama.cpp` all
+resolve to it. `OPENAI_BASE_URL` is read only by the separate `openai-api`
+provider and by the first-run "is anything configured?" guard
+(`_has_any_provider_configured`, where it alone counts) — the adapter exports
+it too, so a Mac with no other credentials does not stop at that guard
+(READ in source; not observed here, this machine has other credentials).
+
+**`~/.hermes/.env` beats the process environment.** `load_hermes_dotenv`
+loads it with `override=True` (`hermes_cli/env_loader.py`). MEASURED: with a
+throwaway `HERMES_HOME` whose `.env` set `CUSTOM_BASE_URL` to a closed port,
+the exported value lost and the run failed against the closed port. That is
+the guard in `harness_wire`, and `tests/hermes-env-guard.sh` holds it.
+
+**No key reaches a loopback address.** Key selection is host-gated
+(`runtime_provider.py`: `OPENAI_API_KEY` only for openai.com hosts,
+`OPENROUTER_API_KEY` only for openrouter.ai, a `<VENDOR>_API_KEY` derived from
+the hostname, explicitly "" for IPs/loopback); a keyless custom endpoint gets
+the placeholder `no-key-required`. So `API_KEY` has no variable that would
+carry it, and the adapter sets none.
+
+**The context size is probed from the server.** `agent/model_metadata.py`
+resolves it: config override → … → "Local server query", which asks
+`GET /v1/models` and reads `context_length` out of the entry's `meta` (among
+other keys). mlx-serve 26.8.8 fills `meta.context_length` with the
+`--ctx-size` it was started with (checked with `curl`), and the live request
+Hermes sent carried `max_tokens=65536` at `CTX_SIZE=65536` — the declared-size
+rule met by the server's own answer, with nothing exported. `model.context_length`
+in config.yaml exists but has no environment variable in 0.20.4.
+
+**Timeouts and retries, by name.** Streaming stall: for a local endpoint,
+`HERMES_LOCAL_STREAM_STALE_TIMEOUT` (default 900 s; applies only while
+`HERMES_STREAM_STALE_TIMEOUT` stays at its 180 s default). Non-streaming
+stall: `HERMES_API_CALL_STALE_TIMEOUT` (default 90 s, auto-disabled for local
+when unset). Whole request: `HERMES_API_TIMEOUT` (default 1800 s — not set;
+a long answer is not a stall). Mid-stream reconnects: `HERMES_STREAM_RETRIES`
+(`env_int` default 2 in `agent/chat_completion_helpers.py`; the docs page says
+3 — the binary wins) — set to 0. Whole-request retry:
+`agent.api_max_retries`, config.yaml only, default 3, floor 1
+(`agent/agent_init.py`) — no flag, no variable, left alone and said so.
+Answer cap: `HERMES_MAX_TOKENS` (`cli.py`: "env var override").
+
+**`HERMES_SAFE_MODE=1` is the LEAN_MCP switch, and the `--safe-mode` flag is
+not.** The variable alone gates four things: MCP server configs
+(`tools/mcp_tool.py` returns `{}`), plugin discovery (`hermes_cli/plugins.py`),
+shell-hook registration (`agent/shell_hooks.py`) and outbound webhooks
+(`agent/outbound_webhooks.py`). The flag additionally sets
+`--ignore-user-config` and `--ignore-rules`, which would drop the person's
+config.yaml and AGENTS.md — too much for LEAN_MCP. MEASURED: probe tokens
+identical (15,060) with and without — no MCP servers are configured for
+Hermes here, so the saving is honestly unmeasured.
+
+**The probe figures, and what lands in them.** `-z` (the one-shot the probe
+uses): 15,060 prompt tokens, `thinking=false`, 36.7 s on Hermes's first turn
+(its prefix prefilled), 7.5 s warm. Hermes also sends a background
+title-generation request (311 tokens, `temp=0.30`, non-streamed) that
+sometimes lands inside the probe's metrics window — one run read 15,371 for
+exactly that reason. An interactive `chat -q` turn is bigger: 17,402 prompt
+tokens with `thinking=true` (MEASURED once each). The two entry points differ
+inside Hermes itself, not in this repo's wiring.
+
+**The update check has no switch.** Interactive `hermes` runs a scoped
+`git fetch origin main` of its own checkout (cached six hours,
+`hermes_cli/banner.py`); `-z` does not reach it on this machine's code path,
+but no setting or variable disables it in 0.20.4 — searched for one, found
+none, documented instead as the one startup network operation the adapter
+cannot switch off.
 
 ## Falsified — do not retry
 
