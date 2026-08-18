@@ -90,7 +90,8 @@ two ever disagree, `AUDIT.md` is right.*
   exception: on `ENV_KEYS`, defaulted and exported (if at all) in that script
   — `TOKENS`, `PROMPT`, `PROMPT_FILE`, `ROW_FILE` in `bench.sh`;
   `CLAUDE_CODE_MAX_OUTPUT_TOKENS` and `MAX_THINKING_TOKENS` (no default:
-  unset means "as the model ships") in `claude-local.sh`. `LOAD_SHAPE_ARGS`
+  unset means "as the model ships") in `harness/claude-code.sh`.
+  `LOAD_SHAPE_ARGS`
   is also here — the flags
   that shape a load's memory footprint (context size, KV format, vision
   switch, and the prefill chunk only when `PREFILL_CHUNK` pins one), passed by

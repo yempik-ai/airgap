@@ -97,7 +97,9 @@ refuse_with_list() {
   echo "This repo can start:" >&2
   harness_list | sed 's/^/    /' >&2
   echo >&2
-  echo "For example:  ./bin/run.sh $(harness_list | head -1)" >&2
+  # sed, not `head -1`: head closes the pipe on the first line, and under
+  # `pipefail` a producer that got that far would take the script down with it.
+  echo "For example:  ./bin/run.sh $(harness_list | sed -n 1p)" >&2
   exit 1
 }
 
