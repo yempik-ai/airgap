@@ -92,9 +92,10 @@ First public release.
   `LOAD_SHAPE_ARGS` contract (the prefill-chunk flag only when pinned, and
   named nowhere but `env.sh`). `tests/run.sh` runs both.
 - **CI** (`.github/workflows/ci.yml`): `bash -n` and `shellcheck -S warning`
-  over every script on Ubuntu, `tests/run.sh` on a macOS runner. Manual
-  trigger only until a maintainer switches it to run on push (the file says
-  how); it has not yet run on GitHub. Every script is clean at that level;
+  over every script on Ubuntu, `tests/run.sh` on a macOS runner, on every
+  push and pull request (the repository is public, where hosted runners are
+  free); each job capped at ten minutes, superseded runs cancelled. Every
+  script is clean at that level;
   the four cross-file "unused" notes shellcheck cannot see through are
   annotated in place.
 - `bin/serve.sh` — refuses, rather than warns, on a non-Apple-Silicon Mac, on a

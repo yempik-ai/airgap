@@ -237,7 +237,7 @@ airgap/
 ├── docs/                    ← 01 → 09, in reading order
 ├── tests/                   ← offline checks: doctor's tool-call reader against
 │                              captured answers, the load-shape contract
-├── .github/workflows/ci.yml ← shellcheck + bash -n, and tests/ on a macOS runner (manual trigger)
+├── .github/workflows/ci.yml ← shellcheck + bash -n, and tests/ on a macOS runner
 └── config.env.example       ← every setting, with its default
 ```
 
