@@ -62,7 +62,7 @@ macOS 26.5.2:
 | Claude Code system prompt, MCP servers loaded | 38,054 tokens |
 | Claude Code system prompt, `--strict-mcp-config` | 20,909 tokens |
 | Prefix-cache reuse on the second turn | 16,384 of 20,906 tokens |
-| Text-only weight bytes on disk, 5-bit, vision tower excluded (the figure that must fit in memory; resident memory itself not yet observed, since the 27B has not been loaded here) | 19.1 GB |
+| Text-only weight bytes on disk, 5-bit, vision tower excluded (the figure that must fit in memory; resident memory itself still not observed — the one 27B load on 2026-08-17 printed only `mlx-serve`'s own preflight estimate, `weights ~19.97 GB`) | 19.1 GB |
 | Checkpoint composition, 5-bit 27B | 2,207 tensors; 504 quantized matrices; 333 vision; 29 MTP |
 | Decode speed of the 9B (`keXjos/Qwen3.8-9B-mlx-4Bit`), 60 greedy tokens, `bin/bench.sh`, mlx-serve's own figure | 57 tokens/s |
 | `bin/bench.sh` exact-match check on the 9B, speed features on vs off | identical output |
@@ -75,10 +75,19 @@ macOS 26.5.2:
 took 6.81 s against 10.15 s with the head disabled, producing an identical output
 SHA-256.
 
+**MEASURED 2026-08-17, once**: the 27B loads on the reference machine under
+`serve.sh`'s flags, and `mlx-serve` 26.8.8 loads its in-checkpoint MTP head with
+it (`[mtp] loading in-checkpoint head from the trunk shards`, `MTP head ready
+(depth=6)`), then serves a `/v1/messages` turn with `mtp=enabled (streaming,
+depth=6)`. That is the whole of what has been established about the 27B in
+operation.
+
 **NOT MEASURED**: no tokens-per-second, prefill-rate or peak-memory figure for the
-**27B** has been benchmarked by this project, on any machine, and the 27B has not been loaded
-here. Any 27B throughput number attributed to `airgap` did not come from this
-repository. `bin/bench.sh` produces one.
+**27B** has been benchmarked by this project, on any machine. The one turn it
+served generated a single token before hitting `max_tokens`, and `bin/doctor.sh`
+and `bin/bench.sh` have never been run against it. Any 27B throughput number
+attributed to `airgap` did not come from this repository. `bin/bench.sh`
+produces one.
 
 **VERIFIABLE from the model files**: `config.json` declares `model_type: qwen3_5`
 and 64 layers, of which 48 are `linear_attention` (Gated DeltaNet) and 16 are

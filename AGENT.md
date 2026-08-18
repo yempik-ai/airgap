@@ -53,9 +53,11 @@ two ever disagree, `AUDIT.md` is right.*
 - **Roadmap position:** Phase 0.5 (the audit backlog) is complete, and so is
   every audit item that needs neither the 27B nor a measurement — 19 of 24.
   Phase 0 (credibility gaps, "before publishing") is 1 of 5 — the four left
-  need hardware this machine cannot give while in use (the 27B loaded, a
+  need hardware this machine cannot give while in use (the 27B *measured*, a
   fresh user account, a 16 GB Mac, the `A5` stall experiment on the 27B);
-  the fifth, `A7`, is done. **Phase 1 is shipped for four harnesses**
+  the fifth, `A7`, is done. The 27B has been *loaded* once (2026-08-17, one
+  turn, no figures — see the environment facts below); it is the measurement
+  that is outstanding, not the load. **Phase 1 is shipped for four harnesses**
   (Claude Code, Codex CLI, Pi, Hermes Agent — all 2026-08-18); what is left
   in it is adapters for harnesses nobody here has installed — Aider,
   OpenCode, mini-swe-agent, little-coder, in the order asked (2026-08-18) —
@@ -74,8 +76,9 @@ two ever disagree, `AUDIT.md` is right.*
   first; does any hot-path flag move this workload), and `bench.sh` would
   need an `extra_args` column to take the second one — a `bench/` contract
   change that belongs with `B2`.
-- **Blocked on memory, not on decisions:** anything needing the 27B loaded.
-  It has never been served on this machine. `serve.sh` needs 22 GB free for
+- **Blocked on memory, not on decisions:** anything needing the 27B loaded
+  *for long enough to measure*. It has been served on this machine exactly
+  once, for one turn (2026-08-17). `serve.sh` needs 22 GB free for
   it and a working day leaves ~14 (2026-08-18: a 3.2 GB VM, a browser,
   WhatsApp and three Claude Code sessions were the difference). An agent
   cannot free that — it means closing the user's apps — so ask, do not kill.
@@ -506,6 +509,38 @@ behavioural change, not a tuning nudge.
 `model_type: qwen3_5_text`, `full_attention_interval: 4`, and no `num_experts`.
 Consequently: expert-streaming techniques have nothing to stream, and
 `--ssm-checkpoint-stride`'s MoE caveat does not apply to this build.
+*The server's log contradicts this and the server is wrong about it* — every
+load prints `Model: qwen3_5_moe (…)`, `Precomputing MoE layer weights...` and
+`MoE routing compiled`, for the 9B and the 27B alike. Those are names on
+`mlx-serve`'s loader path, not properties of the checkpoint: the 27B weight
+index contains **zero** tensors matching `expert`, and `text_config` has no
+MoE key at all (checked 2026-08-18, both models). Do not re-derive this from
+the log.
+
+**The 27B loads, and its in-checkpoint MTP head loads with it.** MEASURED
+2026-08-17, one `serve.sh` session on the reference machine, in
+`~/.mlx-serve/logs/mlx-serve-11234.log` (the third session in that file):
+
+```
+[preflight] weights ~19.97 GB, available 25.59 GB
+Loaded 1874 weights from 5 file(s)
+[mtp] loading in-checkpoint head from the trunk shards
+[mtp] loaded native MTP head (dense-mlp; per-weight quant, fallback bits=4/gs=80)
+[mtp] draft-only lm_head requantized to 3-bit/gs64
+MTP head ready (depth=6).
+[wired] mode=max limit=28753 MB
+...
+POST /v1/messages (…)  prompt=91 tokens
+  mtp=enabled (streaming, depth=6)
+  <- 91+1 tokens streamed [prefill: 75.4 tok/s, decode: 3.2 tok/s] [max_tokens]
+```
+
+That settles the head — `mlx-serve` 26.8.8 finds MTP tensors embedded in the
+trunk shards, with no `mtp/weights.safetensors` present. It settles nothing
+about speed: one token generated is not a decode figure, the 23,551-token turn
+behind it was cancelled at shutdown, and `doctor.sh` and `bench.sh` have never
+been run against the 27B. Do not cite `75.4`/`3.2` as measurements of
+anything.
 
 ### Codex CLI 0.147.0 — every key and flag `harness/codex.sh` uses
 
@@ -878,8 +913,9 @@ strength of a diff.
    and if it touches the argv it builds, capture `ps -o args= -p <pid>` of the
    running server before and after and compare the flag/value pairs. That is
    how `B1`'s `LOAD_SHAPE_ARGS` hoist was proven a no-op.
-6. Anything verified only on the 9B says so. The 27B has never been loaded on
-   this machine, and several open items exist precisely because of that.
+6. Anything verified only on the 9B says so. The 27B has been loaded on this
+   machine once, for one turn, and measured never; several open items exist
+   precisely because of that.
 7. `bash tests/run.sh` and
    `shellcheck -S warning start.sh bin/*.sh harness/*.sh tests/*.sh` pass. CI
    runs exactly those. If you change what `doctor.sh`'s tool-call

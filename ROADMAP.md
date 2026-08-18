@@ -63,7 +63,18 @@ Shipped code, unshipped evidence. Nothing here is a feature.
 
 - [ ] Load and serve the 27B on the test machine; record `mtp_loaded` from
       `doctor.sh` and a `bench.sh` run. Every "NOT YET" in the docs about the
-      27B becomes a number or stays labelled.
+      27B becomes a number or stays labelled. **Half of this turned out to be
+      done already, and the docs were the last to hear (corrected
+      2026-08-18):** the 27B was loaded under `serve.sh`'s flags on
+      2026-08-17 and served one `/v1/messages` turn, and the server's log
+      settles the MTP question on its own — `[mtp] loading in-checkpoint head
+      from the trunk shards`, `MTP head ready (depth=6)`, and `mtp=enabled
+      (streaming, depth=6)` on the request itself. What that run produced was
+      not one figure: the turn hit `max_tokens` after a single token, the next
+      was cancelled at shutdown, and neither `doctor.sh` nor `bench.sh` was
+      ever pointed at it. So what is left here is the measurement, not the
+      load — and `C1` was the same lesson about the cache line. The server
+      writes the evidence down; nothing in this repository was reading it.
 - [ ] Run `start.sh` on a fresh user account (no Homebrew, no Claude Code) and
       correct anything the docs promise that the fresh run does not show.
 - [ ] Run the small-Mac path for real (`HW_FORCE_RAM_GB=16` is arithmetic; a

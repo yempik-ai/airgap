@@ -41,6 +41,8 @@ MEASURED that day on this machine (the claude-code and codex pair on
 ## What 0.1.0 still owes
 
 `ROADMAP.md` Phase 0. Recorded here so a tag cannot quietly skip them: the
-27B has never been loaded on the reference machine (needs 22 GB free), the
-fresh-account run of `start.sh` has not been done, and the 16 GB path is
-arithmetic. A tag before those are done says so in its notes, in these words.
+27B has never been *measured* on the reference machine — it was loaded once,
+on 2026-08-17, for a single turn that produced no figure, and `serve.sh` wants
+22 GB free for another go — the fresh-account run of `start.sh` has not been
+done, and the 16 GB path is arithmetic. A tag before those are done says so in
+its notes, in these words.

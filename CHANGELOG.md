@@ -367,17 +367,28 @@ First public release.
 
 ### Known limitations
 
-- **The 27B has never been served in this repository.** The end-to-end path
-  (`serve → doctor → claude-local -p`) was validated with the catalog's 9B and
-  with Qwen3.5-0.8B, both the same `qwen3_5` architecture family. See "What has
-  and has not been run here" in the README.
-- **`mtp_loaded: true` is unconfirmed on the 27B checkpoint.** `mlx-serve`
-  documents its MTP head as auto-loading from `mtp/weights.safetensors`; this
-  checkpoint has no such file, and instead carries 29 MTP tensors embedded in the
-  main shards as `language_model.mtp.*`. The publisher reports it working under
-  mlx-serve 26.8.7. Not reproduced here. `bin/doctor.sh` reports it.
+- **The 27B has been served here once, for one turn, and measured never.**
+  The end-to-end path (`serve → doctor → run.sh --probe`) was validated with
+  the catalog's 9B and with Qwen3.5-0.8B, both the same `qwen3_5` architecture
+  family. The 27B was loaded under `serve.sh`'s flags on 2026-08-17 and
+  answered one `/v1/messages` request; that turn hit `max_tokens` after a
+  single token and the next was cancelled at shutdown, and neither
+  `bin/doctor.sh` nor `bin/bench.sh` was ever pointed at it. Corrected
+  2026-08-18: until then this list, the README and `AGENT.md` all said the 27B
+  had never been loaded, while the server's log in `~/.mlx-serve/logs/` said
+  otherwise. See "What has and has not been run here" in the README.
+- **The MTP head does load on the 27B checkpoint; its speed is unmeasured.**
+  `mlx-serve` documents its MTP head as auto-loading from
+  `mtp/weights.safetensors`; this checkpoint has no such file, and instead
+  carries 29 MTP tensors embedded in the main shards as `language_model.mtp.*`.
+  26.8.8 loads them anyway — `[mtp] loading in-checkpoint head from the trunk
+  shards`, `MTP head ready (depth=6)`, and `mtp=enabled (streaming, depth=6)`
+  on the one request served (MEASURED 2026-08-17). The publisher's roughly 1.5×
+  is PUBLISHER-REPORTED and has never been measured here. `bin/doctor.sh`
+  reports `mtp_loaded`, and has not been run against this build.
 - **No tokens-per-second figure for the 27B has been measured**, on any machine.
-  The one measured speed is the 9B's. `bin/bench.sh` produces yours.
+  The one turn it served generated one token. The measured speeds are the 9B's,
+  and they are in `bench/m3-max-36gb.tsv`. `bin/bench.sh` produces yours.
 - Only the 36 GB row of the hardware table is measured. The other rows are
   arithmetic from that one.
 - Of the nine catalog builds, only `27b-5bit` (files verified) and `9b-4bit`
