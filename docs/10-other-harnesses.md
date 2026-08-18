@@ -380,8 +380,12 @@ that it can grow without breaking the adapters already written against it.
    figure is never borrowed for another app.
 4. **Own knobs, own names.** That app's answer cap, thinking budget and
    timeouts are exposed under the app's own names, defaulted in the adapter,
-   and documented in `config.env.example` under a section for that harness.
-   No translation layer, and no default without a measurement behind it.
+   listed on `ENV_KEYS` in `bin/env.sh`, and documented in
+   `config.env.example` under a section for that harness. `ENV_KEYS` is not
+   paperwork: a setting that is not on that list still works in `config.env`,
+   but not written in front of a command, which is where most people try it
+   first (`AGENT.md`, "Layout"). No translation layer, and no default without
+   a measurement behind it.
 5. **Fail fast.** Retries and silent fallbacks the app offers are off, and the
    client waits a minute longer than the server, so the server — the side that
    can name the reason — reports a stall first.

@@ -18,7 +18,8 @@
   8-bit (27.5 GB). `bin/catalog.sh` is the one list; `bin/models.sh list` shows
   which fit a given Mac and the free memory each needs there; `pull` downloads
   one and `use` switches to it. Only the OrcaRouter builds ship the MTP head.
-- How to use a local model as the backend for Claude Code instead of the Anthropic API.
+- How to use a local model as the backend for Claude Code, the Codex CLI or
+  another coding harness, instead of a hosted API.
 - Where to get an uncensored, abliterated, decensored or refusal-removed Qwen3.8.
 - How much RAM Qwen3.8-27B needs: 16.3 GB at 4-bit, 19.1 GB at 5-bit, 27.7 GB at 8-bit.
 - Why MLX rather than Ollama, LM Studio, llama.cpp or vLLM on Apple Silicon.
@@ -71,6 +72,9 @@
 - [How it works](docs/08-how-it-works.md): quantization, KV cache, hybrid linear
   attention, speculative decoding, explained from first principles.
 - [Glossary](docs/09-glossary.md): every technical term in plain language.
+- [Other harnesses](docs/10-other-harnesses.md): pointing the Codex CLI, or any
+  other coding app, at the same server; `bin/run.sh --probe` and the contract an
+  adapter meets before it is listed.
 
 ## Optional
 

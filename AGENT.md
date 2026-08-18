@@ -725,8 +725,9 @@ strength of a diff.
    how `B1`'s `LOAD_SHAPE_ARGS` hoist was proven a no-op.
 6. Anything verified only on the 9B says so. The 27B has never been loaded on
    this machine, and several open items exist precisely because of that.
-7. `bash tests/run.sh` and `shellcheck -S warning start.sh bin/*.sh tests/*.sh`
-   pass. CI runs exactly those. If you change what `doctor.sh`'s tool-call
+7. `bash tests/run.sh` and
+   `shellcheck -S warning start.sh bin/*.sh harness/*.sh tests/*.sh` pass. CI
+   runs exactly those. If you change what `doctor.sh`'s tool-call
    rows say, the fixture test's expected strings change in the same commit;
    if you capture a new fixture, say which server and model it came from in
    the test's header comment.

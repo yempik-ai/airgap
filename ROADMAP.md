@@ -203,12 +203,18 @@ the server (that stays `serve.sh`, one window, one job).
       "Pick your path" gains one line. **Shipped 2026-08-18.** The rest of that
       item was a test of whether the abstraction is right — *nothing else in the
       docs should need to change, because nothing else is harness-specific* —
-      and it very nearly held. Two other pages did change, in quoted output
-      only: `docs/02` and `docs/06` paste the Claude Code banner and doctor's
-      section header, and both changed shape. No explanation of how anything
-      works had to be rewritten anywhere, and `docs/05` took its one new
-      sentence. Captured output is the part of a document that a refactor
-      touches; that is worth knowing before Phases 2 and 3 make the same bet.
+      and it mostly held. Three other pages changed. Two of them in quoted
+      output only: `docs/02` and `docs/06` paste the Claude Code banner and
+      doctor's section, and both changed shape. The third changed in prose:
+      `docs/07`'s settings reference had to stop calling `LEAN_MCP` a Claude
+      Code setting — it is every harness's, and each states its own measured
+      cost — and gained a Codex CLI section with `CODEX_BIN`. That is the
+      honest result: no explanation of how anything *works* was rewritten
+      anywhere, and `docs/05` took its one new sentence, but a page that lists
+      settings has to say which harness each one belongs to once there is more
+      than one harness. Captured output and settings tables are the parts of a
+      document that a refactor touches; that is worth knowing before Phases 2
+      and 3 make the same bet.
 - [ ] Candidates, in the order people asked: Pi, Hermes Agent, a DeepSeek
       harness, OpenCode, Aider — each verified end to end before it is listed,
       the way Claude Code and Codex were. **Not shipped**: none of these

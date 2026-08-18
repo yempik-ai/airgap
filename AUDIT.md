@@ -279,7 +279,8 @@ limit airgap inherits*, not adding a mechanism.
 
 **Shape.** `SERVE_TIMEOUT` through all three lists in `bin/env.sh` (see
 `AGENT.md` § Layout), passed by `serve.sh`; explicit values for the two Claude
-Code variables in `claude-local.sh:109-128`. Docs: `docs/06-troubleshooting.md`
+Code variables in `harness/claude-code.sh:184-190` (the wiring that used to
+live in `claude-local.sh`). Docs: `docs/06-troubleshooting.md`
 §12 already covers the slow-but-working case at `:981-1046` — do **not** add a
 second copy. The missing sentence is the *failure* case: what the abort looks
 like and which of the two limits produced it.
@@ -1093,8 +1094,8 @@ precisely what `B1`'s suite should turn into a real number.
 
 **Do not** claim the knob derives from `CLAUDE_CODE_MAX_OUTPUT_TOKENS` "so the
 two numbers come from one place": `env.sh:35` lists the name in `ENV_KEYS` but
-sets no default; the default lives in `claude-local.sh:121`. `serve.sh` and
-`claude-local.sh` are separate processes.
+sets no default; the default lives in `harness/claude-code.sh:160`. `serve.sh`
+and the harness `bin/run.sh` starts are separate processes.
 
 ### E5 — nothing seeds the cache on purpose
 
@@ -1111,20 +1112,23 @@ prefills the rest (`ds4_server.c:11411-11470`). Its comment states the intent:
 
 airgap cannot split a prefill. What it can do is make the first request happen
 before the user's first question, using the genuine article rather than a
-reconstruction: `claude-local.sh:35` already documents `-p` one-shot mode.
+reconstruction: `harness/claude-code.sh:44` already documents `-p` one-shot
+mode, and `HARNESS_ONESHOT` (`:21`) is the same thing as an array.
 
 **Shape.** `bin/warm.sh` that waits for `server_up` (`env.sh:321`), runs one
 real one-shot with a short output cap, and **prints the `[hot-cache] reused N/M`
 line it produced as evidence** — it must never assert a speed-up it did not
 measure.
 
-**The integration point is `bin/claude-local.sh`, not `start.sh`.** `start.sh`
+**The integration point is `bin/run.sh`, not `start.sh`.** `start.sh`
 deliberately never starts the server (`:10-13`) and ends by telling the user to
 open two windows (`:146-161`) — a warm call there always fails `server_up`.
 `serve.sh` ends in `exec` (`:313`), so nothing can run after it. The only seam
-is `claude-local.sh` between `server_up` (`:70`) and `exec` (`:147`). Two guards
-are mandatory: `warm.sh` must invoke `$CLAUDE_BIN` directly with the same
-exports, or `claude-local.sh` recurses infinitely; and `WARM_ON_START` must
+is `bin/run.sh` between `harness_wire` (`:154`), `server_up` (`:173`) and
+`exec` (`:202`) — `claude-local.sh` is now one `exec` line onto it. Two guards
+are mandatory: `warm.sh` must invoke `$CLAUDE_BIN` directly with the exports
+`harness/claude-code.sh`'s `harness_wire` sets, or it recurses back through
+`run.sh` infinitely; and `WARM_ON_START` must
 default to **0** — an opt-in that spends a full ~21k-token prefill, never a
 silent cost on every session start.
 

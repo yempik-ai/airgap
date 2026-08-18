@@ -7,8 +7,9 @@
 # probe all live in run.sh, once, for every harness.
 #
 # This is bin/claude-local.sh's wiring, moved here unchanged. Every variable
-# name below exists in the Claude Code 2.1.233 binary (AGENT.md, "Verified
-# environment facts").
+# name below was verified against the Claude Code 2.1.233 binary (AGENT.md,
+# "Verified environment facts"); the probe recorded in docs/10-other-harnesses.md
+# ran on 2.1.234, which changed none of them.
 
 # The three names below are the contract: bin/run.sh reads them after sourcing
 # this file, which shellcheck cannot see from here.
