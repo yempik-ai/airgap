@@ -597,6 +597,62 @@ server_up() {
   curl -fsS --max-time 2 "$BASE_URL/health" >/dev/null 2>&1
 }
 
+# How long a harness should wait for a silent request, in milliseconds: a
+# MINUTE MORE than the server's own SERVE_TIMEOUT, so the server gives up
+# first and the side that can name the reason is the side that reports it.
+# SERVE_TIMEOUT=0 means the server never gives up; an hour is the client's
+# bound then, not a promise about the server.
+#
+# This is the number, not the way a harness is told about it: a harness that
+# floors or ceilings it does that in its own adapter (Claude Code 2.1.233
+# resolves its variable through Math.max(value, 300000), so it can only ever
+# raise the limit — a fact about that binary, not a rule of this stack).
+client_timeout_ms() {
+  if [ "${SERVE_TIMEOUT:-300}" = "0" ]; then
+    echo 3600000
+  else
+    echo $(( (SERVE_TIMEOUT + 60) * 1000 ))
+  fi
+}
+
+# The counters named in $@, read from $BASE_URL/metrics.json in ONE fetch and
+# printed space-separated in the order they were asked for. A counter the
+# server does not report reads as 0, because "the server has never done this"
+# and "this server does not count it" are the same answer to a caller adding
+# up tokens.
+#
+# Prints nothing and returns 1 when the endpoint does not answer 200 at all,
+# or answers in a shape this cannot read. WHY it did not answer — metrics
+# switched off (503), no server (000), something else — is a second question,
+# and only bin/doctor.sh asks it, on this failure path, so the happy path
+# stays at one request.
+metrics_counters() {
+  [ "$#" -gt 0 ] || return 1
+  command -v "$PYTHON_BIN" >/dev/null 2>&1 || return 1
+
+  if [ -n "${API_KEY:-}" ]; then
+    _mc_out="$(curl -sS --max-time 5 -w '\n%{http_code}' -H "x-api-key: $API_KEY" "$BASE_URL/metrics.json" 2>/dev/null || true)"
+  else
+    _mc_out="$(curl -sS --max-time 5 -w '\n%{http_code}' "$BASE_URL/metrics.json" 2>/dev/null || true)"
+  fi
+  _mc_code="${_mc_out##*$'\n'}"
+  _mc_json="${_mc_out%$'\n'*}"
+  if [ "$_mc_code" != "200" ]; then
+    unset _mc_out _mc_code _mc_json
+    return 1
+  fi
+
+  printf '%s' "$_mc_json" | "$PYTHON_BIN" -c '
+import json, sys
+try:
+    c = json.load(sys.stdin).get("counters", {})
+except Exception:
+    sys.exit(1)
+print(" ".join(str(c.get(n, 0)) for n in sys.argv[1:]))
+' "$@" 2>/dev/null || { unset _mc_out _mc_code _mc_json; return 1; }
+  unset _mc_out _mc_code _mc_json
+}
+
 # --- The model lock ----------------------------------------------------------
 # Only one process on this Mac may hold the weights. Every other concurrency
 # check in this repo is scoped to a PORT, and a port cannot see the thing that

@@ -106,8 +106,16 @@ two ever disagree, `AUDIT.md` is right.*
   cache at 16 bits — `hw_rebudget` scales the latter by `KV_QUANT`, and
   `HW_KV_KIB` / `HW_KV_SOURCE` say what figure the budget used and whether it
   came from `config.json`, the catalog or an assumption), `mlx_serve_version`,
-  `version_lt`, `log_tail` and `log_ended_cleanly`. A question two scripts
-  ask belongs here, once.
+  `version_lt`, `log_tail` and `log_ended_cleanly`. `client_timeout_ms` is the
+  milliseconds a harness waits for a silent request — a minute more than
+  `SERVE_TIMEOUT`, so the server gives up first and names the reason; a floor
+  or ceiling a particular binary imposes on it belongs in that harness's
+  adapter, not here. `metrics_counters <name>…` reads the named counters from
+  `/metrics.json` in one fetch and prints them space-separated in argument
+  order (`0` for one the server does not report, nothing and exit 1 when the
+  endpoint does not answer 200) — `run.sh --probe` and `doctor.sh` share it,
+  and doctor asks the status code only on that failure path. A question two
+  scripts ask belongs here, once.
 - `bin/detect-hardware.sh` — the memory model. Takes a weight size and a context
   window, returns the budget the guards enforce. The disk model is here too:
   `hw_disk_need_gb download|serve` is the one place the download peak and the

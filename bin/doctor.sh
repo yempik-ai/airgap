@@ -628,33 +628,30 @@ if server_up; then
     esac
   fi
 
-  # A 503 is the server saying metrics are switched off, not a failure.
-  metrics_out="$(srv_curl 5 -w '\n%{http_code}' "$BASE_URL/metrics.json" 2>/dev/null || true)"
-  metrics_code="${metrics_out##*$'\n'}"
-  metrics_json="${metrics_out%$'\n'*}"
-  case "$metrics_code" in
-    200)
-      counters="$(printf '%s' "$metrics_json" | python3 -c '
-import json,sys
-c = json.load(sys.stdin).get("counters", {})
-print(c.get("prefix_cache_hits_total", 0), c.get("prefix_cache_queries_total", 0),
-      c.get("prefix_cache_tokens_total", 0), c.get("prompt_tokens_total", 0))
-' 2>/dev/null || true)"
-      read -r m_hits m_queries m_cached m_prompt <<< "${counters:-}"
-      if [ -z "${m_queries:-}" ]; then
-        row WARN "/metrics.json" "answered, but not in the shape this script knows"
-      elif [ "$m_queries" = "0" ]; then
-        row PASS "/metrics.json" "answering; no requests counted yet this run"
-      else
-        row PASS "/metrics.json" "${m_hits} of ${m_queries} lookups hit the cache; ${m_cached} of ${m_prompt} prompt tokens were reused"
-      fi ;;
-    503)
-      row SKIP "/metrics.json" "switched off (METRICS=0)" ;;
-    ""|000)
-      row WARN "/metrics.json" "the server did not answer this question" ;;
-    *)
-      row WARN "/metrics.json" "the server answered HTTP ${metrics_code}" ;;
-  esac
+  # One fetch on the happy path (metrics_counters, bin/env.sh). Only when that
+  # comes back empty is a second request worth making, to say WHY: a 503 is the
+  # server saying metrics are switched off, not a failure.
+  if counters="$(metrics_counters prefix_cache_hits_total prefix_cache_queries_total \
+                                  prefix_cache_tokens_total prompt_tokens_total)"; then
+    read -r m_hits m_queries m_cached m_prompt <<< "$counters"
+    if [ "$m_queries" = "0" ]; then
+      row PASS "/metrics.json" "answering; no requests counted yet this run"
+    else
+      row PASS "/metrics.json" "${m_hits} of ${m_queries} lookups hit the cache; ${m_cached} of ${m_prompt} prompt tokens were reused"
+    fi
+  else
+    metrics_code="$(srv_curl 5 -o /dev/null -w '%{http_code}' "$BASE_URL/metrics.json" 2>/dev/null || true)"
+    case "$metrics_code" in
+      200)
+        row WARN "/metrics.json" "answered, but not in the shape this script knows" ;;
+      503)
+        row SKIP "/metrics.json" "switched off (METRICS=0)" ;;
+      ""|000)
+        row WARN "/metrics.json" "the server did not answer this question" ;;
+      *)
+        row WARN "/metrics.json" "the server answered HTTP ${metrics_code}" ;;
+    esac
+  fi
 
   if [ "$PROBE" = "1" ]; then
     body='{"model":"'"$MODEL_ID"'","max_tokens":8,"messages":[{"role":"user","content":"hi"}]}'
