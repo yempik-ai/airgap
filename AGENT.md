@@ -22,9 +22,11 @@ two ever disagree, `AUDIT.md` is right.*
   memory-size — see the facts below. Same day, found by running it:
   `bench.sh` never released the model lock after a full run (fixed); and the
   `D3` reader checks moved from a scratch directory into `tests/`, with a CI
-  workflow that runs shellcheck and the tests. The workflow itself has run
-  only as its local equivalent so far — the first push to GitHub is its
-  first real run; if it fails there, that is the first thing to look at.
+  workflow that runs shellcheck and the tests. The workflow is
+  `workflow_dispatch` only — it has never run on GitHub and will not until a
+  maintainer runs it from the Actions tab or switches its trigger to push
+  (the file says how; the repo is public, where hosted runners are free).
+  Its first real run is the first thing to look at if it fails.
 - **Next:** the numbered list in `AUDIT.md` is empty. What is left, in
   order of value: the 27B measurement (hardware-blocked — `AUDIT.md` A3, E5,
   `ROADMAP.md` Phase 0), which every "9B only" figure in this file is
@@ -76,7 +78,7 @@ two ever disagree, `AUDIT.md` is right.*
   captured shape renders; `load-shape.sh` holds the `LOAD_SHAPE_ARGS`
   contract. Rename one of those functions and the test says so by name.
   `tests/run.sh` runs all; `.github/workflows/ci.yml` runs it on a macOS
-  runner and shellcheck on Ubuntu.
+  runner and shellcheck on Ubuntu, on manual trigger.
 
 ## Quality rules
 

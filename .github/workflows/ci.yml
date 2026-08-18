@@ -1,12 +1,24 @@
 # Static checks and the offline tests. Nothing here downloads weights or starts
 # a server: the tests read captured answers (tests/fixtures/) and this Mac's
 # memory (bin/env.sh), which is why they run on the macOS runner.
+#
+# Manual trigger only, on purpose: it has never run on GitHub, and it should
+# not start costing anything without a maintainer choosing to. This repository
+# is public, and GitHub-hosted runners (Ubuntu and macOS) are free for public
+# repositories; if that is still true when you read this, replace the `on:`
+# block with
+#     on:
+#       push:
+#         branches: [main]
+#       pull_request:
+# and it runs on every push. Until then: Actions tab -> ci -> Run workflow.
+# The same two jobs, locally:
+#     bash -n start.sh bin/*.sh tests/*.sh && shellcheck -S warning start.sh bin/*.sh tests/*.sh
+#     bash tests/run.sh
 name: ci
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   lint:
