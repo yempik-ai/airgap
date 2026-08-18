@@ -275,7 +275,7 @@ Every one of these can go in `config.env` or in front of a command.
 | `LOCK_DIR` | `~/.airgap/model.lock` | Where the lock that stops two model loads lives | Almost never. Empty switches the lock off. |
 | `PREFILL_CHUNK` | empty — the server sizes it | How much text is read at a time on the first pass. Empty lets the server pick from the memory free when it loads (512 or 1024 on the test machine with the 9B, printed in its log). | Almost never. Pin it to reproduce a shape in `bench.sh`. Section 13. |
 | `NO_VISION` | 1 | Skips loading the image-reading part | Only to feed the model pictures. |
-| `LEAN_MCP` | 1 | Starts Claude Code with optional tool servers off | Section 6. |
+| `LEAN_MCP` | 1 | Starts the harness — any harness — with its optional tool servers off | Section 6. |
 | `MAX_THINKING_TOKENS` | unset — thinking on | `0` turns the model's thinking off; 3x faster on the one prompt measured, quality cost not measured | You want speed and will judge the answers yourself. Section 7. |
 | `MODEL_QUANT` | worked out from your memory | Which OrcaRouter build: `4bit`, `5bit`, `6bit`, `8bit` | Section 9. |
 | `MODEL_REPO` | worked out from your memory | Which model, by its huggingface.co address — any build, catalog or not | Section 9, or `./bin/models.sh use`. |
@@ -360,8 +360,9 @@ taken memory the free-memory guard was counting on. Lower the value.
 
 **MCP** stands for Model Context Protocol
 ([Glossary](09-glossary.md#model-context-protocol-mcp)). MCP servers are optional
-add-ons that give Claude Code extra tools — a database connection, a search tool,
-and so on.
+add-ons that give your coding app extra tools — a database connection, a search
+tool, and so on. `LEAN_MCP` is a setting of every app `./bin/run.sh` can start,
+not of Claude Code alone; the figures below are Claude Code's own.
 
 Each one describes its tools to the model, and those descriptions travel as part
 of the instructions on **every single turn**, whether or not any tool is used.
@@ -388,6 +389,11 @@ You should see the banner's `mcp` line read `your normal config (LEAN_MCP=0)`.
 **If you do not see that.** If the line still says `strict`, you have
 `LEAN_MCP=1` in `config.env`, which does not beat what you typed — check you
 typed it in front of the command and not after it.
+
+Each app pays its own price, and none of them borrows another's figure: for the
+Codex CLI it is 935 prompt tokens per turn, MEASURED on the 9B —
+[10 — other harnesses](10-other-harnesses.md) has that measurement, and what
+`LEAN_MCP=1` does and does not switch off there.
 
 **Worth knowing before you do it.** A 27B model handles many tool descriptions
 badly. It picks the wrong tool, or produces a malformed request. Turning these on
@@ -871,14 +877,25 @@ prefix cache it is about to be told to write — `PREFIX_CACHE_DISK` + that same
 than the guard: `PREFIX_CACHE_DISK=2GB`, or `0` to switch the disk tier off and
 keep only the memory one.
 
-**Claude Code**
+**Harnesses** (every app `./bin/run.sh` can start)
 
 | Name | Default |
 |---|---|
 | `LEAN_MCP` | `1` |
+
+**Claude Code**
+
+| Name | Default |
+|---|---|
 | `CLAUDE_BIN` | `claude` |
 | `CLAUDE_CODE_MAX_OUTPUT_TOKENS` | `8192` |
 | `MAX_THINKING_TOKENS` | unset — thinking on, as the model ships; `0` turns it off (Section 7) |
+
+**Codex CLI** ([10 — other harnesses](10-other-harnesses.md))
+
+| Name | Default |
+|---|---|
+| `CODEX_BIN` | `codex` |
 
 **Tools and scripts**
 

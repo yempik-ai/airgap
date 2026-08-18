@@ -178,9 +178,11 @@ two ever disagree, `AUDIT.md` is right.*
   of `doctor.sh` by their `name() {`…`}` ranges (doctor cannot be sourced; it
   runs at load), stubs `srv_curl` to print a fixture, and checks the row each
   captured shape renders; `load-shape.sh` holds the `LOAD_SHAPE_ARGS`
-  contract; `thinking-knob.sh` holds `claude-local.sh`'s `MAX_THINKING_TOKENS`
-  guard (it points `PORT` at a closed port, so "past the guard" shows as the
-  no-server error); `wired-log.sh` holds doctor's `log_wired_gb` reader;
+  contract; `thinking-knob.sh` holds `harness/claude-code.sh`'s
+  `MAX_THINKING_TOKENS` guard, reached the way a person reaches it — through
+  `bin/claude-local.sh` (it points `PORT` at a closed port, so "past the
+  guard" shows as the no-server error); `wired-log.sh` holds doctor's
+  `log_wired_gb` reader;
   `harness-contract.sh` holds the harness contract — for every `harness/*.sh`,
   that the four names are declared and of the right kind, and that
   `harness_wire` itself (not the ambient environment) names `BASE_URL` and
@@ -418,7 +420,8 @@ the retry that turns a failed streamed request — including one that idled
 past `CLAUDE_STREAM_IDLE_TIMEOUT_MS` — into a non-streamed one
 (`strings -a` shows it OR'd with `tengu_disable_streaming_to_non_streaming_fallback`
 next to `"Stream idle timeout - partial response received"`).
-`claude-local.sh` sets it to 1.
+`harness/claude-code.sh` sets it to 1, for `claude-local.sh` and
+`run.sh claude-code` alike.
 
 **`mlx-serve` binds its port *before* loading the model.** A second start on the
 same port dies immediately at bind with a named error and never loads weights.

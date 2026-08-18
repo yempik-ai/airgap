@@ -1331,6 +1331,13 @@ server section can only be checked while the server is running, and you have not
 started it yet. `SKIP` means "not checked", not "broken". Learn this now, while
 nothing is wrong, so the output is familiar later when something is.
 
+**A `WARN` on a `harness wiring` row is also EXPECTED** if you only use Claude
+Code. The sample above is from a Mac with both Claude Code and the Codex CLI
+installed; a row reading `WARN codex 'codex' not found` simply means that app
+is not on this Mac, which is not a problem and stops nothing.
+[`10-other-harnesses.md`](10-other-harnesses.md) is the page for the other
+apps, if you ever want one.
+
 **A `FAIL memory` line is also EXPECTED right now** if you have been using your
 Mac today. It looks like this:
 
@@ -1690,7 +1697,7 @@ a different build, and the context number is worked out from your Mac's memory
 size. The address is the same everywhere, because `127.0.0.1` means "this Mac"
 on every Mac.
 
-That third line mentions **MCP**, which is short for Model Context Protocol
+The `mcp` line mentions **MCP**, which is short for Model Context Protocol
 ([Glossary](09-glossary.md#model-context-protocol-mcp)). MCP servers are optional
 add-ons that give Claude Code extra tools — a database connection, a web search,
 and so on. This setup switches them off, because the *descriptions* of those

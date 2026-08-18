@@ -62,7 +62,7 @@ git clone https://github.com/yempik-ai/airgap.git airgap && cd airgap
 ./start.sh
 ```
 
-**`./start.sh` is the only command you need to remember.** It installs the tools, downloads the build that fits your Mac (asking first — it is 20 GB for the 27B), proves the weights are real files, runs 22 health checks, and stops with a plain-English fix the moment anything needs you. Safe to run again at any time: finished steps are skipped.
+**`./start.sh` is the only command you need to remember.** It installs the tools, downloads the build that fits your Mac (asking first — it is 20 GB for the 27B), proves the weights are real files, runs every health check, and stops with a plain-English fix the moment anything needs you. Safe to run again at any time: finished steps are skipped.
 
 **Then two commands, in two Terminal windows:**
 
@@ -85,7 +85,7 @@ Free memory before starting the server — it refuses to start below the thresho
 | 1 | `./bin/setup.sh` | installs git-lfs + mlx-serve; checks Homebrew and Claude Code |
 | 2 | `./bin/download-model.sh` | the weights — size-checked against your Mac first, resumable, pointer-verified, de-duplicated |
 | 3 | `./bin/verify-model.sh` | proves every shard is real and whole — not a 135-byte placeholder, not one cut short by a full disk, and none missing that the index names |
-| 4 | `./bin/doctor.sh` | 22 checks, PASS/FAIL with a fix each. Changes nothing |
+| 4 | `./bin/doctor.sh` | one line per check, PASS/FAIL with a fix each, plus one row per harness adapter you have installed — 25 rows on the test machine with the server down (MEASURED 2026-08-18). Changes nothing |
 | 5 | `./bin/serve.sh` | starts the server. Leave the window open |
 | 6 | `./bin/claude-local.sh` | Claude Code, second window, pointed at you |
 
@@ -230,16 +230,18 @@ airgap/
 ├── bin/
 │   ├── catalog.sh           ← the one list of models: names, repos, sizes
 │   ├── detect-hardware.sh   ← reads your Mac, derives every setting
-│   ├── doctor.sh            ← 22 checks, a fix per failure
+│   ├── doctor.sh            ← every check, a fix per failure
 │   ├── setup.sh             ← installs the tooling
 │   ├── models.sh            ← list / pull / use — choose which model to serve
 │   ├── download-model.sh    ← the weights, done correctly
 │   ├── serve.sh             ← the only script that loads the model
+│   ├── run.sh               ← any harness, pointed at your Mac
 │   ├── claude-local.sh      ← Claude Code, pinned to loopback
 │   ├── stop.sh              ← hands the memory straight back
 │   ├── verify-model.sh      ← integrity check
 │   └── bench.sh             ← speculative decoding on versus off, tokens/s
-├── docs/                    ← 01 → 09, in reading order
+├── harness/                 ← one file per harness: claude-code, codex
+├── docs/                    ← 01 → 10, in reading order
 ├── tests/                   ← offline checks: doctor's readers against captured
 │                              lines, the load-shape contract, the thinking guard
 ├── bench/                   ← one .tsv per Mac, one row per bench.sh run

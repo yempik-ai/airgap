@@ -37,7 +37,9 @@ First public release.
   actually selected. Covers 8 GB to 128 GB; where a 27B cannot fit it names the
   catalog builds that do, and the scripts default to one of them instead of
   refusing.
-- `bin/doctor.sh` — 22 checks with a fix per failure (29 with the server up),
+- `bin/doctor.sh` — one line per check with a fix per failure, plus one row per
+  harness adapter present (MEASURED on the test machine, 2026-08-18: 25 rows
+  with the server down, of which 2 are adapter rows; more with it running),
   including whether git-lfs is *enabled* rather than merely installed, whether
   the weights are real files or 135-byte pointers, whether the selected model
   fits under the GPU wired ceiling, whether `CTX_SIZE` is within the model's own
@@ -316,7 +318,7 @@ First public release.
   `tests/harness-contract.sh` and `tests/run-dispatch.sh` hold the contract and
   the dispatch offline. `ROADMAP.md` Phase 1.
 - `bin/verify-model.sh`, `bin/stop.sh`.
-- Nine documents, `docs/01` to `docs/09`, written for readers who have never
+- Ten documents, `docs/01` to `docs/10`, written for readers who have never
   opened a terminal, plus a glossary of every technical term used.
 - `ROADMAP.md` — where this goes next: any harness, any runtime, one abstraction.
 - `AGENT.md` — the contributor contract, plus the environment facts already
