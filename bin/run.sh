@@ -5,7 +5,8 @@
 # server and does not load the model.
 #
 # One file per harness lives in harness/. This script picks one, lets it wire
-# itself, checks the server, prints what was decided, and hands over. The
+# itself, checks the server, lets it write the one file its harness reads (only
+# when it has to), prints what was decided, and hands over. The
 # harness-specific knowledge is in the adapter; everything every harness needs
 # is here, once.
 #
@@ -157,8 +158,8 @@ harness_wire
 # before the server check, and for the same reason as the wiring guards above:
 # a harness that is not installed is refused whether or not a server happens to
 # be running. Each adapter names its own setting for this in its own --help
-# (CLAUDE_BIN, CODEX_BIN), so this message points there rather than guessing at
-# a name the contract does not carry.
+# (CLAUDE_BIN, CODEX_BIN, PI_BIN, HERMES_BIN), so this message points there
+# rather than guessing at a name the contract does not carry.
 if ! command -v "$HARNESS_BIN" >/dev/null 2>&1; then
   echo "error: '$HARNESS_BIN' is not installed, or not on your PATH — $harness cannot start" >&2
   echo >&2
@@ -178,6 +179,17 @@ if ! server_up; then
   echo "    ./bin/serve.sh" >&2
   echo "Wait until it says it is listening, then run this command again." >&2
   exit 1
+fi
+
+# An adapter whose harness cannot be told about a provider on the command line
+# or in the environment writes the one file that harness reads (harness/pi.sh:
+# ~/.pi/agent/models.json). That is a side effect, so it lives in an optional
+# hook of its own and runs HERE — after every refusal above, never before one,
+# and never in the offline tests, which call harness_wire and nothing else.
+# It may still refuse (a file it cannot read back), and does so before the
+# banner, which is a statement of what was decided.
+if declare -f harness_prepare >/dev/null 2>&1; then
+  harness_prepare
 fi
 
 # --- What was decided --------------------------------------------------------
