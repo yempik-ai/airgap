@@ -197,7 +197,17 @@ group_digits() {
 
 probe_out="$(mktemp -t airgap-probe-out)"
 probe_err="$(mktemp -t airgap-probe-err)"
-trap 'rm -f "$probe_out" "$probe_err"' EXIT
+probe_pid=""
+
+# Ctrl-C during a probe must not leave the harness running into files that no
+# longer exist, so the harness goes first and the files after. probe_pid is
+# cleared the moment the job has been reaped, so this can never signal a pid
+# the system has since handed to somebody else.
+cleanup_probe() {
+  [ -z "$probe_pid" ] || kill -KILL "$probe_pid" 2>/dev/null || true
+  rm -f "$probe_out" "$probe_err"
+}
+trap cleanup_probe EXIT
 
 # The server's own count of prompt tokens, before and after. The difference is
 # what this one turn cost, every request the harness made included — which is
@@ -239,6 +249,7 @@ while kill -0 "$probe_pid" 2>/dev/null; do
   waited=$((waited + 1))
 done
 wait "$probe_pid" || true
+probe_pid=""
 exec 2>&3 3>&-
 elapsed_ms=$(( $(now_ms) - started_ms ))
 took="$(awk -v ms="$elapsed_ms" 'BEGIN { printf "%.1f", ms / 1000 }')"
@@ -249,7 +260,14 @@ if [ "$METRICS" = "1" ]; then
   tokens="prompt tokens n/a (the server did not answer /metrics.json)"
   tokens_after="$(metrics_counters prompt_tokens_total || true)"
   if [ -n "$tokens_before" ] && [ -n "$tokens_after" ]; then
-    tokens="$(group_digits "$(( tokens_after - tokens_before ))") prompt tokens"
+    # A server restarted between the two readings counts from zero again, and
+    # the difference is then a negative number that means nothing.
+    delta=$(( tokens_after - tokens_before ))
+    if [ "$delta" -lt 0 ]; then
+      tokens="prompt tokens n/a (counter reset)"
+    else
+      tokens="$(group_digits "$delta") prompt tokens"
+    fi
   fi
 fi
 
