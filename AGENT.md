@@ -34,7 +34,10 @@ two ever disagree, `AUDIT.md` is right.*
   waiting on; `B2` (a context sweep — `bench.sh` already emits the row a
   sweep would append, so it is a loop and a cap, 9B is enough to start) and `B6` (a quality suite,
   the only way `E4`'s quality cost becomes a number) — both need the model
-  loaded at length. Nothing here is blocked on a decision.
+  loaded at length. **Needing neither the 27B nor a decision, and the slice to
+  take when the machine is busy:** the seven guard fixes `AUDIT.md`'s "Order
+  of work" note ranks — `D1`+`D2`, `A4`, `D4`, `A6`, `A2`, `C3` — each small,
+  each provable offline (`tests/`) or with a refusal transcript.
 - **Blocked on memory, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `serve.sh` needs 22 GB free for
   it and a working day leaves ~14 (2026-08-18: a 3.2 GB VM, a browser,

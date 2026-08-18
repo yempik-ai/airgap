@@ -54,8 +54,14 @@ quality cost is not a default. Everything in §F is roadmap sequencing, not
 code — absorbed into `ROADMAP.md` Phases 2–3 (revised 2026-08-17), nothing
 left to do until Phase 2 starts. Still open, and why: `B2` (a context sweep)
 and `B6` (a quality suite — also the only way `E4`'s quality cost becomes a
-number) need the model loaded at length; the rest of §A–§E are recorded with their shape and wait on the 27B or on
-a decision nobody has needed to make yet.
+number) need the model loaded at length. Seven need neither the 27B nor a
+decision and are the next slice, ranked by user harm: `D1` + `D2` (a
+truncated shard passes verify; three "is it here?" checks read one shard),
+`A4` (`CTX_SIZE` guard in `serve.sh`), `D4` (`stop.sh` cannot stop a bench
+and misreports a foreign port holder), `A6` (`mlx-serve` minimum version),
+`A2` (disk guard for the prefix cache), `C3` (say the log rotates at 32 MB;
+show its tail on failure). `C4`, `E2`, `E3` need a measurement to say
+anything honest; `A3`, `E5` need the 27B.
 
 ---
 
