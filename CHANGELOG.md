@@ -116,6 +116,14 @@ First public release.
   key already in the shell cannot take priority, declares the real context
   window, and switches off telemetry, error reporting, the auto-updater,
   marketplace auto-install and background tasks.
+- `RELEASE.md` — the release gate: eight runs with pass and block conditions,
+  the one-line record each manual run leaves in the release notes, and what
+  0.1.0 still owes. Closes `AUDIT.md` B5.
+- **`outputs IDENTICAL` now says what it proves.** Byte identity observed on
+  this run — the algorithm's promise in exact arithmetic, checked every run
+  because a batched floating-point implementation in a closed binary can drift;
+  it has held on every 9B run so far (MEASURED). `bench.sh`, `docs/07`,
+  `docs/08` and the glossary. Closes `AUDIT.md` B3.
 - **The GPU wired ceiling is labelled, and doctor quotes the measured one.**
   The 2/3-of-RAM (to 32 GB) / 3/4-above rule behind the stack's hardest
   refusal was stated as fact; it is now labelled ARITHMETIC in

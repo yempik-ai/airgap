@@ -18,7 +18,9 @@ environment facts established along the way. Read that file first — it exists 
 these findings are not researched twice.
 
 Items are referenced by id from [`ROADMAP.md`](ROADMAP.md). All are **OPEN**
-except `A1`, `A5`, `C1`, `B1`, `D3`, `E1`, `E4` and `A7`, marked **DONE** below.
+except `A1`, `A5`, `C1`, `B1`, `D3`, `E1`, `E4`, `A7`, `B3` and `B5`, marked
+**DONE** below; §F is roadmap sequencing and was absorbed into `ROADMAP.md`
+Phases 2–3 on 2026-08-17.
 
 Evidence is cited as `file:line` at the time of the audit. Line numbers drift;
 the greps are given where the reader will need to re-locate something.
@@ -42,11 +44,19 @@ marks *never measured*.
 | ✅ | `E1` stop overriding the engine's prefill sizing — **DONE** | small | medium |
 | ✅ | `E4` thinking off, opt-in — **DONE** | small | high |
 | ✅ | `A7` label the wired ceiling; doctor quotes the measured one — **DONE** | small | high |
+| ✅ | `B3` say what `IDENTICAL` proves: this run, not the algorithm — **DONE** | small | high |
+| ✅ | `B5` a checked-in release gate, `RELEASE.md` — **DONE** | small | high |
 
 No numbered item is left. `E4` carried the largest measured speed-up in this
 audit and shipped opt-in, as required: a behavioural change with an unmeasured
 quality cost is not a default. Everything in §F is roadmap sequencing, not
-code.
+code — absorbed into `ROADMAP.md` Phases 2–3 (revised 2026-08-17), nothing
+left to do until Phase 2 starts. Still open, and why: `B2` (a context sweep)
+and `B6` (a quality suite — also the only way `E4`'s quality cost becomes a
+number) need the model loaded at length; `B4` (contributed benchmarks as
+data) needs `bench.sh` to emit a machine-readable row and a place to commit
+it; the rest of §A–§E are recorded with their shape and wait on the 27B or on
+a decision nobody has needed to make yet.
 
 ---
 
@@ -373,7 +383,16 @@ Note for any sweep touching `PREFILL_CHUNK`: at ~30 tokens that flag is a litera
 no-op (mlx-serve's help calls it "the ceiling, not a floor"). A sweep on the
 stock prompt will report "no difference" and be wrong.
 
-### B3 — the exactness claim rests on one 9B run, and is stated six times
+### B3 — the exactness claim rests on one 9B run, and is stated six times — **DONE**
+
+*Shipped 2026-08-18, wording only: `bench.sh` prints `outputs IDENTICAL <-
+byte identity, observed on this run`; `docs/07`, `docs/08` and the glossary
+say identity is the algorithm's promise in exact arithmetic, that a batched
+floating-point implementation in a closed binary can drift, and that the
+script therefore checks every run instead of the docs asserting it once — it
+has held on every 9B run so far. Not "divergence is expected". The
+median-of-N and spread wait on `B2`.*
+
 
 `README.md:186`, `docs/07-tuning.md:421-424`, `:473`, `:484`, `:495-497` and
 `docs/09-glossary.md:990-991` all assert that speculative decoding is exact and
@@ -403,7 +422,16 @@ ds4 asks for one CSV per machine committed to the repo (`m2_ultra.csv`,
 `m4_max.csv`, `m5_max.csv`, `gb10.csv`) plus a stdlib-only plotter that renders
 an SVG beside it.
 
-### B5 — there is no checked-in release gate
+### B5 — there is no checked-in release gate — **DONE**
+
+*Shipped 2026-08-18: `RELEASE.md` — eight numbered runs with pass and block
+conditions (CI, doctor with the server up, `bench.sh` on a real prompt with a
+>10 % repeatable decode slowdown as a blocker unless written down, the
+end-to-end `AIRGAP OK`, re-proving any touched guard, the argv diff, the
+label check on every changed figure, CHANGELOG + CITATION), the one-line
+record each manual run leaves in the release notes, and what 0.1.0 still owes
+so a tag cannot skip it silently.*
+
 
 Phase 0 lists three evidence tasks in prose. Nothing states what must be re-run
 before a tag, on what hardware, with what configuration recorded, or what counts

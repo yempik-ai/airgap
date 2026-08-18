@@ -115,6 +115,10 @@ able to prove things it currently only asserts. Ordered as in `AUDIT.md`.
       the 9B on the test machine (from what is free at load) and the working
       set while reading 16k tokens fell 2.6 → 0.7–1.1 GB (MEASURED, 9B).
       `bench.sh`'s one-shot load does not get that sizing and now says so.
+- [x] `B3`, `B5` — the exactness claim now says what one `IDENTICAL` proves
+      (this run, MEASURED; not the algorithm in a closed binary), and
+      `RELEASE.md` is the checked-in gate: what is re-run before a tag, on
+      what, and what blocks it. **Shipped 2026-08-18.**
 - [x] `E4` — thinking off, opt-in. The largest speed-up the audit measured
       (9B, one prompt: 3× fewer output tokens, 3× faster) behind a client-side
       switch, `MAX_THINKING_TOKENS=0`, with the quality cost stated as

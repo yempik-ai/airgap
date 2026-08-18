@@ -978,8 +978,8 @@ one.
 
 **Why you care here.** The benchmark script prints the fingerprint of the
 model's output with the guessing feature on and off. Matching fingerprints prove
-the two outputs are identical, character for character, so the speed gain costs
-no accuracy.
+the two outputs of *that run* are identical, character for character — observed
+each time, not assumed.
 
 ### shard
 
@@ -1007,8 +1007,9 @@ the full model checks them all in one pass, keeping the correct ones.
 **Why you care here.** It is faster with no change to the output. Checking
 several guesses costs one trip through the 19.1 GB of [weights](#weights), which
 is nearly the cost of producing one token. Rejected guesses cost nothing but the
-guess. The result is exact, which the benchmark script proves with matching
-[fingerprints](#sha-256--checksum).
+guess. The result is exact in principle; the benchmark script checks it on
+every run with matching [fingerprints](#sha-256--checksum), and it has held on
+every run here so far (the 9B).
 
 **Think of it like** a colleague finishing your sentences while you nod or shake
 your head. You still approve every word, so the meaning never changes; you save

@@ -473,7 +473,11 @@ text ahead of time, which the full model then checks in one pass. This is
 decoding** ([Glossary](09-glossary.md#speculative-decoding)).
 
 The claim worth checking is not that it is faster. It is that the answer is
-**identical** — that this is a pure speed gain and not a quality trade.
+**identical** — that this is a pure speed gain and not a quality trade. In exact
+arithmetic the algorithm guarantees that: it keeps only guesses the full model
+would have written itself. A real implementation verifies in batches and can
+drift in floating point, and `mlx-serve` is a closed binary, so this repository
+does not assert identity — it **observes** it, one run at a time.
 `./bin/bench.sh` runs the model twice with the randomness switched off, once with
 the feature on and once with it off, and compares a fingerprint of each answer.
 While it is at it, it keeps the two other figures mlx-serve prints — how fast
@@ -541,7 +545,7 @@ The figures per run are the ones mlx-serve prints itself; the load is not in the
   output sha  : 5df6c56513eeea39
 
 ── result ──────────────────────────────────
-  outputs IDENTICAL  <- speculative decoding is exact, as expected
+  outputs IDENTICAL  <- byte identity, observed on this run
   speed-up ~ 1.02x  (36.746 tokens/s with the speed features on, 36.055 off)
   prefill    201.224 tokens/s at 41 prompt tokens (speed features on)
              ^ at a prompt this short that is mostly per-call overhead, several
@@ -565,7 +569,10 @@ not a stable figure, so always quote it with its prompt and token count). On an 
 where the head exists, the publisher's own figures are 6.81 seconds against
 10.15 seconds for the same answer — PUBLISHER-REPORTED, NOT YET reproduced on
 the test machine. The interesting line is always the first of the result block:
-`outputs IDENTICAL`.
+`outputs IDENTICAL` — and what it says is that *this* run was byte-identical
+(MEASURED, the 9B, every run so far). It is not a guarantee for the next run,
+another build or another `mlx-serve`; that is exactly why the script checks
+every time instead of the docs asserting it once.
 
 The three figures per run are the ones mlx-serve prints after each run. Reading
 the model off the disk is in none of them.

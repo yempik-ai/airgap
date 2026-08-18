@@ -223,6 +223,7 @@ airgap/
 ├── AGENT.md                 ← for contributors: the rules, and the facts
 │                              already established so nobody re-derives them
 ├── AUDIT.md                 ← the open gap register, with evidence per item
+├── RELEASE.md               ← what is re-run before a tag, and what blocks it
 ├── bin/
 │   ├── catalog.sh           ← the one list of models: names, repos, sizes
 │   ├── detect-hardware.sh   ← reads your Mac, derives every setting
@@ -236,8 +237,8 @@ airgap/
 │   ├── verify-model.sh      ← integrity check
 │   └── bench.sh             ← speculative decoding on versus off, tokens/s
 ├── docs/                    ← 01 → 09, in reading order
-├── tests/                   ← offline checks: doctor's tool-call reader against
-│                              captured answers, the load-shape contract
+├── tests/                   ← offline checks: doctor's readers against captured
+│                              lines, the load-shape contract, the thinking guard
 ├── .github/workflows/ci.yml ← shellcheck + bash -n, and tests/ on a macOS runner
 └── config.env.example       ← every setting, with its default
 ```

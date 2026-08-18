@@ -767,8 +767,10 @@ turns out to be right is a token you got for free.
 
 The property that makes this trustworthy: the output is **identical** to what the
 model would have written on its own. Not similar. Identical. Wrong guesses are
-discarded, and the model's own next token is used instead. Speculative decoding is
-a speed optimization with no effect on what gets written. (See the **speculative
+discarded, and the model's own next token is used instead. That is the algorithm
+in exact arithmetic; a real implementation verifies in batches and can drift in
+floating point, which is why `bench.sh` checks identity on every run rather than
+this page asserting it once (it has held on every 9B run so far — MEASURED). (See the **speculative
 decoding** entry in the [Glossary](09-glossary.md).)
 
 ### An analogy, and where it stops being true
@@ -896,7 +898,7 @@ The encouraging one: the two output fingerprints are the same. A fingerprint is 
 short code computed from a piece of text, such that different text almost
 certainly produces a different code. The same code means the same text, character
 for character. This is the exactness claim from the start of this section, shown
-rather than asserted.
+for this run rather than asserted in general.
 
 The restraining one: the publisher labels those durations, in their own words,
 "bounded smoke-test evidence, not performance benchmarks". They come from a single

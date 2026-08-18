@@ -14,7 +14,11 @@ against the installed binaries, and what has already been tried and found false.
 not a record — [`AUDIT.md`](AUDIT.md) holds the status of every item, and if the
 two ever disagree, `AUDIT.md` is right.*
 
-- **Last landed:** `A7`, 2026-08-18 — the wired ceiling is labelled
+- **Last landed:** `B3` and `B5`, 2026-08-18 — `outputs IDENTICAL` says
+  "observed on this run" and the docs say why that is all it can say;
+  `RELEASE.md` is the checked-in gate (eight runs, block conditions, the
+  one-line record, what 0.1.0 still owes). §F was already absorbed into
+  `ROADMAP.md` Phases 2–3 and `AUDIT.md` now says so. Before them: `A7` — the wired ceiling is labelled
   ARITHMETIC everywhere it is stated, and `doctor.sh`'s `gpu ceiling` row
   quotes the number the server measured (`[wired] mode=max limit=N MB` in
   the log's current run; 28.1 GB here against 27.0 estimated — fact below)
@@ -40,9 +44,11 @@ two ever disagree, `AUDIT.md` is right.*
   the fifth, `A7`, is done. Phases 1–4 are not started.
 - **Next, in order of value:** the 27B measurement (`AUDIT.md` A3, E5,
   `ROADMAP.md` Phase 0), which every "9B only" figure in this file is
-  waiting on; the quality cost of `E4`, which needs a quality suite
-  (`AUDIT.md` B6) to become a number; §F
-  (roadmap sequencing, no code). Nothing here is blocked on a decision.
+  waiting on; `B4` (bench emits a machine-readable row, and a place to
+  commit one per machine — small, needs one bench run to prove the row);
+  `B2` (a context sweep, 9B is enough to start) and `B6` (a quality suite,
+  the only way `E4`'s quality cost becomes a number) — both need the model
+  loaded at length. Nothing here is blocked on a decision.
 - **Blocked on memory, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `serve.sh` needs 22 GB free for
   it and a working day leaves ~14 (2026-08-18: a 3.2 GB VM, a browser,
@@ -88,6 +94,8 @@ two ever disagree, `AUDIT.md` is right.*
 - `bin/catalog.sh` — the one list of models.
 - `docs/01`–`09` — user-facing, in reading order. Contributor material does not
   go here.
+- `RELEASE.md` — what is re-run before a tag, on what, and what blocks it.
+  Touch a guard or a figure and this file says what you owe before tagging.
 - `tests/` — offline checks, no server and no weights: `tool-call-verdict.sh`
   lifts `row`, `tool_probe_body`, `tool_call_verdict` and `tool_call_row` out
   of `doctor.sh` by their `name() {`…`}` ranges (doctor cannot be sourced; it

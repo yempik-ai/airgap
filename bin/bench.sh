@@ -84,7 +84,7 @@ SETTINGS
                sends on every turn.
 
 WHAT YOU SHOULD SEE AT THE END
-  outputs IDENTICAL  <- speculative decoding is exact, as expected
+  outputs IDENTICAL  <- byte identity, observed on this run
   a decode figure for each run with the ratio between them, the prefill figure
   next to the prompt length it was measured at, and the peak memory next to the
   weights + conversation figure the memory guard counts for this load.
@@ -293,8 +293,13 @@ if [ "$ok" != "1" ]; then
   exit 1
 fi
 
+# What this line may claim: identity on THIS run. In exact arithmetic the
+# algorithm keeps only guesses the full model would have written itself; a real
+# implementation verifies in batches and can drift in floating point, and
+# mlx-serve is a closed binary — so identity is observed per run, not
+# guaranteed by the repository (AUDIT.md B3).
 if cmp -s "$TMP/spec-on.txt" "$TMP/spec-off.txt"; then
-  echo "  outputs IDENTICAL  <- speculative decoding is exact, as expected"
+  echo "  outputs IDENTICAL  <- byte identity, observed on this run"
 else
   echo "  outputs DIFFER     <- unexpected at temp 0; investigate before trusting the speeds"
   echo "  (the two answers are in $TMP — kept until this window closes)"
