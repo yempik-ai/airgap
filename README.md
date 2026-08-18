@@ -239,6 +239,7 @@ airgap/
 ├── docs/                    ← 01 → 09, in reading order
 ├── tests/                   ← offline checks: doctor's readers against captured
 │                              lines, the load-shape contract, the thinking guard
+├── bench/                   ← one .tsv per Mac, one row per bench.sh run
 ├── .github/workflows/ci.yml ← shellcheck + bash -n, and tests/ on a macOS runner
 └── config.env.example       ← every setting, with its default
 ```

@@ -73,10 +73,14 @@ USAGE (run from the repo root)
                                              a long prompt: the whole file is
                                              the question. This is how to get a
                                              prefill figure worth quoting.
+  ROW_FILE=bench/my-mac.tsv ./bin/bench.sh   also append this run as one row of a
+                                             tab-separated file (see below)
   ./bin/bench.sh --help                      print this help
 
 SETTINGS
   TOKENS       how many tokens to generate. Default: 200
+  ROW_FILE     a .tsv to append this run's row to; written with a header line
+               when the file is new. Default: unset (the row is only printed).
   PROMPT       the question to ask. Default: a fixed one about how the model works.
   PROMPT_FILE  a file whose whole contents are the prompt. Overrides PROMPT.
                It must fit in CTX_SIZE. Anything readable will do — a document
@@ -86,8 +90,12 @@ SETTINGS
 WHAT YOU SHOULD SEE AT THE END
   outputs IDENTICAL  <- byte identity, observed on this run
   a decode figure for each run with the ratio between them, the prefill figure
-  next to the prompt length it was measured at, and the peak memory next to the
-  weights + conversation figure the memory guard counts for this load.
+  next to the prompt length it was measured at, the peak memory next to the
+  weights + conversation figure the memory guard counts for this load — and
+  the same run as ONE ROW: tab-separated, machine, model, settings and figures,
+  the form bench/ collects (bench/README.md). A run on a Mac that is not the
+  M3 Max 36 GB is the contribution this repository needs most; the row is how
+  to send it so it can be diffed and plotted rather than read once.
 
   A NOTE ABOUT THE NUMBERS: they are what mlx-serve prints after a run, and
   they describe your Mac, this model, this prompt and this token count.
@@ -165,6 +173,7 @@ fi
 : "${TOKENS:=200}"
 : "${PROMPT:=Explain why speculative decoding produces output identical to standard autoregressive decoding, then describe how a gated linear attention layer differs from full self-attention.}"
 : "${PROMPT_FILE:=}"
+: "${ROW_FILE:=}"
 
 # --- The prompt: a file, when one is named ------------------------------------
 # The whole file becomes the prompt. This is the only way to get a prefill
@@ -300,10 +309,12 @@ fi
 # guaranteed by the repository (AUDIT.md B3).
 if cmp -s "$TMP/spec-on.txt" "$TMP/spec-off.txt"; then
   echo "  outputs IDENTICAL  <- byte identity, observed on this run"
+  identical=yes
 else
   echo "  outputs DIFFER     <- unexpected at temp 0; investigate before trusting the speeds"
   echo "  (the two answers are in $TMP — kept until this window closes)"
   trap 'release_model_lock' EXIT
+  identical=no
 fi
 
 on="$(cat "$TMP/spec-on.tps")"
@@ -362,3 +373,30 @@ echo
 echo "This measured YOUR Mac, this model, this prompt and ${TOKENS} tokens. It is not a"
 echo "benchmark of anything else. Speed features here means the MTP head (if this"
 echo "checkpoint ships one) and prompt-lookup decoding."
+
+# The same run as one row. Every value above, plus what it was measured on and
+# with, tab-separated in a fixed column order, so runs from different Macs can
+# be diffed, plotted and used as a baseline (AUDIT.md B4). bench/README.md
+# holds the same header and says where a row goes. Nothing here is derived:
+# each field is either printed above or read from the machine right now.
+row_header='date	commit	chip	gpu_cores	ram_gb	macos	mlx_serve	model	ctx_size	kv_quant	prefill_chunk	prompt	prompt_tokens	gen_tokens	decode_on_tps	decode_off_tps	prefill_on_tps	peak_on_gb	peak_off_gb	identical'
+row="$(printf '%s\t' \
+  "$(date +%F)" \
+  "$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo -)" \
+  "${HW_CHIP:--}" "${HW_GPU_CORES:--}" "${HW_RAM_GB:--}" "$(sw_vers -productVersion 2>/dev/null || echo -)" \
+  "$(mlx-serve --version 2>/dev/null | awk '/^mlx-serve /{ print $2; exit }')" \
+  "$(basename "$MODEL_DIR")" "$CTX_SIZE" "$KV_QUANT" "${PREFILL_CHUNK:-auto}" \
+  "$( [ -n "$PROMPT_FILE" ] && basename "$PROMPT_FILE" || echo default )" \
+  "$ptok" "${ntok:-0}" "$on" "$off" "$ptps" "$peak_on" "$peak_off" "$identical")"
+row="${row%	}"
+echo
+echo "── row ─────────────────────────────────────"
+echo "$row_header"
+echo "$row"
+if [ -n "$ROW_FILE" ]; then
+  [ -s "$ROW_FILE" ] || echo "$row_header" > "$ROW_FILE"
+  echo "$row" >> "$ROW_FILE"
+  echo "appended to $ROW_FILE — see bench/README.md for where it goes from here"
+else
+  echo "(ROW_FILE=bench/<chip>-<ram>gb.tsv ./bin/bench.sh appends it to a file — bench/README.md)"
+fi

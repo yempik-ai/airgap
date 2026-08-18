@@ -18,8 +18,8 @@ environment facts established along the way. Read that file first — it exists 
 these findings are not researched twice.
 
 Items are referenced by id from [`ROADMAP.md`](ROADMAP.md). All are **OPEN**
-except `A1`, `A5`, `C1`, `B1`, `D3`, `E1`, `E4`, `A7`, `B3` and `B5`, marked
-**DONE** below; §F is roadmap sequencing and was absorbed into `ROADMAP.md`
+except `A1`, `A5`, `C1`, `B1`, `D3`, `E1`, `E4`, `A7`, `B3`, `B4` and `B5`,
+marked **DONE** below; §F is roadmap sequencing and was absorbed into `ROADMAP.md`
 Phases 2–3 on 2026-08-17.
 
 Evidence is cited as `file:line` at the time of the audit. Line numbers drift;
@@ -46,6 +46,7 @@ marks *never measured*.
 | ✅ | `A7` label the wired ceiling; doctor quotes the measured one — **DONE** | small | high |
 | ✅ | `B3` say what `IDENTICAL` proves: this run, not the algorithm — **DONE** | small | high |
 | ✅ | `B5` a checked-in release gate, `RELEASE.md` — **DONE** | small | high |
+| ✅ | `B4` `bench.sh` ends as one row; `bench/` holds one file per Mac — **DONE** | small | high |
 
 No numbered item is left. `E4` carried the largest measured speed-up in this
 audit and shipped opt-in, as required: a behavioural change with an unmeasured
@@ -53,9 +54,7 @@ quality cost is not a default. Everything in §F is roadmap sequencing, not
 code — absorbed into `ROADMAP.md` Phases 2–3 (revised 2026-08-17), nothing
 left to do until Phase 2 starts. Still open, and why: `B2` (a context sweep)
 and `B6` (a quality suite — also the only way `E4`'s quality cost becomes a
-number) need the model loaded at length; `B4` (contributed benchmarks as
-data) needs `bench.sh` to emit a machine-readable row and a place to commit
-it; the rest of §A–§E are recorded with their shape and wait on the 27B or on
+number) need the model loaded at length; the rest of §A–§E are recorded with their shape and wait on the 27B or on
 a decision nobody has needed to make yet.
 
 ---
@@ -411,7 +410,21 @@ The single recorded run is also 57.114 vs 56.302 tok/s — a 1.01× ratio that
 talk its reader out of its only measured ratio is the argument for a
 median-of-N and a spread.
 
-### B4 — contributed benchmarks arrive in a form nothing can use
+### B4 — contributed benchmarks arrive in a form nothing can use — **DONE**
+
+*Shipped 2026-08-18: `bench.sh` ends every run by printing it as one
+tab-separated row — date, commit, chip, GPU cores, RAM, macOS, `mlx-serve`,
+model, `ctx_size`, `kv_quant`, `prefill_chunk` (`auto` when unpinned), prompt
+(`default` or the `PROMPT_FILE` name), prompt and generated tokens, decode
+on/off, prefill, peak on/off, identical — and `ROW_FILE=bench/<chip>-<ram>gb.tsv`
+appends it, header first when the file is new. `bench/README.md` fixes the
+name, the header and the meaning of every column. `bench/m3-max-36gb.tsv`
+holds the reference machine's first two rows (9B, default prompt and
+`docs/08` — 27.4/26.4 tok/s at 41 tokens; 11.9/9.6 tok/s and 269 tok/s
+prefill at 16,458, 1.25× with prompt lookup given text to copy, peak 9.55 GB
+unpinned; MEASURED). No plotter: stdlib-only SVG is Python, out of scope, and
+a TSV opens in anything.*
+
 
 `ROADMAP.md` asks contributors to *"paste the whole output into an issue"*.
 Prose in issues cannot be diffed, plotted, aggregated or used as a baseline —

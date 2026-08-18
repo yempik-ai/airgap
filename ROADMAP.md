@@ -115,8 +115,10 @@ able to prove things it currently only asserts. Ordered as in `AUDIT.md`.
       the 9B on the test machine (from what is free at load) and the working
       set while reading 16k tokens fell 2.6 → 0.7–1.1 GB (MEASURED, 9B).
       `bench.sh`'s one-shot load does not get that sizing and now says so.
-- [x] `B3`, `B5` — the exactness claim now says what one `IDENTICAL` proves
-      (this run, MEASURED; not the algorithm in a closed binary), and
+- [x] `B3`, `B4`, `B5` — the exactness claim now says what one `IDENTICAL`
+      proves (this run, MEASURED; not the algorithm in a closed binary);
+      `bench.sh` ends every run as one tab-separated row and `bench/` holds
+      one file per Mac (`ROW_FILE=`), the reference machine's two rows first;
       `RELEASE.md` is the checked-in gate: what is re-run before a tag, on
       what, and what blocks it. **Shipped 2026-08-18.**
 - [x] `E4` — thinking off, opt-in. The largest speed-up the audit measured
@@ -250,19 +252,18 @@ to get from a clean Mac to a working harness without learning MLX.
 ## How to help
 
 The most valuable contributions, in order: a `bench.sh` run on a Mac that is not
-an M3 Max 36 GB (paste the whole output into an issue); a harness adapter for a
+an M3 Max 36 GB (`ROW_FILE=bench/<chip>-<ram>gb.tsv ./bin/bench.sh`, commit the
+file, put the full output in the PR — `bench/README.md`); a harness adapter for a
 harness you actually use, with its `AIRGAP OK` transcript; a catalog line for a
 build you have actually loaded, with `verify-model.sh` output. Claims without the
 transcript are not merged — not out of distrust, but because the whole point of
 this repository is that its numbers are real.
 
-Prose in an issue is the wrong container for the first of those, and it is the
-contribution the project needs most. Once `B1` lands, `bench.sh` should emit one
-CSV per machine, committed to the repository the way ds4 accumulates
-`m4_max.csv` and `m5_max.csv` — so contributed runs can be diffed, plotted and
-used as a regression baseline instead of read once and lost. (`AUDIT.md` B4.)
-
-There is also no checked-in release gate: nothing states what must be re-run
-before a tag, on what hardware, or what counts as a blocker. The MEASURED
-convention is currently enforced by the maintainer's memory, which is the exact
-failure mode the convention exists to prevent. (B5.)
+Prose in an issue was the wrong container for the first of those, and it is the
+contribution the project needs most — so since 2026-08-18 `bench.sh` ends every
+run as one tab-separated row and `bench/` holds one file per Mac, the way ds4
+accumulates `m4_max.csv` and `m5_max.csv`: contributed runs can be diffed,
+plotted and used as a baseline instead of read once and lost (`AUDIT.md` B4).
+The release gate is `RELEASE.md` (`B5`): what is re-run before a tag, on what,
+and what blocks it — so the MEASURED convention is enforced by a checklist, not
+by the maintainer's memory.

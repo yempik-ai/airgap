@@ -618,10 +618,18 @@ between), and speed did not track the chunk (594 at 8192, 309 at 4096, 430 at
 samples and these do not repeat it. What the numbers do support is that the
 peak is chunk-bound and reproducible, and the rate is noisy. That is why
 `PREFILL_CHUNK` is left empty and the server sizes it
-([§12](#never)). And mlx-serve's `Peak memory` is its own accounting of its
+([§13](#never)). And mlx-serve's `Peak memory` is its own accounting of its
 Metal buffers: `footprint(1)` on the same process showed about 0.5 GB more, so
 treat the printed peak as a lower bound. None of this has been measured on the
 27B, whose working set is likely larger — see `AUDIT.md` A3.
+
+**Every run ends as one row.** The last block `bench.sh` prints is the whole
+run, tab-separated in a fixed column order — machine, runtime, model, load
+shape, prompt, and every figure above. `ROW_FILE=bench/<chip>-<ram>gb.tsv
+./bin/bench.sh` appends it to a file under [`bench/`](../bench/README.md), one
+file per Mac, which is how a run from a Mac that is not the test machine
+becomes evidence this repository can diff and plot instead of prose in an
+issue. The reference machine's own rows are in `bench/m3-max-36gb.tsv`.
 
 **If you do not see that.**
 
@@ -794,6 +802,7 @@ carries the same list with a longer explanation each.
 | `TOKENS` | `200` | `bench.sh` |
 | `PROMPT` | a fixed question | `bench.sh` |
 | `PROMPT_FILE` | unset — a file whose whole contents are the prompt; overrides `PROMPT` | `bench.sh` |
+| `ROW_FILE` | unset — a `.tsv` to append the run's row to (`bench/`) | `bench.sh` |
 
 ---
 

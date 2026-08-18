@@ -14,7 +14,10 @@ against the installed binaries, and what has already been tried and found false.
 not a record — [`AUDIT.md`](AUDIT.md) holds the status of every item, and if the
 two ever disagree, `AUDIT.md` is right.*
 
-- **Last landed:** `B3` and `B5`, 2026-08-18 — `outputs IDENTICAL` says
+- **Last landed:** `B4`, 2026-08-18 — `bench.sh` ends every run as one
+  tab-separated row, `ROW_FILE=` appends it, `bench/` holds one file per Mac
+  with the reference machine's first two rows (`bench/m3-max-36gb.tsv`).
+  Before it, same day: `B3` and `B5` — `outputs IDENTICAL` says
   "observed on this run" and the docs say why that is all it can say;
   `RELEASE.md` is the checked-in gate (eight runs, block conditions, the
   one-line record, what 0.1.0 still owes). §F was already absorbed into
@@ -44,9 +47,8 @@ two ever disagree, `AUDIT.md` is right.*
   the fifth, `A7`, is done. Phases 1–4 are not started.
 - **Next, in order of value:** the 27B measurement (`AUDIT.md` A3, E5,
   `ROADMAP.md` Phase 0), which every "9B only" figure in this file is
-  waiting on; `B4` (bench emits a machine-readable row, and a place to
-  commit one per machine — small, needs one bench run to prove the row);
-  `B2` (a context sweep, 9B is enough to start) and `B6` (a quality suite,
+  waiting on; `B2` (a context sweep — `bench.sh` already emits the row a
+  sweep would append, so it is a loop and a cap, 9B is enough to start) and `B6` (a quality suite,
   the only way `E4`'s quality cost becomes a number) — both need the model
   loaded at length. Nothing here is blocked on a decision.
 - **Blocked on memory, not on decisions:** anything needing the 27B loaded.
@@ -78,7 +80,7 @@ two ever disagree, `AUDIT.md` is right.*
   export list. Missing `ENV_KEYS` means the setting works in `config.env` but
   not from the command line. Settings a single script reads are the one
   exception: on `ENV_KEYS`, defaulted and exported (if at all) in that script
-  — `TOKENS`, `PROMPT`, `PROMPT_FILE` in `bench.sh`;
+  — `TOKENS`, `PROMPT`, `PROMPT_FILE`, `ROW_FILE` in `bench.sh`;
   `CLAUDE_CODE_MAX_OUTPUT_TOKENS` and `MAX_THINKING_TOKENS` (no default:
   unset means "as the model ships") in `claude-local.sh`. `LOAD_SHAPE_ARGS`
   is also here — the flags
@@ -94,6 +96,8 @@ two ever disagree, `AUDIT.md` is right.*
 - `bin/catalog.sh` — the one list of models.
 - `docs/01`–`09` — user-facing, in reading order. Contributor material does not
   go here.
+- `bench/` — one `.tsv` per Mac, one row per `bench.sh` run, header and
+  columns fixed in `bench/README.md`. Never hand-edited; a row is a run.
 - `RELEASE.md` — what is re-run before a tag, on what, and what blocks it.
   Touch a guard or a figure and this file says what you owe before tagging.
 - `tests/` — offline checks, no server and no weights: `tool-call-verdict.sh`

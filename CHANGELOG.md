@@ -116,6 +116,14 @@ First public release.
   key already in the shell cannot take priority, declares the real context
   window, and switches off telemetry, error reporting, the auto-updater,
   marketplace auto-install and background tasks.
+- **`bench.sh` ends every run as one row, and `bench/` collects them.** The
+  last block is the run tab-separated in a fixed column order (machine,
+  runtime, model, load shape, prompt, every figure, `identical`);
+  `ROW_FILE=bench/<chip>-<ram>gb.tsv` appends it, header first when new.
+  `bench/README.md` fixes the format; `bench/m3-max-36gb.tsv` holds the
+  reference machine's first two rows (9B; MEASURED 2026-08-18: 27.4 tok/s
+  decode at 41 tokens, 11.9 at 16,458 with prefill 269 tok/s and 1.25× from
+  prompt lookup, peak 9.55 GB unpinned). Closes `AUDIT.md` B4.
 - `RELEASE.md` — the release gate: eight runs with pass and block conditions,
   the one-line record each manual run leaves in the release notes, and what
   0.1.0 still owes. Closes `AUDIT.md` B5.
