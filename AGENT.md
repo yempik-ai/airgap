@@ -14,32 +14,16 @@ against the installed binaries, and what has already been tried and found false.
 not a record — [`AUDIT.md`](AUDIT.md) holds the status of every item, and if the
 two ever disagree, `AUDIT.md` is right.*
 
-- **Last landed:** `B4`, 2026-08-18 — `bench.sh` ends every run as one
-  tab-separated row, `ROW_FILE=` appends it, `bench/` holds one file per Mac
-  with the reference machine's first two rows (`bench/m3-max-36gb.tsv`).
-  Before it, same day: `B3` and `B5` — `outputs IDENTICAL` says
-  "observed on this run" and the docs say why that is all it can say;
-  `RELEASE.md` is the checked-in gate (eight runs, block conditions, the
-  one-line record, what 0.1.0 still owes). §F was already absorbed into
-  `ROADMAP.md` Phases 2–3 and `AUDIT.md` now says so. Before them: `A7` — the wired ceiling is labelled
-  ARITHMETIC everywhere it is stated, and `doctor.sh`'s `gpu ceiling` row
-  quotes the number the server measured (`[wired] mode=max limit=N MB` in
-  the log's current run; 28.1 GB here against 27.0 estimated — fact below)
-  and FAILs a build the measured one cannot hold. `tests/wired-log.sh` holds
-  the reader. Before it, same day, `E4` (thinking off, opt-in). `MAX_THINKING_TOKENS`
-  — Claude Code's own name — is on `ENV_KEYS`, has no default, and
-  `claude-local.sh` exports it only when set, refuses a value that is not a
-  whole number, and reports it on a `thinking` banner line (so the banner is
-  six lines now; the three doc snapshots and `docs/05` say so).
-  `tests/thinking-knob.sh` holds the guard. Proven through the harness on
-  Claude Code 2.1.234: the server log reads `thinking=false` under `0`,
-  `thinking=true` otherwise (facts below). Nothing server-side moved.
-  `docs/07` gained a §7 for it and its later sections renumbered (7–13 →
-  8–14); every cross-reference by number was updated (`README`, `docs/02`,
-  `04`, `05`, `08`) — `AUDIT.md`'s own `docs/07 §N` citations are
-  audit-time snapshots and were left. Before that, the same day: `E1`, the
-  `bench.sh` lock release, `tests/` and CI (green on GitHub, run
-  `32121837232`; pin any new action at a Node-24 major).
+- **Last landed (all 2026-08-18, in order):** `E1` · bench lock release ·
+  `tests/` + CI (green on GitHub; pin any new action at a Node-24 major) ·
+  `E4` (thinking off, opt-in — `MAX_THINKING_TOKENS`, proven through Claude
+  Code 2.1.234) · `A7` (wired ceiling labelled ARITHMETIC; doctor quotes the
+  server-measured 28.1 GB) · `B3` (`IDENTICAL` = observed on this run) ·
+  `B5` (`RELEASE.md`) · `B4` (`bench.sh` ends as one row; `bench/` one file
+  per Mac). Details and numbers: `CHANGELOG.md`; status per item: `AUDIT.md`.
+  Two things a later session must not undo: the `docs/07` renumbering (a new
+  §7; 7–13 → 8–14, cross-refs updated everywhere but `AUDIT.md`'s
+  audit-time citations) and the six-line `claude-local.sh` banner.
 - **Roadmap position:** Phase 0.5 (the audit backlog) is complete, 7 of 7.
   Phase 0 (credibility gaps, "before publishing") is 1 of 5 — the four left
   need hardware this machine cannot give while in use (the 27B loaded, a
