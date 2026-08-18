@@ -13,10 +13,13 @@
 # MATCH. Guessing ahead changes how fast tokens come out, never which tokens
 # come out. A mismatch means something is wrong.
 #
-# The peak is measured under the same context size, KV format, prefill chunk
-# and vision switch that serve.sh starts the server with (LOAD_SHAPE_ARGS in
-# env.sh), so it is a number the memory guard can be checked against, and the
-# result section puts the two side by side.
+# The peak is measured under the same context size, KV format and vision
+# switch that serve.sh starts the server with (LOAD_SHAPE_ARGS in env.sh) —
+# and the same prefill chunk when PREFILL_CHUNK pins one; unpinned, this
+# one-shot load reads at the server's ceiling while the server sizes the chunk
+# down for itself, and the output says so. Either way it is a number the memory
+# guard can be checked against, and the result section puts the two side by
+# side.
 #
 # THIS LOADS THE MODEL TWICE. Stop the server first.
 
@@ -41,9 +44,13 @@ WHAT IT DOES
   it used — and a short fingerprint of each answer so you can see they are the
   same text. Loading the model off the disk is in none of the three figures.
 
-  It loads the model with the same context size, KV format, prefill chunk and
-  vision setting ./bin/serve.sh uses, so the peak memory it prints is one the
-  memory guard's arithmetic can be checked against. The last lines do that.
+  It loads the model with the same context size, KV format and vision setting
+  ./bin/serve.sh uses, so the peak memory it prints is one the memory guard's
+  arithmetic can be checked against. The last lines do that. One flag differs
+  unless you pin it: the server sizes its own prefill chunk when it starts
+  (and prints it in its log); a one-shot load like this one reads at the
+  ceiling instead, so its peak is an upper bound on the server's. The output
+  names the PREFILL_CHUNK= that reproduces the server's shape.
 
 WHAT IT COSTS
   Memory: about 19.1 GB, twice, one after the other. This script loads the
@@ -91,7 +98,9 @@ WHAT YOU SHOULD SEE AT THE END
     prompt length next to it.
   - PEAK MEMORY is mlx-serve's own accounting of its Metal buffers. It is a
     lower bound on what the process takes: measured on the test machine, the
-    whole process was about 0.5 GB above the printed peak.
+    whole process was about 0.5 GB above the printed peak. Unpinned, it is
+    also read at the largest prefill chunk (measured on the 9B at 16,408
+    tokens: 9.52 GB, against 5.63 GB pinned to the 512 the server chose).
   - The publisher's figures for the 27B are 6.81 seconds against 10.15 seconds
     with the same answer both times. Those are the model publisher's figures.
     They have NOT been reproduced on the test machine, and no tokens-per-second
@@ -188,6 +197,17 @@ trap 'rm -rf "$TMP"' EXIT
 # LOAD_SHAPE_ARGS is the same context/KV/prefill/vision set serve.sh passes, so
 # the peak here is one reached under the guard's own settings. Anything after
 # it is this run's own switch (spec-off passes --no-mtp --no-pld).
+#
+# One flag in that set is honest only when pinned. With PREFILL_CHUNK empty
+# (the default), serve.sh lets the server size the prefill chunk itself, and
+# in serve mode it does — from the memory free at load, --ctx-size and
+# --max-resident-mem, printing `Prefill chunk: N tokens (memory-sized down
+# from 8192; ...)` in its log. In this one-shot mode it does not: it reads at
+# the 8192-token ceiling and ignores --max-resident-mem (MEASURED on the 9B:
+# the same 9.52 GB peak with and without that flag, against 5.63 GB pinned to
+# the 512 the server chose one run).
+# So an unpinned peak here is an UPPER BOUND on the server's; the load line
+# says so and names the pin that reproduces the server's shape.
 
 # stat_tokens <raw> <Prompt|Generation> — the N in "<label>: N tokens, R tokens-per-sec".
 # stat_tps    <raw> <Prompt|Generation> — the R. Both print nothing when the line is missing.
@@ -233,6 +253,26 @@ else
 fi
 echo "tokens: $TOKENS, temp 0.0 (greedy — required for an exact-match comparison)"
 echo "load:   $LOAD_SHAPE_ARGS   (the same as serve.sh)"
+if [ -z "$PREFILL_CHUNK" ]; then
+  # The chunk the server chose in its LAST run, from its own log. Scoped past
+  # the last "Logging to" banner: the log spans restarts and has no timestamps.
+  # Empty when the server has never run unpinned (a pinned run prints no line).
+  srv_chunk="$( { [ -r "$LOG_FILE" ] && awk '
+      /^Logging to /   { n = "" }
+      /^Prefill chunk: [0-9]+ tokens/ { n = $3 }
+      END { print n }' "$LOG_FILE"; } || true )"
+  echo "chunk:  not pinned. A one-shot load reads at the server's 8192-token ceiling;"
+  echo "        the server itself sizes the chunk down to what is free, so the peak"
+  if [ -n "$srv_chunk" ]; then
+    echo "        below is an upper bound on its. Its last run chose ${srv_chunk} (from its log);"
+    echo "        PREFILL_CHUNK=${srv_chunk} ./bin/bench.sh measures that shape."
+  else
+    echo "        below is an upper bound on its. Its log has no 'Prefill chunk:' line from"
+    echo "        its last run (not started yet, or started pinned): start ./bin/serve.sh"
+    echo "        unpinned once, read that line in $LOG_FILE,"
+    echo "        then PREFILL_CHUNK=<that number> ./bin/bench.sh measures that shape."
+  fi
+fi
 echo "This loads the model twice. Expect a wait with no output while it reads the disk."
 echo "The figures per run are the ones mlx-serve prints itself; the load is not in them."
 echo
@@ -293,7 +333,8 @@ peak_on="$(cat "$TMP/spec-on.peak")"
 peak_off="$(cat "$TMP/spec-off.peak")"
 ntok="$(stat_tokens "$TMP/spec-on.raw" Generation || true)"
 awk -v on="$peak_on" -v off="$peak_off" -v w="$HW_WEIGHTS_GB" -v kv="${HW_KV_GB:-0}" \
-    -v ctx="$CTX_SIZE" -v minfree="$MIN_FREE_GB" -v used="$(( ptok + ${ntok:-0} ))" 'BEGIN {
+    -v ctx="$CTX_SIZE" -v minfree="$MIN_FREE_GB" -v used="$(( ptok + ${ntok:-0} ))" \
+    -v chunk="$PREFILL_CHUNK" 'BEGIN {
   peak = (on > off) ? on : off
   if (peak <= 0) { print "  peak       not reported: mlx-serve did not print a Peak memory line"; exit }
   kv_used = (ctx > 0) ? kv * used / ctx : 0
@@ -305,6 +346,9 @@ awk -v on="$peak_on" -v off="$peak_off" -v w="$HW_WEIGHTS_GB" -v kv="${HW_KV_GB:
   printf "  gap        %+.2f GB — peak minus weights minus the conversation actually used: the\n", peak - w - kv_used
   printf "             working set the arithmetic does not line-item. It grows with the prompt;\n"
   printf "             a longer PROMPT_FILE= is how to see by how much.\n"
+  if (chunk == "")
+    printf "             Read at the 8192-token ceiling chunk (see the chunk line above): an\n" \
+           "             upper bound on the server, which reads in smaller pieces.\n"
 }'
 echo
 echo "This measured YOUR Mac, this model, this prompt and ${TOKENS} tokens. It is not a"

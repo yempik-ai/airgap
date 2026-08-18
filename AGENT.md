@@ -14,15 +14,14 @@ against the installed binaries, and what has already been tried and found false.
 not a record — [`AUDIT.md`](AUDIT.md) holds the status of every item, and if the
 two ever disagree, `AUDIT.md` is right.*
 
-- **Last landed:** `D3` (`doctor.sh` sends one forced-by-the-question tool
-  call twice, plain and streamed, thinking on, and reads the answer back —
-  two rows, `tool call` and `streamed call`, each with a named failure shape;
-  `claude-local.sh` now sets `CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK=1` so
-  a broken stream fails where the fault is), 2026-08-17. Running it showed
-  `tool_choice` is ignored by `mlx-serve 26.8.8` — see the facts below.
-- **Next:** `E1`, which has evidence behind it (`PREFILL_CHUNK` 4096 → 1024
-  cut the working set 2.6 → 1.1 GB at a 24% prefill cost). The ranked list is
-  at the top of `AUDIT.md`.
+- **Last landed:** `E1` (`PREFILL_CHUNK` defaults to empty and the flag is
+  passed only when set; the server sizes the chunk itself — 512 or 1024 on
+  this machine for the 9B by what was free at load, against the 4096 airgap
+  pinned — and `bench.sh` says plainly that its one-shot load reads at the
+  8192 ceiling instead), 2026-08-18. Running it showed one-shot mode does not
+  memory-size — see the facts below.
+- **Next:** the numbered list in `AUDIT.md` is empty. What is left is `E4`
+  (thinking off — opt-in or not at all) and §F, which is roadmap sequencing.
 - **Blocked on hardware, not on decisions:** anything needing the 27B loaded.
   It has never been served on this machine. `AUDIT.md` E5 and A5 both stop short
   of a measurement for this reason, and `ROADMAP.md` Phase 0 names it.
@@ -48,10 +47,11 @@ two ever disagree, `AUDIT.md` is right.*
   export list. Missing `ENV_KEYS` means the setting works in `config.env` but
   not from the command line. Settings only `bench.sh` reads (`TOKENS`,
   `PROMPT`, `PROMPT_FILE`) are the one exception: on `ENV_KEYS`, defaulted in
-  `bench.sh`, not exported. `LOAD_SHAPE_ARGS` is also here — the four flags
-  that shape a load's memory footprint, passed by both `serve.sh` and
-  `bench.sh`; a memory-relevant flag belongs in that list, not in either
-  script.
+  `bench.sh`, not exported. `LOAD_SHAPE_ARGS` is also here — the flags
+  that shape a load's memory footprint (context size, KV format, vision
+  switch, and the prefill chunk only when `PREFILL_CHUNK` pins one), passed by
+  both `serve.sh` and `bench.sh`; a memory-relevant flag belongs in that list,
+  not in either script.
 - `bin/detect-hardware.sh` — the memory model. Takes a weight size and a context
   window, returns the budget the guards enforce.
 - `bin/serve.sh` — the only script that loads the model. Ends in `exec`, so
@@ -169,13 +169,48 @@ mlx-serve [35576]: 64-bit    Footprint: 5322 MB
 4940 MB  IOAccelerator (graphics)   214 MB  MALLOC_LARGE   144 MB  Owned physical footprint (unmapped) (graphics)
 ```
 
-**The prefill working set is chunk-bound and large.** MEASURED on the 9B,
-single samples, `bench.sh` with `PROMPT_FILE=docs/08-how-it-works.md`
-(16,377 tokens): peak 7.52 GB, i.e. **+2.56 GB** over weights + KV-used at
-`PREFILL_CHUNK=4096`; **+1.11 GB** at `PREFILL_CHUNK=1024`, prefill 374 →
-285 tok/s. Decode after that prompt: 15.6 tok/s, against 36.7 after a
-41-token one. Not measured on the 27B. This is the number `A3` was waiting
-for and the evidence `E1` needed.
+**The prefill working set is chunk-bound and large; the rate is not.**
+MEASURED on the 9B, single samples, `bench.sh` with
+`PROMPT_FILE=docs/08-how-it-works.md` (16,377 tokens on 2026-08-17, 16,408
+on 2026-08-18): peak 7.52 GB, i.e. **+2.56 GB** over weights + KV-used at
+`PREFILL_CHUNK=4096` (7.535 / +2.58 when re-run a day later); **+1.11 GB** at
+1024; **+0.72 GB** at 512 (peak 5.63); **+4.57 GB** at the 8192 one-shot
+ceiling (peak 9.52). Prefill rate: 374 then 309 at 4096, 285 at 1024, 430 at
+512, 594 at 8192 — it does not track the chunk and is not reproducible to
+better than ~20% here, so do not quote a "speed cost" for a smaller chunk from
+these. Decode after that prompt: 15.6 tok/s (7.7 on the noisier day), against
+36.7 after a 41-token one. Not measured on the 27B.
+
+**`mlx-serve` sizes the prefill chunk itself in serve mode — from the memory
+free at load, `--max-resident-mem` and `--ctx-size` — and not at all in
+one-shot mode.** Unpinned, the server prints `Prefill chunk: N tokens
+(memory-sized down from 8192; --prefill-chunk overrides)` after `Model ready`;
+pinned, it prints nothing about the chunk. Probed on the 9B (serve mode, argv
+checked with `ps -o args=`, the `[preflight] … available` line as the free
+figure): `--max-resident-mem 6GB` at 14.9 GB free → **512**, the same at
+18.9 and 19.5 GB free → **1024**; `12GB` at 19.1 free → 1024; `24GB` at 20.1 free →
+2048; flag absent (engine default 22.5 GB) at 18.9 free → 2048 — all at
+`--ctx-size 65536`; `6GB` at `--ctx-size 8192`, 19.9 free → 2048. So all
+three inputs move it and the exact rule is not known; do not write one down.
+Under airgap's own settings on this machine (9B, `MAX_RESIDENT_MEM=6GB`,
+`CTX_SIZE=65536`) it has been 512 and 1024. `mlx-serve --prompt` (what
+`bench.sh` uses) prints no such line, prints no `[registry]` line, and reaches
+the same 9.52 GB peak with and without `--max-resident-mem 6GB` on the
+16,408-token prompt — i.e. it reads at the 8192 ceiling. So a `bench.sh` peak
+with `PREFILL_CHUNK` empty is an upper bound on the server's, which is why
+`bench.sh` prints a `chunk:` line naming the pin that reproduces the server's
+last shape. Since `E1` (2026-08-18) airgap passes `--prefill-chunk` only when
+`PREFILL_CHUNK` is set.
+
+```
+$ ./bin/serve.sh                      # unpinned; then in ~/.mlx-serve/logs/mlx-serve-11234.log:
+[registry] max_resident_models=1, max_resident_mem=6.0 GB
+[preflight] weights ~4.69 GB, available 14.94 GB
+Prefill chunk: 512 tokens (memory-sized down from 8192; --prefill-chunk overrides)
+$ ./bin/serve.sh                      # same settings, more free memory
+[preflight] weights ~4.69 GB, available 19.51 GB
+Prefill chunk: 1024 tokens (memory-sized down from 8192; --prefill-chunk overrides)
+```
 
 **`--api-key` gates `/metrics` and `/v1/models`, but not `/health` — and it
 exempts loopback entirely.** The server's own banner says so:
@@ -307,7 +342,7 @@ That is `E4` in `AUDIT.md`.
 chunk by *model variant, prompt length and multi-GPU topology*, never by RAM.
 And `mlx-serve` already memory-sizes the chunk itself, printing
 `Prefill chunk: N tokens (memory-sized down from M; --prefill-chunk overrides)`.
-The correct change is to stop overriding it — see `E1`.
+The correct change was to stop overriding it — `E1`, shipped 2026-08-18.
 
 **ds4 is not a viable runtime for airgap's median user.** It compiles in exactly
 three model shapes (DeepSeek V4 Flash, DeepSeek V4 PRO, GLM 5.2), all 100B+ MoE,

@@ -66,9 +66,10 @@ macOS 26.5.2:
 | Checkpoint composition, 5-bit 27B | 2,207 tensors; 504 quantized matrices; 333 vision; 29 MTP |
 | Decode speed of the 9B (`keXjos/Qwen3.8-9B-mlx-4Bit`), 60 greedy tokens, `bin/bench.sh`, mlx-serve's own figure | 57 tokens/s |
 | `bin/bench.sh` exact-match check on the 9B, speed features on vs off | identical output |
-| `bin/bench.sh` on the 9B, `mlx-serve 26.8.8`, single samples: prefill rate | 201 tokens/s at a 41-token prompt; 374 tokens/s at 16,377 tokens; 285 tokens/s at 16,377 tokens with `PREFILL_CHUNK=1024` |
+| `bin/bench.sh` on the 9B, `mlx-serve 26.8.8`, single samples: prefill rate | 201 tokens/s at a 41-token prompt; 374 tokens/s at 16,377 tokens with `PREFILL_CHUNK=4096` (309 a day later at 16,408); 285 tokens/s at 16,377 tokens with `PREFILL_CHUNK=1024`; 430 at 16,408 with `PREFILL_CHUNK=512`; 594 unpinned (the 8192 one-shot ceiling). The server itself, unpinned at the 512 it chose: 483 tokens/s at 16,416 tokens |
 | `bin/bench.sh` on the 9B: decode after a long prompt | 36.7 tokens/s after 41 prompt tokens, 15.6 after 16,377 |
-| `bin/bench.sh` on the 9B: peak memory (mlx-serve's own Metal-buffer figure) | 4.78 GB at 41 prompt tokens, 7.52 GB at 16,377 — 2.6 GB above weights + KV at `PREFILL_CHUNK=4096`, 1.1 GB above at `PREFILL_CHUNK=1024`. `footprint(1)` on the process showed ~0.5 GB more than the printed peak |
+| `bin/bench.sh` on the 9B: peak memory (mlx-serve's own Metal-buffer figure) | 4.78 GB at 41 prompt tokens, 7.52 GB at 16,377 — 2.6 GB above weights + KV at `PREFILL_CHUNK=4096`, 1.1 GB above at `PREFILL_CHUNK=1024`, 0.7 GB above (5.63 GB) at `PREFILL_CHUNK=512`, 4.6 GB above (9.52 GB) unpinned at the 8192 one-shot ceiling. `footprint(1)` on the process showed ~0.5 GB more than the printed peak |
+| `bin/serve.sh` on the 9B, unpinned: the prefill chunk the server sizes for itself | 512 with 14.9 GB free at load and 1024 with 19.5 GB, both under `MAX_RESIDENT_MEM=6GB`, `CTX_SIZE=65536` (its own log line); 1024 at 12 GB, 2048 at 24 GB with ~19–20 GB free. One-shot mode (`bench.sh`) does not size it |
 
 **PUBLISHER-REPORTED**, not reproduced here: MTP speculative decoding on the 27B
 took 6.81 s against 10.15 s with the head disabled, producing an identical output

@@ -274,9 +274,10 @@ args=(
   --serve
   --host "$HOST"
   --port "$PORT"
-  # Context size, KV format, prefill chunk and the vision switch come from one
-  # list in env.sh that bench.sh passes too, so the peak it measures is reached
-  # under these same settings. Split on spaces on purpose; see env.sh.
+  # Context size, KV format, prefill chunk (only when PREFILL_CHUNK pins it)
+  # and the vision switch come from one list in env.sh that bench.sh passes
+  # too, so the peak it measures is reached under these same settings. Split on
+  # spaces on purpose; see env.sh.
   # shellcheck disable=SC2206
   $LOAD_SHAPE_ARGS
   --prefix-cache-mem "$PREFIX_CACHE_MEM"

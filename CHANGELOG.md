@@ -64,6 +64,19 @@ First public release.
   `bin/claude-local.sh` now sets `CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK=1`
   so Claude Code cannot paper over a broken stream by retrying non-streamed.
   Closes `AUDIT.md` D3.
+- **The prefill chunk is the server's to size.** `PREFILL_CHUNK` now defaults
+  to empty and `--prefill-chunk` is passed only when it is set, by `serve.sh`
+  and `bench.sh` alike (one list, `LOAD_SHAPE_ARGS`). The server sizes the
+  chunk when it starts — from the memory free at that moment, the context size
+  and the resident cap — and prints what it chose; airgap's pinned 4096 was a
+  second, worse-informed source of truth. MEASURED on the test machine with
+  the 9B: the server picks 512 or 1024 by what is free, and the working set
+  while reading a 16,408-token prompt is 0.7–1.1 GB there against 2.6 GB at 4096, with
+  no read-rate cost the samples could show (single samples; the rate did not
+  track the chunk). Found by running it: one-shot mode does not memory-size,
+  so an unpinned `bench.sh` reads at the 8192 ceiling (peak 9.52 GB, +4.57 GB)
+  and now prints a `chunk:` line saying so, quoting the figure the server chose
+  in its last run and the pin that reproduces it. Closes `AUDIT.md` E1.
 - `bin/serve.sh` — refuses, rather than warns, on a non-Apple-Silicon Mac, on a
   build that does not fit under the GPU wired ceiling, on a non-loopback host, on
   `--host`, `--lan-share`, `--lan-discover`, `--skip-mem-preflight`, `--no-mtp`

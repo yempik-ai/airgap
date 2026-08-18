@@ -18,7 +18,7 @@ environment facts established along the way. Read that file first — it exists 
 these findings are not researched twice.
 
 Items are referenced by id from [`ROADMAP.md`](ROADMAP.md). All are **OPEN**
-except `A1`, `A5`, `C1`, `B1` and `D3`, marked **DONE** below.
+except `A1`, `A5`, `C1`, `B1`, `D3` and `E1`, marked **DONE** below.
 
 Evidence is cited as `file:line` at the time of the audit. Line numbers drift;
 the greps are given where the reader will need to re-locate something.
@@ -39,11 +39,12 @@ marks *never measured*.
 | ✅ | `C1` read the cache evidence already being written — **DONE** | medium | high |
 | ✅ | `B1` make `bench.sh` keep prefill and peak memory — **DONE** | medium | high |
 | ✅ | `D3` doctor probes a streamed tool call — **DONE** | medium | high |
-| 6 | `E1` stop overriding the engine's prefill sizing — next | small | medium |
+| ✅ | `E1` stop overriding the engine's prefill sizing — **DONE** | small | medium |
 
-`E4` (thinking off) carries the largest measured speed-up in this audit but is
-a behavioural change with an unmeasured quality cost; it ships opt-in or not at
-all. Everything in §F is roadmap sequencing, not code.
+No numbered item is left. `E4` (thinking off) carries the largest measured
+speed-up in this audit but is a behavioural change with an unmeasured quality
+cost; it ships opt-in or not at all. Everything in §F is roadmap sequencing,
+not code.
 
 ---
 
@@ -146,6 +147,15 @@ and **+1.11 GB** at `PREFILL_CHUNK=1024`. On the 9B that sits inside a
 `MIN_FREE_GB` of 11 with room to spare; on the 27B, where `MIN_FREE_GB=22`
 rounds up from 21.6, a comparable working set is not covered. Not measured on
 the 27B — still the missing measurement.
+
+*Number, 2026-08-18 (`E1`, 9B, MEASURED, single samples):* with the pin gone
+the server sizes the chunk to **512 or 1024** on this machine, by what is
+free when it loads (14.9 GB → 512, 19.5 GB → 1024), and the working set is
+**+0.72 GB** at 512 and **+1.11 GB** at 1024 — about the "~1 GB" row
+`docs/04` narrates. So on the 9B the prose row is about right, and it is
+right because the server sizes the chunk to the memory it actually has, not
+because the formula models it. The formula still has no prefill term, and the
+27B's number is still missing; both remain this item.
 
 ### A4 — `CTX_SIZE` is validated only in `doctor.sh`
 
@@ -640,7 +650,66 @@ question the user is asking.
 
 ## E. Tuning surface the stack owns and does not use
 
-### E1 — `PREFILL_CHUNK` overrides the engine's own memory sizing
+### E1 — `PREFILL_CHUNK` overrides the engine's own memory sizing — **DONE**
+
+> **Shipped 2026-08-18.** Subtraction, as prescribed: `PREFILL_CHUNK` defaults
+> to empty and `--prefill-chunk` is added to `LOAD_SHAPE_ARGS` in `env.sh` only
+> when it is set, so `serve.sh` and `bench.sh` both stop passing it. No
+> `HW_PREFILL_CHUNK`. `config.env.example`, `docs/04`, `docs/07` (§4 table,
+> §9 sample and measurements, §12 left-alone table, §13 defaults) and
+> `docs/09` updated; the `docs/04` "MIN_FREE_GB=22 comes from" gap is `A3` and
+> was left there.
+>
+> **The first action did not collapse it.** The banner had printed before on
+> this machine, but only for the 0.8B in ad hoc launches; for the 9B it never
+> had. Unpinned, `serve.sh` at `LOG_LEVEL=info` printed
+> `Prefill chunk: 512 tokens (memory-sized down from 8192; --prefill-chunk
+> overrides)` — eight times smaller than the 4096 airgap was pinning; a later
+> start under the same settings with more memory free chose 1024. Probing the
+> sizing (serve mode, 9B, `ps`-verified argv, free figure from the server's
+> own `[preflight]` line): `--max-resident-mem 6GB` → 512 at 14.9 GB free and
+> 1024 at 19.5 GB free; `12GB` → 1024 at 19.1; `24GB` → 2048 at 20.1; no flag
+> (engine default 22.5 GB) → 2048 at 18.9 — all at `--ctx-size 65536`; `6GB`
+> at `--ctx-size 8192` → 2048 at 19.9. So the engine sizes the chunk from the
+> memory free at load, the resident budget **and** the context size — the last
+> two being settings airgap already derives from the Mac, the first being what
+> only the engine can see at that moment — which is exactly the
+> "better-informed source of truth" the item claimed. The rule itself is not
+> known and is not written down anywhere in this repository. When the flag is
+> pinned the server prints **no** chunk line at all, which is why the figure
+> in use was invisible until now.
+>
+> **One thing the analysis did not predict, found by running it: one-shot mode
+> does not memory-size.** `mlx-serve --prompt` (what `bench.sh` uses) prints no
+> banner, ignores `--max-resident-mem` (no `[registry]` line; the same 9.52 GB
+> peak with and without it) and reads at the 8192 ceiling. So after `E1`,
+> `bench.sh`'s peak is an *upper bound* on the server's shape, not "the same as
+> serve.sh". `bench.sh` now says so when `PREFILL_CHUNK` is empty — a `chunk:`
+> line quoting the figure the server chose in its last run (from its log,
+> scoped past the last `Logging to` banner like `C1`'s reader) and the exact
+> pin that reproduces it — and marks the `gap` line as the ceiling's.
+>
+> Numbers, 9B, `docs/08` as prompt (16,408 tokens), `bench.sh` single samples:
+>
+> | prefill chunk | prefill | peak | working set |
+> |:--|--:|--:|--:|
+> | 8192 (unpinned one-shot) | 594 tok/s | 9.52 GB | +4.57 GB |
+> | 4096 (the old pin, re-run) | 309 tok/s | 7.535 GB | +2.58 GB |
+> | 512 (the server's choice, pinned) | 430 tok/s | 5.63 GB | +0.72 GB |
+>
+> and the server itself, unpinned at 512, prefilled 16,416 tokens at 483 tok/s
+> (`[prefill:` in its log; serve mode prints no peak). Peak reproduces the
+> 2026-08-17 figure to the second decimal (7.52 → 7.535); prefill speed does
+> not (374 → 309), and speed did not track the chunk (594 at 8192, 309 at
+> 4096, 430 at 512, one sample each on a shared machine), so the "small speed
+> cost" claim was retired from `env.sh`, `config.env.example` and `docs/04`
+> rather than restated — the peak is the reproducible number, the rate is
+> not. On the 27B nothing is measured, and since free memory at load is an
+> input, nothing about its chunk is predicted here either.
+>
+> argv, `ps -o args=` on the running server, before → after: identical except
+> `--prefill-chunk 4096` removed. `PREFILL_CHUNK=1024 ./bin/serve.sh` puts the
+> pair back, and `PREFILL_CHUNK= ./bin/serve.sh` (empty) leaves it out.
 
 `bin/env.sh:251` hardcodes 4096 and `serve.sh:256` passes it always. But
 `mlx-serve` already sizes this from memory, printing

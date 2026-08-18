@@ -100,9 +100,13 @@ able to prove things it currently only asserts. Ordered as in `AUDIT.md`.
 - [ ] `D3` — doctor probes a *streamed* tool call. Today every check can pass
       on a build that cannot emit one, which is the capability Claude Code is
       entirely built on.
-- [ ] `E1` — stop overriding the engine's own prefill sizing. This one is
+- [x] `E1` — stop overriding the engine's own prefill sizing. This one is
       subtraction: `mlx-serve` already sizes the chunk from memory, and airgap's
       hardcoded 4096 is a second, worse-informed source of truth.
+      **Shipped 2026-08-18** — the pin is gone; the server picks 512–1024 for
+      the 9B on the test machine (from what is free at load) and the working
+      set while reading 16k tokens fell 2.6 → 0.7–1.1 GB (MEASURED, 9B).
+      `bench.sh`'s one-shot load does not get that sizing and now says so.
 
 Deliberately **not** in this list, and recorded in `AGENT.md` so it is not
 proposed again: a server-side reasoning budget. The flag exists, and it was

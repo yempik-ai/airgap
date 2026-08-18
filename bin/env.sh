@@ -258,8 +258,17 @@ unset _YOURS_MIN_FREE_GB _YOURS_MAX_RESIDENT_MEM _YOURS_PREFIX_CACHE_MEM
 : "${SERVE_TIMEOUT:=300}"
 
 # How much of your text the server reads at a time on the first pass. A smaller
-# number means a smaller temporary memory spike, at a small speed cost.
-: "${PREFILL_CHUNK:=4096}"
+# number means a smaller temporary memory spike (MEASURED on the 9B: 2.6 GB at
+# 4096, 1.1 GB at 1024, 0.7 GB at 512; the read rate did not track the chunk).
+# Empty, the default, means the server sizes it when it starts — from the
+# memory free at that moment, the context size and the resident cap — and
+# prints `Prefill chunk: N tokens (memory-sized down from 8192; ...)` in its
+# log: 512 or 1024 on the test machine with the 9B, by what was free. Set a
+# number to pin it instead; the server treats that as a ceiling and still caps
+# it lower when one layer's attention scores would not fit. Only serve mode
+# sizes it: bench.sh's one-shot load reads at the 8192 ceiling unless this is
+# set, and says so.
+: "${PREFILL_CHUNK:=}"
 
 # Refuse to start the server when less than this much memory is free. This turns
 # what would be a stalled Mac into a clear message. Set 0 to bypass (not advised).
@@ -318,13 +327,16 @@ unset _YOURS_MIN_FREE_GB _YOURS_MAX_RESIDENT_MEM _YOURS_PREFIX_CACHE_MEM
 BASE_URL="http://${HOST}:${PORT}"
 
 # The flags that decide how much memory a load takes beyond the weights: the
-# context size, the KV format, the prefill chunk, and whether the vision tower
-# is loaded. serve.sh passes them to the server and bench.sh passes the very
-# same ones to its one-shot load, so the peak memory bench.sh reports is a peak
-# reached under the settings the memory guard is sized for. One list, here, so
-# the two cannot drift apart. Split on spaces where it is used, like EXTRA_ARGS;
-# every value in it is a single word.
-LOAD_SHAPE_ARGS="--ctx-size $CTX_SIZE --kv-quant $KV_QUANT --prefill-chunk $PREFILL_CHUNK"
+# context size, the KV format, the prefill chunk (only when pinned), and whether
+# the vision tower is loaded. serve.sh passes them to the server and bench.sh
+# passes the very same ones to its one-shot load, so the peak memory bench.sh
+# reports is a peak reached under the settings the memory guard is sized for.
+# One list, here, so the two cannot drift apart. Split on spaces where it is
+# used, like EXTRA_ARGS; every value in it is a single word.
+LOAD_SHAPE_ARGS="--ctx-size $CTX_SIZE --kv-quant $KV_QUANT"
+if [ -n "$PREFILL_CHUNK" ]; then
+  LOAD_SHAPE_ARGS="$LOAD_SHAPE_ARGS --prefill-chunk $PREFILL_CHUNK"
+fi
 if [ "$NO_VISION" = "1" ]; then
   LOAD_SHAPE_ARGS="$LOAD_SHAPE_ARGS --no-vision"
 fi

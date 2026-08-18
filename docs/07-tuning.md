@@ -250,7 +250,7 @@ Every one of these can go in `config.env` or in front of a command.
 | `IDLE_EVICT_SECS` | 900 | Seconds of silence before the memory goes back to macOS | Section 7. |
 | `SERVE_TIMEOUT` | 300 | Seconds a question may produce **nothing** before it is given up on | A cold first turn is being cut off. Not a length limit. |
 | `LOCK_DIR` | `~/.airgap/model.lock` | Where the lock that stops two model loads lives | Almost never. Empty switches the lock off. |
-| `PREFILL_CHUNK` | 4096 | How much text is read at a time on the first pass | Your Mac spikes while reading a long file. |
+| `PREFILL_CHUNK` | empty — the server sizes it | How much text is read at a time on the first pass. Empty lets the server pick from the memory free when it loads (512 or 1024 on the test machine with the 9B, printed in its log). | Almost never. Pin it to reproduce a shape in `bench.sh`. Section 12. |
 | `NO_VISION` | 1 | Skips loading the image-reading part | Only to feed the model pictures. |
 | `LEAN_MCP` | 1 | Starts Claude Code with optional tool servers off | Section 6. |
 | `MODEL_QUANT` | worked out from your memory | Which OrcaRouter build: `4bit`, `5bit`, `6bit`, `8bit` | Section 8. |
@@ -468,7 +468,11 @@ memory   21.0 GB available (need 11 GB) — ok
 model:  Qwen3.8-9B-mlx-4Bit (~4.7 GB)
 prompt: Explain why speculative decoding produces output identical to standard...
 tokens: 200, temp 0.0 (greedy — required for an exact-match comparison)
-load:   --ctx-size 65536 --kv-quant turbo4 --prefill-chunk 4096 --no-vision   (the same as serve.sh)
+load:   --ctx-size 65536 --kv-quant turbo4 --no-vision   (the same as serve.sh)
+chunk:  not pinned. A one-shot load reads at the server's 8192-token ceiling;
+        the server itself sizes the chunk down to what is free, so the peak
+        below is an upper bound on its. Its last run chose 1024 (from its log);
+        PREFILL_CHUNK=1024 ./bin/bench.sh measures that shape.
 This loads the model twice. Expect a wait with no output while it reads the disk.
 The figures per run are the ones mlx-serve prints itself; the load is not in them.
 
@@ -524,25 +528,40 @@ PROMPT_FILE=docs/08-how-it-works.md ./bin/bench.sh
 ```
 
 MEASURED on the test machine with the 9B, `mlx-serve 26.8.8`, single samples,
-same settings as above:
+same settings as above. The prefill chunk is the one flag a one-shot load does
+not share with the server (the `chunk:` line above), so it is named on every
+long-prompt row:
 
-| prompt | prefill | decode after it | peak memory | working set above weights + KV |
-|---:|---:|---:|---:|---:|
-| 41 tokens | 201 tokens/s | 36.7 tokens/s | 4.78 GB | +0.08 GB |
-| 16,377 tokens (`docs/08`) | 374 tokens/s | 15.6 tokens/s | 7.52 GB | +2.56 GB |
-| 16,377 tokens, `PREFILL_CHUNK=1024` | 285 tokens/s | 15.6 tokens/s | 6.06 GB | +1.11 GB |
+| prompt | prefill chunk | prefill | decode after it | peak memory | working set above weights + KV |
+|---:|---:|---:|---:|---:|---:|
+| 41 tokens | 4096 | 201 tokens/s | 36.7 tokens/s | 4.78 GB | +0.08 GB |
+| 16,377 tokens (`docs/08`, 2026-08-17) | 4096, the old default | 374 tokens/s | 15.6 tokens/s | 7.52 GB | +2.56 GB |
+| 16,377 tokens (2026-08-17) | 1024 | 285 tokens/s | 15.6 tokens/s | 6.06 GB | +1.11 GB |
+| 16,408 tokens (`docs/08`, 2026-08-18) | 4096, pinned again | 309 tokens/s | 7.7 tokens/s | 7.535 GB | +2.58 GB |
+| 16,408 tokens (2026-08-18) | not pinned: 8192, the one-shot ceiling | 594 tokens/s | 24.6 tokens/s | 9.52 GB | +4.57 GB |
+| 16,408 tokens (2026-08-18) | 512, what the server chose that run | 430 tokens/s | 20.1 tokens/s | 5.63 GB | +0.72 GB |
+| 16,416 tokens, **the server itself**, unpinned (2026-08-18) | 512, its own choice with 14.9 GB free at load | 483 tokens/s (`[prefill:` in its log) | — | not printed in serve mode | — |
 
-Three things that table says, each on the 9B only. The prefill rate at a real
+Four things that table says, each on the 9B only. The prefill rate at a real
 prompt is roughly double the short-prompt figure, and depth costs decode: the
 same model wrote at 36.7 tokens/s after a 41-token prompt and 15.6 after a
-16,377-token one. The peak grows far more than the conversation does — the
-working set while reading a long prompt was 2.6 GB at `PREFILL_CHUNK=4096`, and
-`PREFILL_CHUNK=1024` cut it to 1.1 GB at a 24% prefill cost, which is what that
-setting is for ([§4](#4-the-settings-that-matter-and-what-each-one-is-for)). And mlx-serve's `Peak memory` is its
-own accounting of its Metal buffers: `footprint(1)` on the same process showed
-about 0.5 GB more, so treat the printed peak as a lower bound. None of this
-has been measured on the 27B, whose working set is likely larger — see
-`AUDIT.md` A3.
+16,377-token one. The peak grows far more than the conversation does, and it
+is the chunk that sets it: the working set while reading a long prompt was
+4.6 GB at the 8192 ceiling, 2.6 GB at 4096, 1.1 GB at 1024 and 0.7 GB at 512
+— and 512 or 1024 is what the server sizes itself down to on this machine,
+by what is free when it loads (14.9 GB free → 512, 19.5 GB → 1024, same
+settings) — the peak reproduces to
+the second decimal across days, the speed figures do not (374 then 309 at
+4096, single samples on a shared machine, and `docs/08` grew 31 tokens in
+between), and speed did not track the chunk (594 at 8192, 309 at 4096, 430 at
+512), so the 24% cost once quoted for 1024 against 4096 was one pair of single
+samples and these do not repeat it. What the numbers do support is that the
+peak is chunk-bound and reproducible, and the rate is noisy. That is why
+`PREFILL_CHUNK` is left empty and the server sizes it
+([§12](#never)). And mlx-serve's `Peak memory` is its own accounting of its
+Metal buffers: `footprint(1)` on the same process showed about 0.5 GB more, so
+treat the printed peak as a lower bound. None of this has been measured on the
+27B, whose working set is likely larger — see `AUDIT.md` A3.
 
 **If you do not see that.**
 
@@ -640,6 +659,7 @@ the two most-recommended settings on the internet are both wrong here.
 | `sudo sysctl iogpu.wired_limit_mb=<large number>` | The single genuinely dangerous change in this area. Memory reserved this way **cannot be swapped out**, so raising the ceiling lets the model squeeze macOS itself, and a Mac that runs out of that memory stalls until you hold the power button. Apple's automatic value is the right one. [04 — memory safety](04-memory-safety.md#wired-limit) has the full argument. |
 | `--skip-mem-preflight` | Turns a clear refusal into a stalled Mac. |
 | Raising `MAX_RESIDENT_MODELS` | Loading two copies of a 19 GB model is how you fill a Mac in one step. |
+| `--prefill-chunk` (`PREFILL_CHUNK`) | The server already sizes this when it starts — from the memory free at that moment, the context size and the resident cap — and prints what it chose: `Prefill chunk: N tokens (memory-sized down from 8192; --prefill-chunk overrides)` in its log. Until 2026-08-18 this repository pinned 4096, four to eight times the 512–1024 the server picks for itself on the test machine, and that cost 2.6 GB of working set against 0.7–1.1 GB for no speed the samples could show (MEASURED, 9B, [§9](#bench)). A pinned value is a ceiling the server still caps lower; an empty one is the server's own number, and the only reason to set it is to give `bench.sh` the server's shape. |
 
 ---
 
@@ -682,7 +702,7 @@ carries the same list with a longer explanation each.
 | `IDLE_EVICT_SECS` | `900` |
 | `SERVE_TIMEOUT` | `300` |
 | `LOCK_DIR` | `~/.airgap/model.lock` |
-| `PREFILL_CHUNK` | `4096` |
+| `PREFILL_CHUNK` | empty (the server chose `512` and `1024` for the 9B, by what was free at load) |
 | `KV_QUANT` | `turbo4` |
 | `NO_VISION` | `1` |
 | `MAX_RESIDENT_MODELS` | `1` |

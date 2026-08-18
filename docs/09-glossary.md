@@ -231,9 +231,12 @@ contains 2207 [tensors](#tensor) spread across 5
 Reading a long incoming message in slices rather than all at once, so the
 temporary memory spike stays small.
 
-**Why you care here.** This repository sets the slice size to 4096
-[tokens](#token). Reading a 20,000-token opening message in one piece produces a
-memory spike large enough to matter on a 36 GB Mac. See [prefill](#prefill).
+**Why you care here.** The server sizes the slice from the memory free when it
+loads and prints the figure in its log (`Prefill chunk: N tokens (memory-sized
+down from 8192; …)`); this repository leaves that alone. `PREFILL_CHUNK=` pins
+it. Reading a 20,000-token opening message in one piece would produce a memory
+spike large enough to matter on a 36 GB Mac (MEASURED on the 9B: 2.6 GB at a
+4096-token slice, 1.1 GB at 1024). See [prefill](#prefill).
 
 ### Claude Code
 

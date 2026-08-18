@@ -195,7 +195,7 @@ put together is smaller than the rounding error on a browser.
 | Conversation notebook at 65,536 tokens | 1.0 GB | Calculated exactly, see the deep dive above |
 | Fixed summaries for the other 48 layers | ~0.2 GB | Does not grow with the conversation |
 | Prefix cache ceiling | 1.5 GB | Set by `PREFIX_CACHE_MEM=1536MB` in `bin/env.sh` |
-| Working space while reading a prompt | ~1 GB | Reduced by `PREFILL_CHUNK=4096` |
+| Working space while reading a prompt | ~1 GB | The server sizes its read chunk from what is free when it loads; MEASURED 0.7–1.1 GB on the 9B at the 512–1024 it chose |
 | **Peak total** | **~22.8 GB** | Added up from the rows above |
 
 This is where `MIN_FREE_GB=22` comes from, and it is arithmetic rather than a
@@ -211,15 +211,22 @@ The two remaining rows above — the fixed summaries and the working space while
 reading a prompt — are transient and are covered by the rounding. The server
 refuses to start below this number.
 
-**The "~1 GB" working-space row now has a measurement against it, and it is
-larger.** `./bin/bench.sh` puts mlx-serve's own peak next to this arithmetic
-([07 §9](07-tuning.md#bench)). MEASURED on the test machine with the **9B**,
-single samples: reading a 16,377-token prompt at `PREFILL_CHUNK=4096` took
-**2.6 GB** above weights + conversation; `PREFILL_CHUNK=1024` cut that to
-**1.1 GB** at a 24% prefill cost. So on the 9B the row is right only at the
-smaller chunk. Not measured on the 27B, whose working set is likely larger,
-and where 2.6 GB would be more than the rounding in `MIN_FREE_GB=22` covers.
-That is `AUDIT.md` A3, and it is open.
+**The "~1 GB" working-space row has measurements against it, and which one
+applies depends on who sizes the read chunk.** `./bin/bench.sh` puts
+mlx-serve's own peak next to this arithmetic ([07 §9](07-tuning.md#bench)).
+MEASURED on the test machine with the **9B**, single samples, a 16,377–16,408
+token prompt: **2.6 GB** above weights + conversation at a pinned
+`PREFILL_CHUNK=4096` (what this repository passed until 2026-08-18), **1.1 GB**
+at 1024, **0.7 GB** at 512 — and 512 or 1024 is what the server picks for
+itself on this machine when nothing pins it, sizing the chunk from the memory
+free when it loads, the context size and the resident cap (14.9 GB free →
+512, 19.5 GB free → 1024, both under `MAX_RESIDENT_MEM=6GB`) and printing
+`Prefill chunk: N tokens (memory-sized down from 8192; --prefill-chunk
+overrides)` in its log. Prefill speed did not track the chunk in those samples
+(single samples; the table in 07 §9). So with the pin gone the row is about
+right on the 9B, and it is right *because* the server sizes the chunk to the
+memory it actually has. Not measured on the 27B, whose working set is likely
+larger. That is `AUDIT.md` A3, and it is open.
 
 **That figure is different on every Mac**, because the context window and the
 prefix cache are sized from your Mac's memory. To print yours, run from the repo
@@ -761,9 +768,14 @@ gone is taken over rather than obeyed, so a crash can never leave this Mac
 unable to start a server. Full entry:
 [06 — troubleshooting](06-troubleshooting.md#model-lock).
 
-**5. Smaller spikes while reading a long prompt.** `PREFILL_CHUNK=4096` processes
-your prompt in smaller pieces. It halves the temporary memory spike compared with
-the default, at a small cost in speed.
+**5. Smaller spikes while reading a long prompt — sized by the server, not by
+this repository.** The server reads a long prompt in pieces and picks the piece
+size when it starts, from the memory free at that moment, the context size and
+the resident cap, printing what it chose in its log. This repository used to
+pin that to 4096; on the test machine the server picks 512 or 1024 for itself,
+and the temporary spike while reading a 16,000-token prompt was 0.7–1.1 GB
+there against 2.6 GB pinned (MEASURED, 9B, [07 §9](07-tuning.md#bench)). `PREFILL_CHUNK=` still pins it, and the server still
+caps a pinned value lower when it would not fit.
 
 **6. A stop button.** `./bin/stop.sh` ends the server and reports how much memory
 came back. It is safe to run when nothing is running.
