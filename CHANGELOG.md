@@ -302,8 +302,8 @@ First public release.
   figure no harness reports honestly about itself. Two adapters, both verified
   end to end on the 9B (`Qwen3.8-9B-mlx-4Bit`, `mlx-serve 26.8.8`, M3 Max
   36 GB, 2026-08-18, `LEAN_MCP=1`): **Claude Code 2.1.234** — `AIRGAP OK`,
-  47.4 s cold, 4.1 s warm, 20,718 prompt tokens; **Codex CLI 0.147.0** —
-  `AIRGAP OK`, 21.3 s cold, 3.1 s warm, 9,336 prompt tokens, against 10,271
+  55.4 s cold, 4.8 s warm, 20,718 prompt tokens; **Codex CLI 0.147.0** —
+  `AIRGAP OK`, 29.8 s cold, 3.4 s warm, 9,336 prompt tokens, against 10,271
   with `LEAN_MCP=0`, so 935 per turn for its plugins (all MEASURED; the two
   harnesses' token figures are each that harness's own cost and are not
   comparable with each other). The Codex adapter wires `-c` overrides only —

@@ -183,12 +183,12 @@ the server (that stays `serve.sh`, one window, one job).
       the adapter and its dialect, and the answer cap moved to an `output` line
       of its own.
 - [x] **Claude Code, verified end to end.** **Shipped 2026-08-18** —
-      `./bin/run.sh --probe claude-code` → `AIRGAP OK`, 47.4 s on a first turn
-      and 4.1 s warm, 20,718 prompt tokens per turn at `LEAN_MCP=1` (MEASURED;
+      `./bin/run.sh --probe claude-code` → `AIRGAP OK`, 55.4 s on a first turn
+      and 4.8 s warm, 20,718 prompt tokens per turn at `LEAN_MCP=1` (MEASURED;
       Claude Code 2.1.234, mlx-serve 26.8.8, `Qwen3.8-9B-mlx-4Bit`, M3 Max
       36 GB).
 - [x] **Codex CLI, verified end to end.** **Shipped 2026-08-18** —
-      `./bin/run.sh --probe codex` → `AIRGAP OK`, 21.3 s cold and 3.1 s warm,
+      `./bin/run.sh --probe codex` → `AIRGAP OK`, 29.8 s cold and 3.4 s warm,
       9,336 prompt tokens per turn at `LEAN_MCP=1` against 10,271 at
       `LEAN_MCP=0`, i.e. 935 for its plugins (MEASURED; Codex CLI 0.147.0, same
       server, model and machine). One design assumption was falsified on

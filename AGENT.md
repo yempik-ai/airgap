@@ -620,7 +620,7 @@ one that does nothing.
 2026-08-18): **9,336 prompt tokens** with `LEAN_MCP=1` and **10,271** with
 `LEAN_MCP=0` — 935 tokens per turn for the plugins. Both figures reproduced to
 the token across two runs each and across the cmux shim and the Homebrew
-binary. Wall clock 21.3 s cold, 3.1 s warm. Not measured on the 27B. Claude
+binary. Wall clock 29.8 s cold, 3.4 s warm. Not measured on the 27B. Claude
 Code's 17,000-token figure is a different harness's number and is never reused
 for this one.
 

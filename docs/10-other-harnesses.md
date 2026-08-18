@@ -118,16 +118,19 @@ sends it exactly one question — `Reply with exactly: AIRGAP OK` — with nothi
 on its input, waits for the answer, and prints one line.
 
 ```
-probe  codex  AIRGAP OK  3.1 s  9,336 prompt tokens
+probe  codex  AIRGAP OK  3.4 s  9,336 prompt tokens
 ```
 
 Three things in that line, and it is worth knowing what each one is:
 
 - **`AIRGAP OK`** — the answer came back through your app, from the model on
   your Mac. Nothing else produces that phrase. The exit code is 0.
-- **`3.1 s`** — wall clock, MEASURED, this run only. The **first** turn after
-  the server has been idle is much slower, because the weights are read back
-  into memory first. That is the reload, not the app.
+- **`3.4 s`** — wall clock, MEASURED, this run only, to the fifth of a second
+  the probe polls at. The **first** turn is much slower: after an idle server
+  the weights are read back into memory, and either way the app's own
+  instructions — thousands of tokens, before you have typed anything — have to
+  be processed before the model can answer. That is the reload and the prefix,
+  not the app being slow.
 - **`9,336 prompt tokens`** — what the **server** counted for that one turn,
   every request the app made included, housekeeping ones as well. It is the
   fixed cost of one turn before you have typed a word: the app's own
@@ -181,12 +184,15 @@ macOS 26.5.2) on **2026-08-18**, with **Claude Code 2.1.234**, **mlx-serve
 `SERVE_TIMEOUT=300`, `LEAN_MCP=1`:
 
 ```
-probe  claude-code  AIRGAP OK  47.4 s  20,718 prompt tokens     (first turn, weights being reloaded)
-probe  claude-code  AIRGAP OK  4.1 s   20,718 prompt tokens     (a later turn, model already in memory)
+probe  claude-code  AIRGAP OK  55.4 s  20,718 prompt tokens     (first turn, weights being reloaded)
+probe  claude-code  AIRGAP OK  4.8 s   20,718 prompt tokens     (a later turn, model already in memory)
 ```
 
-The cold figure was 47.4 s and 47.6 s on two runs; the warm one 4.1 s and
-5.1 s. The token figure was identical on all five runs. Nothing here has been
+The cold figure was 55.4 s on the first turn after the server started, and
+59.1 s on a first Claude Code turn after Codex had been talking to the same
+server — the weights were in memory by then, but this harness's own
+20,718-token prefix still had to be processed. The warm figure was 4.8 s and
+3.7 s. The token figure was identical on all four runs. Nothing here has been
 measured on the 27B, and nothing here has been measured on another Mac.
 
 What the adapter does, in one list: every model slot Claude Code reads is
@@ -226,8 +232,8 @@ macOS 26.5.2) on **2026-08-18**, with **Codex CLI 0.147.0**, **mlx-serve
 `SERVE_TIMEOUT=300`, `LEAN_MCP=1`:
 
 ```
-probe  codex  AIRGAP OK  21.3 s  9,336 prompt tokens     (first turn, weights being reloaded)
-probe  codex  AIRGAP OK  3.1 s   9,336 prompt tokens     (a later turn, model already in memory)
+probe  codex  AIRGAP OK  29.8 s  9,336 prompt tokens     (first turn, weights being reloaded)
+probe  codex  AIRGAP OK  3.4 s   9,336 prompt tokens     (a later turn, model already in memory)
 ```
 
 What is worth knowing about Codex here, before you use it:
