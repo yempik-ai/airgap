@@ -44,9 +44,10 @@ HARNESS_ENDPOINT=/v1/responses
 # outside a git checkout adds it themselves; harness_usage says so.
 HARNESS_ONESHOT=(exec --skip-git-repo-check)
 
-# The provider this adapter invents and then selects. A name of its own so it
-# cannot collide with, or quietly inherit from, a provider in the person's own
-# config.toml.
+# The provider this adapter invents and then selects. A name of its own, chosen
+# to be unlikely in anybody's config.toml — but `-c` merges into the table, so a
+# provider you already declared under this name keeps any key this adapter does
+# not override. A collision is unlikely, not impossible.
 CODEX_PROVIDER_ID=airgap
 
 harness_usage() {

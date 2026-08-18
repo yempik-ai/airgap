@@ -485,7 +485,10 @@ fi
 # instructions are 20,909 tokens with LEAN_MCP=1 and 38,054 tokens with every
 # tool server loaded, so those schemas cost it about 17,000 tokens on EVERY
 # turn; the Codex CLI's plugins cost it 935 prompt tokens per turn (9,336
-# against 10,271, run.sh --probe on the 9B). Set LEAN_MCP=0 to load your normal
+# against 10,271, run.sh --probe on the 9B). How far it reaches is a fact about
+# each harness too: for Codex it reaches only the plugins, and the MCP servers
+# written in your own ~/.codex/config.toml stay on either way, because 0.147.0
+# has no command-line switch for those. Set LEAN_MCP=0 to load your normal
 # configuration instead.
 : "${LEAN_MCP:=1}"
 

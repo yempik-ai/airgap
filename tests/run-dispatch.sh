@@ -13,13 +13,21 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 failures=0
 
+# Extra settings for the NEXT run() call only, as name=value words. run() clears
+# it again, so every other case keeps the same fresh environment. Written the
+# ${a[@]+"${a[@]}"} way because bash 3.2, which macOS ships, treats an empty
+# array as unset under `set -u`.
+RUN_ENV=()
+
 # run <label> <expected exit code> <expected stdout+stderr regex> -- <run.sh arguments…>
 run() {
   label="$1"; want_code="$2"; want="$3"; shift 4
   set +e
-  got="$(env -i HOME="$HOME" PATH="$PATH" PORT=9 bash "$ROOT/bin/run.sh" "$@" 2>&1)"
+  got="$(env -i HOME="$HOME" PATH="$PATH" PORT=9 ${RUN_ENV[@]+"${RUN_ENV[@]}"} \
+    bash "$ROOT/bin/run.sh" "$@" 2>&1)"
   code=$?
   set -e
+  RUN_ENV=()
   if [ "$code" = "$want_code" ] && [[ "$got" =~ $want ]]; then
     printf 'ok    %-24s exit %s, %s\n' "$label" "$code" "$(printf '%s' "$got" | head -1)"
   else
@@ -41,6 +49,14 @@ done
 
 run "no name refuses"    1 'harness'                    --
 run "unknown name says so" 1 'nope'                     -- nope
+# A harness that is not installed is refused by name, and refused BEFORE the
+# server check: PORT=9 is closed, so an order the other way round would report
+# a missing server instead of the missing app.
+RUN_ENV=( CLAUDE_BIN=/nonexistent/claude-bin )
+run "missing binary refuses" 1 "^error: '/nonexistent/claude-bin' is not installed" -- claude-code
+RUN_ENV=( CLAUDE_BIN=/nonexistent/claude-bin )
+run "missing binary names its help" 1 './bin/run.sh claude-code --help' -- claude-code
+
 run "no server"          1 '^error: no server at'       -- claude-code
 run "adapter help"       0 'USAGE'                      -- claude-code --help
 run "adapter help names run.sh" 0 './bin/run.sh claude-code' -- claude-code --help

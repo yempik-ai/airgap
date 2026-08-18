@@ -34,7 +34,12 @@ WHAT IT DOES
 
 WHAT IT COSTS
   No extra memory beyond the server that is already running. No money.
-  Nothing leaves your Mac.
+
+  Everything this script sends goes to your Mac and nowhere else. What it
+  cannot speak for is the MCP or tool servers you set up yourself inside
+  your harness: those are yours, some of them talk to the internet, and how
+  much of them LEAN_MCP=1 switches off is a fact about each harness. The
+  "mcp" line the banner prints says what it did for the one you started.
 
 USAGE (run from the folder you want to work in)
   ./bin/run.sh                       list the harnesses this repo can start
@@ -148,6 +153,22 @@ HARNESS_NOTES=()
 # setting. tests/thinking-knob.sh observes this order.
 harness_wire
 
+# The harness itself has to exist before anything else is worth checking. Also
+# before the server check, and for the same reason as the wiring guards above:
+# a harness that is not installed is refused whether or not a server happens to
+# be running. Each adapter names its own setting for this in its own --help
+# (CLAUDE_BIN, CODEX_BIN), so this message points there rather than guessing at
+# a name the contract does not carry.
+if ! command -v "$HARNESS_BIN" >/dev/null 2>&1; then
+  echo "error: '$HARNESS_BIN' is not installed, or not on your PATH — $harness cannot start" >&2
+  echo >&2
+  echo "fix:   install it, or point this repo at the command you do have. The" >&2
+  echo "       setting that chooses it is named in this harness's own help:" >&2
+  echo "           ./bin/run.sh $harness --help" >&2
+  echo "       Set it in config.env. See docs/10-other-harnesses.md" >&2
+  exit 1
+fi
+
 # A dead server makes a harness fail in confusing ways much later, so check now.
 if ! server_up; then
   echo "error: no server at $BASE_URL — start ./bin/serve.sh first" >&2
@@ -228,24 +249,33 @@ fi
 exec 3>&2 2>/dev/null
 
 started_ms="$(now_ms)"
-"$HARNESS_BIN" ${HARNESS_ARGS[@]+"${HARNESS_ARGS[@]}"} "${HARNESS_ONESHOT[@]}" \
+# Both arrays are written the ${a[@]+"${a[@]}"} way for the reason above: an
+# adapter whose one-shot form needs no arguments at all is a legal adapter, and
+# under `set -u` bash 3.2 would stop on the empty array rather than run it.
+"$HARNESS_BIN" ${HARNESS_ARGS[@]+"${HARNESS_ARGS[@]}"} ${HARNESS_ONESHOT[@]+"${HARNESS_ONESHOT[@]}"} \
   'Reply with exactly: AIRGAP OK' >"$probe_out" 2>"$probe_err" </dev/null &
 probe_pid=$!
 
 # The same bound the harness itself was given: a cold first turn reloads the
 # weights before it produces a token, and that is not a new number.
-deadline=$(( client_ms / 1000 ))
+#
+# Polled in fifths of a second, not whole ones: the poll interval is the
+# granularity of the wall clock printed below, and a figure labelled MEASURED
+# must not carry up to a hidden second of this loop's own waiting. Counted in
+# ticks of 0.2 s, so the bound is client_ms / 200.
+deadline_s=$(( client_ms / 1000 ))
+deadline_ticks=$(( client_ms / 200 ))
 waited=0
 timed_out=0
 while kill -0 "$probe_pid" 2>/dev/null; do
-  if [ "$waited" -ge "$deadline" ]; then
+  if [ "$waited" -ge "$deadline_ticks" ]; then
     timed_out=1
     kill -TERM "$probe_pid" 2>/dev/null || true
     sleep 2
     kill -KILL "$probe_pid" 2>/dev/null || true
     break
   fi
-  sleep 1
+  sleep 0.2
   waited=$((waited + 1))
 done
 wait "$probe_pid" || true
@@ -280,7 +310,7 @@ if [ "$timed_out" = "0" ] && grep -q 'AIRGAP OK' "$probe_out"; then
 fi
 
 if [ "$timed_out" = "1" ]; then
-  printf 'probe  %s  FAIL after %s s — killed at the %ss client limit\n' "$harness" "$took" "$deadline"
+  printf 'probe  %s  FAIL after %s s — killed at the %ss client limit\n' "$harness" "$took" "$deadline_s"
 else
   printf 'probe  %s  FAIL after %s s\n' "$harness" "$took"
 fi
