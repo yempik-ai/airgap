@@ -629,9 +629,10 @@ honest description is in
 [01 — requirements](01-requirements.md#6-what-you-get-and-what-you-do-not).
 
 No tokens-per-second figure has been measured for the 27B on any machine, so
-this repository does not print one. `./bin/bench.sh` measures your own; the one
-figure on record is 57 tokens per second for the 9B on the test machine, one
-short greedy run, which says nothing about the 27B.
+this repository does not print one. `./bin/bench.sh` measures your own; the
+figures on record are the 9B's, in `bench/m3-max-36gb.tsv` — 27.4 tokens per
+second decode after a 41-token prompt and 11.9 after 16,458 on the test machine,
+single runs that say nothing about the 27B.
 
 ---
 

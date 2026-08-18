@@ -658,10 +658,11 @@ not, and no one should treat it as fact.
 
 **Why you care here.** The test machine is an Apple M3 Max with 30 GPU cores,
 36 GB of memory, and macOS 26.5.2. No speed figure for the 27B has been
-measured on it or anywhere else; the one measured speed is 57 tokens per second
-for the 9B, one short run of `bin/bench.sh`. A third label, PUBLISHER-REPORTED,
-marks numbers published by the people who made the model and not reproduced
-here.
+measured on it or anywhere else; the measured speeds are all the 9B's, and
+every one of them is a row in `bench/m3-max-36gb.tsv` with the machine, the
+model, the prompt and the load shape beside it. A third label,
+PUBLISHER-REPORTED, marks numbers published by the people who made the model
+and not reproduced here.
 
 ### model lock
 
@@ -1153,11 +1154,13 @@ How many [tokens](#token) the model produces each second. The direct measure of
 how fast text appears on your screen.
 
 **Why you care here.** This figure for the 27-billion-parameter model is NOT
-YET MEASURED in this repository. The one figure on record is 57 tok/s for the
-9B in the catalog, one short greedy run of `bin/bench.sh` on the test machine
-(MEASURED). It depends heavily on [GPU cores](#gpu-cores), so a figure from
-one Mac tells you little about another, and a figure for one model tells you
-nothing about a bigger one.
+YET MEASURED in this repository. The figures on record are the 9B's, in
+`bench/m3-max-36gb.tsv`: 27.4 tok/s decode after a 41-token prompt and 11.9
+after 16,458, single runs of `bin/bench.sh` on the test machine (MEASURED
+2026-08-18). It depends heavily on [GPU cores](#gpu-cores) and on what else
+the Mac is doing, so a figure from one Mac tells you little about another, a
+figure for one model tells you nothing about a bigger one, and two runs on the
+same Mac need not agree — earlier ones gave 36.7 and 57.
 
 ### tool call (`tool_use` / `tool_result`)
 

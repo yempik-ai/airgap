@@ -196,10 +196,12 @@ is NOT YET MEASURED.
 
 **Second: no speed figure exists for the 27B at all.** This repository has not
 measured tokens per second for the 27B on any machine, so it does not print one.
-The one figure it has is for the 9B: `./bin/bench.sh` on the test machine
-produced 57 tokens per second, decode only, on one short greedy run — which says
-nothing about the 27B. Anyone who quotes you a speed figure should tell you
-which Mac and which model produced it.
+The figures it has are for the 9B, and they are checked in as
+`bench/m3-max-36gb.tsv`: 27.4 tokens per second decode after a 41-token prompt
+and 11.9 after 16,458, on the test machine — which says nothing about the 27B.
+They are also single runs on a laptop doing other work, and they move: earlier
+runs of the same build gave 36.7 and 57. Anyone who quotes you a speed figure
+should tell you which Mac, which model and which run produced it.
 
 ---
 

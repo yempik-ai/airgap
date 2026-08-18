@@ -67,9 +67,14 @@ git clone https://github.com/yempik-ai/airgap.git airgap && cd airgap
 **Then two commands, in two Terminal windows:**
 
 ```bash
-./bin/serve.sh          # window 1 — the server. Leave it open.
-./bin/claude-local.sh   # window 2 — Claude Code, pointed at your Mac.
+./bin/serve.sh              # window 1 — the server. Leave it open.
+./bin/run.sh claude-code    # window 2 — your harness, pointed at your Mac.
 ```
+
+Not Claude Code? `./bin/run.sh codex`, `pi` or `hermes` does the same job for
+those — one adapter each, same server, same guards
+([`docs/10`](docs/10-other-harnesses.md)). `./bin/claude-local.sh` still works
+and is the same thing.
 
 `./bin/stop.sh` stops whatever is holding the weights — the server on that port, or a `bench.sh` run that has no port at all — and hands the memory straight back. A program on the port that is not ours is reported, not killed.
 
@@ -87,7 +92,7 @@ Free memory before starting the server — it refuses to start below the thresho
 | 3 | `./bin/verify-model.sh` | proves every shard is real and whole — not a 135-byte placeholder, not one cut short by a full disk, and none missing that the index names |
 | 4 | `./bin/doctor.sh` | one line per check, PASS/FAIL with a fix each, plus one row per harness adapter you have installed — 25 rows on the test machine with the server down (MEASURED 2026-08-18). Changes nothing |
 | 5 | `./bin/serve.sh` | starts the server. Leave the window open |
-| 6 | `./bin/claude-local.sh` | Claude Code, second window, pointed at you |
+| 6 | `./bin/run.sh <harness>` | your harness, second window, pointed at you — `claude-code`, `codex`, `pi` or `hermes` |
 
 </details>
 
@@ -171,10 +176,10 @@ Three things make this model unusually good on a laptop:
 | Prefix cache reuse on turn 2 | 16,384 / 20,906 |
 | Weights on disk, 5-bit, text-only (vision skipped) | 19.1 GB |
 | Tokens per second, **the 27B** | **not measured** |
-| Tokens per second, the 9B (`9b-4bit`, 60 greedy tokens, `bin/bench.sh`) | 57 tok/s decode, mlx-serve's own figure |
+| Tokens per second, the 9B (`9b-4bit`, `bin/bench.sh` → [`bench/m3-max-36gb.tsv`](bench/m3-max-36gb.tsv)) | 27.4 tok/s decode after a 41-token prompt, 11.9 after 16,458 — mlx-serve's own figures |
 | Thinking off (`MAX_THINKING_TOKENS=0`), the 9B, one prompt, n=1 | 376 vs 1156 output tokens, 7.2 s vs 20.9 s — quality cost **not measured** ([07 §7](docs/07-tuning.md#thinking)) |
 
-The 27B has no speed figure, on this machine or any other. The 9B figure is one short run of `./bin/bench.sh` on the test machine (M3 Max, 30 GPU cores) and says nothing about the 27B. Anything unmeasured is labelled unmeasured, here and throughout the docs.
+The 27B has no speed figure, on this machine or any other. The 9B figures are single runs of `./bin/bench.sh` on the test machine (M3 Max, 30 GPU cores) and say nothing about the 27B. **They also move.** The same build and the same prompt gave 36.7 tok/s the day before ([07 §10](docs/07-tuning.md#bench)), at a peak memory identical to three decimal places and a prefill chunk that only prefill cares about; an earlier, shorter run gave 57. A laptop's decode speed depends on what else the laptop is doing, and nothing here pretends otherwise. `bench/` keeps every row instead of averaging them away, which is the only way that spread is visible to you at all. Anything unmeasured is labelled unmeasured, here and throughout the docs.
 
 ### What has and has not been run here
 
@@ -183,11 +188,11 @@ Being precise about this matters more than looking finished.
 | | |
 |:--|:--|
 | Checkpoint integrity, architecture, MTP head present in the bytes | ✓ `bin/verify-model.sh` |
-| **Every script, actually run** — `start`, `setup`, `download-model`, `models`, `verify-model`, `doctor`, `serve`, `claude-local`, `stop` | ✓ all of them |
-| **Claude Code answering from a local model, end to end** | ✓ `serve → doctor → claude-local -p` returned `AIRGAP OK` on the 9B |
+| **Every script, actually run** — `start`, `setup`, `download-model`, `models`, `verify-model`, `doctor`, `serve`, `run`, `claude-local`, `stop` | ✓ all of them |
+| **Four harnesses answering from a local model, end to end** | ✓ `./bin/run.sh --probe <name>` returned `AIRGAP OK` on the 9B for `claude-code`, `codex`, `pi` and `hermes` — warm turns 4.8 / 3.4 / 1.5 / 7.5 s, prompt tokens per turn 20,718 / 9,336 / 2,024 / 15,060 (MEASURED 2026-08-18, [docs/10](docs/10-other-harnesses.md)) |
 | Anthropic `/v1/messages`, tool calling, prefix-cache reuse | ✓ verified |
-| `doctor.sh` against a live server, including the `mtp_loaded` probe | ✓ all PASS on the 9B (which ships no MTP head, and doctor says so) — 29 checks against a live server on 2026-08-18, model-lock, cache-evidence and tool-call (plain and streamed) rows included; the tool-call reader's failure branches are exercised offline by `tests/tool-call-verdict.sh` against captured answers |
-| `bench.sh`, exact-match check, decode speed, prefill rate and peak memory | ✓ on the 9B: identical output; 36.7 tok/s decode after a 41-token prompt, 15.6 after 16,377; prefill 374 tok/s at 16,377 tokens (309 a day later — the rate is noisy, the peak is not); peak 7.52 GB there at a pinned 4096-token prefill chunk, 2.6 GB of it working set above weights + KV; 5.63 GB / 0.7 GB at the 512 the server sizes for itself ([07 §10](docs/07-tuning.md#bench)) |
+| `doctor.sh` against a live server, including the `mtp_loaded` probe | ✓ all PASS on the 9B (which ships no MTP head, and doctor says so) — 29 checks against a live server on 2026-08-18, model-lock, cache-evidence and tool-call (plain and streamed) rows included. That count is not a constant: it predates the harness section, which prints a row per adapter you have installed, so the same machine prints 25 rows today with the server down and more than 29 with it up; the tool-call reader's failure branches are exercised offline by `tests/tool-call-verdict.sh` against captured answers |
+| `bench.sh`, exact-match check, decode speed, prefill rate and peak memory | ✓ on the 9B, and every run since is a row in [`bench/m3-max-36gb.tsv`](bench/m3-max-36gb.tsv): identical output; the 2026-08-17 sweep read 36.7 tok/s decode after a 41-token prompt, 15.6 after 16,377; prefill 374 tok/s at 16,377 tokens (309 a day later — the rate is noisy, the peak is not); peak 7.52 GB there at a pinned 4096-token prefill chunk, 2.6 GB of it working set above weights + KV; 5.63 GB / 0.7 GB at the 512 the server sizes for itself ([07 §10](docs/07-tuning.md#bench)) |
 | **The 27B itself, loaded and served** | **◑ once, incompletely** — 2026-08-17, under `serve.sh`'s own flags: 5 shards loaded (`[preflight] weights ~19.97 GB, available 25.59 GB`) and one `/v1/messages` turn streamed back. That turn hit `max_tokens` after a single token and a second was cancelled by shutdown, so it produced no figure. Server log only — `doctor.sh` has never been run against the 27B, and neither has `bench.sh` |
 | **`mtp_loaded: true` on the 27B checkpoint** | **◑ the head loads** — `[mtp] loaded native MTP head (dense-mlp; …)`, `MTP head ready (depth=6)`, and the served turn logged `mtp=enabled (streaming, depth=6)` (MEASURED 2026-08-17, mlx-serve 26.8.8). What is still unconfirmed is doctor's `mtp_loaded` row on this build, and the speed it is supposed to buy — see below |
 | Tokens per second, prefill rate and peak memory on the 27B | ✕ never measured (the 9B figures above are the only ones) |
@@ -204,16 +209,18 @@ The end-to-end runs above used **`9b-4bit`** (a community distillation into the 
 
 | Component | Version | Role |
 |:--|:--|:--|
-| [`mlx-serve`](https://github.com/ddalcu/mlx-serve) | 26.8.8 | inference server — Anthropic, OpenAI and Ollama APIs on one port |
+| [`mlx-serve`](https://github.com/ddalcu/mlx-serve) | 26.8.8 or newer — `serve.sh` refuses older | inference server — Anthropic, OpenAI and Ollama APIs on one port |
 | MLX / Metal | 0.32.0 | Apple's array framework, running on the GPU |
 | Qwen3.8-27B-Uncensored | 5-bit MLX | the weights — **not** in this repo |
-| Claude Code | 2.1.233 | the harness you type into |
+| Claude Code · Codex CLI · Pi · Hermes Agent | whichever you have installed | the harness you type into — one adapter each in `harness/`, and `doctor.sh` prints the version it found for every one of them |
+
+Nothing here pins a harness version: the adapters read what is on your `PATH`. The four were verified end to end on 2026-08-18 against Claude Code 2.1.234, Codex CLI 0.147.0, Pi 0.84.2 and Hermes Agent 0.20.4, and where a specific release matters — Codex 0.147.0 refusing `wire_api = "chat"`, for one — [`docs/10`](docs/10-other-harnesses.md) and `AGENT.md` say which release established it.
 
 ---
 
 ## Where this is going
 
-Today: one harness (Claude Code), one model family (Qwen3.8), one runtime (`mlx-serve`), on Apple Silicon. The point of the scripts is that none of that should require you to learn MLX first — and the next steps make the harness, the catalog and the runtime each a pluggable adapter behind one command, so the harness you already use is the one that gets pointed at your Mac. The plan, in phases and with its non-goals, is in [`ROADMAP.md`](ROADMAP.md).
+Today: four harnesses (Claude Code, the Codex CLI, Pi and Hermes Agent), one model family (Qwen3.8), one runtime (`mlx-serve`), on Apple Silicon. The harness is already the pluggable part — one small file in `harness/`, and `bin/run.sh` does everything the four have in common. The catalog and the runtime are next, so that none of the three requires you to learn MLX first. The plan, in phases and with its non-goals, is in [`ROADMAP.md`](ROADMAP.md).
 
 ---
 
@@ -243,7 +250,8 @@ airgap/
 ├── harness/                 ← one file per harness: claude-code, codex, pi, hermes
 ├── docs/                    ← 01 → 10, in reading order
 ├── tests/                   ← offline checks: doctor's readers against captured
-│                              lines, the load-shape contract, the thinking guard
+│                              lines, the harness contract and its dispatcher,
+│                              the load-shape contract, the guards
 ├── bench/                   ← one .tsv per Mac, one row per bench.sh run
 ├── .github/workflows/ci.yml ← shellcheck + bash -n, and tests/ on a macOS runner
 └── config.env.example       ← every setting, with its default

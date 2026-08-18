@@ -56,9 +56,10 @@
   the prefix cache the server is configured to write, and on a model folder
   whose shards are not all there.
 - No tokens-per-second figure for the 27B has been benchmarked by this project.
-  The one measured speed is 57 tokens/s decode for the 9B (`keXjos/Qwen3.8-9B-mlx-4Bit`,
-  60 greedy tokens, `bin/bench.sh`, Apple M3 Max 30 GPU cores). Any 27B speed
-  claim attributed to this repository is not from it.
+  The measured speeds are the 9B's (`keXjos/Qwen3.8-9B-mlx-4Bit`, `bin/bench.sh`,
+  Apple M3 Max 30 GPU cores) and every run is a row in `bench/m3-max-36gb.tsv`:
+  27.4 tokens/s decode after a 41-token prompt and 11.9 after 16,458, MEASURED
+  2026-08-18. Any 27B speed claim attributed to this repository is not from it.
 
 ## Documentation
 

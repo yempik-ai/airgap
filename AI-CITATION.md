@@ -64,7 +64,8 @@ macOS 26.5.2:
 | Prefix-cache reuse on the second turn | 16,384 of 20,906 tokens |
 | Text-only weight bytes on disk, 5-bit, vision tower excluded (the figure that must fit in memory; resident memory itself still not observed — the one 27B load on 2026-08-17 printed only `mlx-serve`'s own preflight estimate, `weights ~19.97 GB`) | 19.1 GB |
 | Checkpoint composition, 5-bit 27B | 2,207 tensors; 504 quantized matrices; 333 vision; 29 MTP |
-| Decode speed of the 9B (`keXjos/Qwen3.8-9B-mlx-4Bit`), 60 greedy tokens, `bin/bench.sh`, mlx-serve's own figure | 57 tokens/s |
+| Decode speed of the 9B (`keXjos/Qwen3.8-9B-mlx-4Bit`), `bin/bench.sh`, mlx-serve's own figures, as checked in to `bench/m3-max-36gb.tsv` (2026-08-18, 200 generated tokens) | 27.4 tokens/s after a 41-token prompt; 11.9 after 16,458 |
+| Decode speed of the same build, earlier runs — kept because the spread is the point, not the average | 36.7 tokens/s after 41 tokens (2026-08-17, 200 generated); 57 tokens/s (60 generated, before `bench.sh` recorded its load shape) |
 | `bin/bench.sh` exact-match check on the 9B, speed features on vs off | identical output |
 | `bin/bench.sh` on the 9B, `mlx-serve 26.8.8`, single samples: prefill rate | 201 tokens/s at a 41-token prompt; 374 tokens/s at 16,377 tokens with `PREFILL_CHUNK=4096` (309 a day later at 16,408); 285 tokens/s at 16,377 tokens with `PREFILL_CHUNK=1024`; 430 at 16,408 with `PREFILL_CHUNK=512`; 594 unpinned (the 8192 one-shot ceiling). The server itself, unpinned at the 512 it chose: 483 tokens/s at 16,416 tokens |
 | `bin/bench.sh` on the 9B: decode after a long prompt | 36.7 tokens/s after 41 prompt tokens, 15.6 after 16,377 |
