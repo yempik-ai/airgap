@@ -730,9 +730,11 @@ for _h in "$ROOT"/harness/*.sh; do
     # The first field that looks like a version number, not simply the first
     # word: `claude --version` leads with it, but `codex --version` prints
     # "codex-cli 0.147.0", and a row reading "codex-cli" tells nobody which
-    # version they have. Nothing is printed when no field looks like one.
+    # version they have. A leading "v" is dropped first: `hermes --version`
+    # prints "Hermes Agent v0.20.4 (2026.8.18)". Nothing is printed when no
+    # field looks like one.
     _ver="$("$_bin" --version 2>/dev/null \
-      | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+(\.[0-9]+)*$/) { print $i; exit } }')"
+      | awk '{ for (i = 1; i <= NF; i++) { sub(/^v/, "", $i); if ($i ~ /^[0-9]+(\.[0-9]+)*$/) { print $i; exit } } }')"
     row PASS "$_hname" "${_ver} -> ${BASE_URL}${_endpoint}"
   else
     row WARN "$_hname" "'${_bin}' not found — run.sh will refuse" "docs/10-other-harnesses.md"
