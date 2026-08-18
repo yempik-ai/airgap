@@ -38,7 +38,7 @@ A bash file `bin/run.sh` sources after `bin/env.sh`. It reads `BASE_URL`,
 | `HARNESS_DIALECT` | variable | `anthropic`, `openai` or `ollama` — the mlx-serve endpoint family it will hit |
 | `HARNESS_BIN` | variable | the executable, from the harness's `*_BIN` setting (`CLAUDE_BIN`, `CODEX_BIN`) |
 | `HARNESS_ONESHOT` | array | the arguments that make the harness answer one prompt and exit; the prompt is always the last argument (`(-p)`, `(exec)`) |
-| `harness_wire` | function | exports environment variables and/or appends flags to the `HARNESS_ARGS` array so that every request goes to `BASE_URL` for `MODEL_ID` with `CTX_SIZE` declared. Refuses (exit 1, fix named) on an invalid harness-specific setting. Prints only harness-specific banner lines |
+| `harness_wire` | function | exports environment variables and/or appends flags to the `HARNESS_ARGS` array so that every request goes to `BASE_URL` for `MODEL_ID` with `CTX_SIZE` declared. Refuses (exit 1, fix named) on an invalid harness-specific setting. Prints nothing; harness-specific banner lines go into the `HARNESS_NOTES` array |
 | `harness_usage` | function, optional | the harness-specific `--help` text |
 
 An adapter does not: check the server, parse `run.sh` options, compute
@@ -85,17 +85,22 @@ Sequence:
 1. `source bin/env.sh`.
 2. No name / unknown name → list `harness/*.sh` (basename without `.sh`),
    exit 1.
-3. `server_up` or refuse with the message `claude-local.sh` prints today
+3. `source harness/<name>.sh`.
+4. `<name> --help` (first passthrough argument is `-h`/`--help` and
+   `harness_usage` is defined) → print it, exit 0. Otherwise `--help` is
+   passed through: it is the harness's flag.
+5. `HARNESS_ARGS=()`; `HARNESS_NOTES=()`; `harness_wire`. Its guards run
+   before the server check, so a typo in a harness setting is refused
+   whether or not the server is up (`tests/thinking-knob.sh` relies on
+   this order).
+6. `server_up` or refuse with the message `claude-local.sh` prints today
    (open another window, `cd $ROOT`, `./bin/serve.sh`).
-4. `source harness/<name>.sh`; `HARNESS_ARGS=()`; `harness_wire`.
-5. `<name> --help` (first passthrough argument is `-h`/`--help` and
-   `harness_usage` is defined) → print it, exit 0. Otherwise pass `--help`
-   through: it is the harness's flag.
-6. Common banner, from `env.sh` values only:
+7. Common banner, from `env.sh` values only:
    `<name>  -> BASE_URL  model MODEL_ID  (DIALECT)`, `context CTX_SIZE
-   tokens declared`, `timeout` line (client vs server, as today).
-7. Without `--probe`: `exec "$HARNESS_BIN" "${HARNESS_ARGS[@]}" "$@"`.
-8. With `--probe`: see below.
+   tokens declared`, `timeout` line (client vs server, as today); then
+   each line of `HARNESS_NOTES`; then a blank line.
+8. Without `--probe`: `exec "$HARNESS_BIN" "${HARNESS_ARGS[@]}" "$@"`.
+9. With `--probe`: see below.
 
 `bin/claude-local.sh` becomes:
 `exec "$(dirname "${BASH_SOURCE[0]}")/run.sh" claude-code "$@"` under a
@@ -107,12 +112,12 @@ comment saying so. Its documented behaviour (`--help`, `-p`, the
 One implementation, harness-agnostic:
 
 1. If `METRICS=1`: read `prompt_tokens_total` from `BASE_URL/metrics.json`
-   (the reader doctor already has, moved to `env.sh` as `metrics_counter
-   <name>` so it exists once).
+   via `metrics_counters` (below).
 2. Run `"$HARNESS_BIN" "${HARNESS_ARGS[@]}" "${HARNESS_ONESHOT[@]}" 'Reply
    with exactly: AIRGAP OK'` with stdin closed, stdout+stderr captured, wall
    clock measured, bounded by `client_timeout_ms` (a cold first turn reloads
-   the weights; no new number).
+   the weights; no new number). macOS ships no `timeout` binary: the bound
+   is a background run polled with `sleep`, killed on expiry.
 3. Read the counter again. Delta = prompt tokens the harness sent for one
    turn, all requests included.
 4. Print one line and exit with the verdict:
@@ -130,8 +135,12 @@ not parse any harness's output format.
   `(SERVE_TIMEOUT + 60) * 1000`. Moved from `claude-local.sh`; the
   `300000` floor stays in the Claude Code adapter (a `Math.max` fact of the
   2.1.233 binary, not a rule).
-- `metrics_counter <name>`: prints the named counter from `/metrics.json`
-  or nothing. Doctor's inline Python moves here.
+- `metrics_counters <name>…`: one fetch of `/metrics.json`; prints the
+  named counters' values space-separated in argument order (`0` for a
+  counter the server does not report); prints nothing and returns 1 when
+  the endpoint does not answer 200. Doctor's inline Python moves here;
+  doctor keeps its own status-code diagnosis only on the failure path (one
+  fetch on the happy path).
 - `CODEX_BIN` (default `codex`): on `ENV_KEYS`, defaulted, exported — the
   three edits AGENT.md names. `LEAN_MCP` and `CLAUDE_BIN` unchanged.
 - `LEAN_MCP` comment reworded harness-neutral: "starts the harness with its
@@ -144,12 +153,14 @@ the same exports, the same `MAX_THINKING_TOKENS` guard, the same
 `CLAUDE_CODE_MAX_OUTPUT_TOKENS` default, `--model "$MODEL_ID"` and
 `--strict-mcp-config` under `LEAN_MCP=1` in `HARNESS_ARGS`. `HARNESS_ONESHOT=(-p)`.
 `harness_usage` is today's `usage()`, with `USAGE` lines showing both
-`./bin/claude-local.sh` and `./bin/run.sh claude-code`. Banner lines it
-prints: `mcp`, `thinking`, `note` (the rest are common).
+`./bin/claude-local.sh` and `./bin/run.sh claude-code`. `HARNESS_NOTES`
+carries today's `mcp`, `thinking` and `note` lines (the rest are common).
 
 ## `harness/codex.sh`
 
-`HARNESS_DIALECT=openai`, `HARNESS_BIN="$CODEX_BIN"`, `HARNESS_ONESHOT=(exec)`.
+`HARNESS_DIALECT=openai`, `HARNESS_BIN="$CODEX_BIN"`, `HARNESS_ONESHOT=(exec)`
+plus, if the 0.147.0 binary has it, the flag that lets `exec` run outside a
+git checkout (the probe may run from any folder).
 Wiring is `-c key=value` overrides only — no file under `~/.codex` is
 written or read differently, no login required, `--oss` not used (Codex's
 own provider path can list and pull models by itself, which is a second
@@ -218,8 +229,10 @@ The `claude code` row under "tools" is unchanged.
   assert `HARNESS_ARGS` or the exported environment mentions `BASE_URL` and
   `MODEL_ID` (the wiring points at loopback).
 - `run-dispatch.sh`: `run.sh` with no name and with `nope` prints the
-  adapter list, exits 1, mentions `claude-code` and `codex`; `run.sh
-  claude-code` with `PORT=9` refuses with `error: no server at`.
+  adapter list and exits 1; the list names every `harness/*.sh` present
+  (derived, not hardcoded in the test); `run.sh claude-code` with `PORT=9`
+  refuses with `error: no server at`; `run.sh claude-code --help` prints
+  the adapter's usage and exits 0 without a server.
 - `thinking-knob.sh`: unchanged, green through the shim.
 - Live, by hand before the commit and pasted into docs/10:
   `run.sh --probe claude-code`, `run.sh --probe codex`, both on the 9B.
