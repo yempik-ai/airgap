@@ -85,7 +85,7 @@ PASS  git-lfs enabled   switched on for your account
 PASS  mlx-serve         26.8.8 (needs 26.8.8 or newer)
 PASS  claude code       2.1.233
 ─────────────────────────────────────────────
-21 pass, 0 warn, 0 fail, 1 skipped
+23 pass, 0 warn, 0 fail, 1 skipped
 doctor: OK — next: ./bin/serve.sh
 ```
 
@@ -721,9 +721,10 @@ folder, in a second Terminal window, with the server already running.
 You should see something like this:
 
 ```
-claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
-context  65536 tokens declared to the harness, 8192 max output
+claude-code -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit  (anthropic)
+context  65536 tokens declared to the harness
 timeout  client gives up after 360s of silence, the server after 300s — so the server reports it
+output   8192 max output tokens per answer (CLAUDE_CODE_MAX_OUTPUT_TOKENS)
 mcp      strict (LEAN_MCP=1) — MCP servers off, saves ~17k prompt tokens per turn
 thinking on, as the model ships — MAX_THINKING_TOKENS=0 turns it off (measured 3x faster on the 9B; quality cost not measured)
 note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
@@ -974,7 +975,7 @@ repository folder.
 You should see something like this:
 
 ```
-claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
+claude-code -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit  (anthropic)
 ```
 
 Output trimmed. The address on that line must be `127.0.0.1`. If it names anything

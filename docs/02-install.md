@@ -1308,13 +1308,15 @@ PASS  model id          Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
 ── server ───────────────────────────────────
 PASS  bind setting      HOST=127.0.0.1 — serve.sh will listen on this Mac only
 SKIP  server            not running — start ./bin/serve.sh
-── claude code wiring ───────────────────────
+── harness wiring ───────────────────────────
+PASS  claude-code       2.1.233 -> http://127.0.0.1:11234/v1/messages
+PASS  codex             codex-cli -> http://127.0.0.1:11234/v1/responses
 PASS  ANTHROPIC_API_KEY not set in this shell
 PASS  base url          claude-local.sh will point at http://127.0.0.1:11234
 PASS  context           CTX_SIZE=65536 declared to server and Claude Code, within the model's 262144
 PASS  mcp mode          strict (LEAN_MCP=1) — saves about 17,000 prompt tokens per turn
 ─────────────────────────────────────────────
-21 pass, 0 warn, 0 fail, 1 skipped
+23 pass, 0 warn, 0 fail, 1 skipped
 doctor: OK — next: ./bin/serve.sh
 ```
 
@@ -1673,9 +1675,10 @@ This starts Claude Code and points it at your own Mac instead of at the internet
 You should see something like this before Claude Code's own screen appears:
 
 ```
-claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
-context  65536 tokens declared to the harness, 8192 max output
+claude-code -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit  (anthropic)
+context  65536 tokens declared to the harness
 timeout  client gives up after 360s of silence, the server after 300s — so the server reports it
+output   8192 max output tokens per answer (CLAUDE_CODE_MAX_OUTPUT_TOKENS)
 mcp      strict (LEAN_MCP=1) — MCP servers off, saves ~17k prompt tokens per turn
 thinking on, as the model ships — MAX_THINKING_TOKENS=0 turns it off (measured 3x faster on the 9B; quality cost not measured)
 note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
