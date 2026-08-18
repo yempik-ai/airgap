@@ -183,7 +183,10 @@ if [ -n "$PROMPT_FILE" ]; then
 fi
 
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+# `trap ... EXIT` REPLACES the EXIT trap acquire_model_lock installed above,
+# so the lock release has to be repeated here or a finished run leaves a stale
+# lock behind (found by running it: every completed bench left one).
+trap 'rm -rf "$TMP"; release_model_lock' EXIT
 
 # mlx-serve --prompt prints the answer between two lines of "=" signs, then
 # three lines of its own statistics, all of which are kept:
@@ -295,7 +298,7 @@ if cmp -s "$TMP/spec-on.txt" "$TMP/spec-off.txt"; then
 else
   echo "  outputs DIFFER     <- unexpected at temp 0; investigate before trusting the speeds"
   echo "  (the two answers are in $TMP — kept until this window closes)"
-  trap - EXIT
+  trap 'release_model_lock' EXIT
 fi
 
 on="$(cat "$TMP/spec-on.tps")"

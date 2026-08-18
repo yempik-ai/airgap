@@ -273,7 +273,13 @@ admitting one that will not.
 > chunk-bound, `PREFILL_CHUNK` is the lever, and `docs/04`'s "~1 GB" row is
 > right on the 9B only at the smaller chunk — noted there. `PROMPT_FILE`
 > missing or empty refuses before anything loads; the lock is released on
-> both paths. The flags do not distort the speed figure: same prompt with and
+> both refuse paths — and, found 2026-08-18 while running `E1`, *not* on a
+> completed run: `bench.sh`'s own `trap 'rm -rf "$TMP"' EXIT` replaced the
+> release trap `acquire_model_lock` had installed, so every finished bench
+> left a stale lock (reclaimed by the next start, reported as "left behind
+> by something that crashed" by `doctor.sh` in between). Fixed the same day
+> by repeating the release in that trap; proven by a full run leaving no
+> lock. The flags do not distort the speed figure: same prompt with and
 > without them, decode 35–36 vs 37 tok/s.
 >
 > The **Unknown** below is resolved: `footprint(1)` on the one-shot process
