@@ -285,6 +285,36 @@ First public release.
   and an unmeasured speed knob does not earn a name (the rule that made
   thinking-off opt-in). `config.env.example` and `docs/07` §14 point at the
   table. Closes the label half of `AUDIT.md` E3.
+- **Any harness, one command** (`bin/run.sh [--probe] <name>`, `harness/`,
+  `docs/10-other-harnesses.md`). One file per harness declares what only that
+  harness knows — its dialect (`anthropic`, `openai`, `ollama`), the command
+  that starts it, how to make it answer once and exit, and how to point every
+  one of its model settings at the server — and `run.sh` does the rest for all
+  of them: the server check, the banner, the timeout arithmetic and the probe.
+  `bin/claude-local.sh` is now one `exec` line onto `run.sh claude-code`, so
+  every document that names it stays true; its banner gained the adapter's name
+  and dialect on line 1 and an `output` line for the answer cap, and is eight
+  lines. `--probe` sends one question through the harness and reports the
+  verdict, the wall clock and the prompt tokens **the server** counted for that
+  turn — the harness's fixed cost, every housekeeping request included, and a
+  figure no harness reports honestly about itself. Two adapters, both verified
+  end to end on the 9B (`Qwen3.8-9B-mlx-4Bit`, `mlx-serve 26.8.8`, M3 Max
+  36 GB, 2026-08-18, `LEAN_MCP=1`): **Claude Code 2.1.234** — `AIRGAP OK`,
+  47.4 s cold, 4.1 s warm, 20,718 prompt tokens; **Codex CLI 0.147.0** —
+  `AIRGAP OK`, 21.3 s cold, 3.1 s warm, 9,336 prompt tokens, against 10,271
+  with `LEAN_MCP=0`, so 935 per turn for its plugins (all MEASURED; the two
+  harnesses' token figures are each that harness's own cost and are not
+  comparable with each other). The Codex adapter wires `-c` overrides only —
+  nothing under `~/.codex` is read specially or written — puts a placeholder in
+  `CODEX_API_KEY` so the ChatGPT sign-in token is not sent to a server that
+  never asked for it, and speaks `wire_api = "responses"` because 0.147.0
+  refuses `"chat"` outright. `LEAN_MCP` moved to a harness-neutral
+  `# --- Harnesses ---` section of `config.env.example`, each harness stating
+  its own measured cost; `CODEX_BIN` joins `CLAUDE_BIN`. `doctor.sh`'s
+  "claude code wiring" section is now "harness wiring" and opens with one row
+  per adapter — installed, and which endpoint it would be pointed at.
+  `tests/harness-contract.sh` and `tests/run-dispatch.sh` hold the contract and
+  the dispatch offline. `ROADMAP.md` Phase 1.
 - `bin/verify-model.sh`, `bin/stop.sh`.
 - Nine documents, `docs/01` to `docs/09`, written for readers who have never
   opened a terminal, plus a glossary of every technical term used.
