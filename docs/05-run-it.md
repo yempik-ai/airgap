@@ -41,7 +41,10 @@ memory.
 **`./bin/claude-local.sh`** starts **Claude Code**
 ([Glossary](09-glossary.md#claude-code)) — the app you type into — in a second
 Terminal window, with every one of its settings pointed at the server on your own
-Mac instead of at Anthropic's.
+Mac instead of at Anthropic's. It is the short way of writing
+`./bin/run.sh claude-code`, which is how every other app is started too; if you
+use the Codex CLI or something else, see
+[10 — other harnesses](10-other-harnesses.md).
 
 **`./bin/stop.sh`** ends the first one and gives the memory back.
 
@@ -231,12 +234,13 @@ That is one action expressed as two commands, because the script needs to be
 found and the folder it starts in becomes the folder Claude Code works on. To
 work on a different project, see Section 8.
 
-You should see these six lines before Claude Code's own screen appears:
+You should see these eight lines before Claude Code's own screen appears:
 
 ```
-claude   -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit
-context  65536 tokens declared to the harness, 8192 max output
+claude-code -> http://127.0.0.1:11234   model Qwen3.8-27B-Uncensored-OrcaRouter-MLX-5bit  (anthropic)
+context  65536 tokens declared to the harness
 timeout  client gives up after 360s of silence, the server after 300s — so the server reports it
+output   8192 max output tokens per answer (CLAUDE_CODE_MAX_OUTPUT_TOKENS)
 mcp      strict (LEAN_MCP=1) — MCP servers off, saves ~17k prompt tokens per turn
 thinking on, as the model ships — MAX_THINKING_TOKENS=0 turns it off (measured 3x faster on the 9B; quality cost not measured)
 note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
@@ -246,13 +250,19 @@ note     an "unrecognized_model" line at startup is EXPECTED and cosmetic; so is
 The model name and the context number differ if you have a different build, or
 a different context size. The address is the same on every Mac.
 
-That third line mentions **MCP**, which stands for Model Context Protocol
+The `mcp` line mentions **MCP**, which stands for Model Context Protocol
 ([Glossary](09-glossary.md#model-context-protocol-mcp)). MCP servers are optional
 add-ons that give Claude Code extra tools — a connection to a database, a
 web-search tool, and so on. This setup switches them off, because the
 *descriptions* of those tools alone cost about 17,000 tokens of the model's
 limited memory on **every single turn**. Section 7 has the measured numbers and
 how to turn them back on.
+
+The `output` line is the longest single answer Claude Code will ask for. It is
+kept modest on purpose: a local model that talks past a tool call is harder to
+work with than one that stops. `CLAUDE_CODE_MAX_OUTPUT_TOKENS` changes it, and
+it is Claude Code's setting, not the server's — each app on
+[10 — other harnesses](10-other-harnesses.md) has its own.
 
 The `thinking` line says whether the model reasons before it answers. It does,
 as it ships; `MAX_THINKING_TOKENS=0` turns that off and was measured 3× faster
