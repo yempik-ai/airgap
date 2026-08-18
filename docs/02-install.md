@@ -812,6 +812,24 @@ ds4 unknown
 Your version numbers may differ. A line starting with `[mem] MLX buffer-pool cap`
 may also appear before or after these. That line is EXPECTED and harmless.
 
+**The first line is the one that matters, and there is a minimum: 26.8.8.**
+Every flag `./bin/serve.sh` passes was checked against that build, and nothing
+older has been run by this project. An older one accepts the install, passes
+every other check, and then refuses one of those flags a minute into loading the
+model — so `./bin/serve.sh` refuses first and names the fix, and `./bin/doctor.sh`
+reports the version beside the minimum:
+
+```
+REFUSING TO START — mlx-serve 26.8.7 is older than the 26.8.8 this repo needs.
+  installed : 26.8.7
+  needed    : 26.8.8 or newer
+```
+
+The fix is one command: `brew update && brew upgrade mlx-serve`. Homebrew
+installs the current version, so a fresh install of this guide is already past
+the minimum — you would only meet this message on a Mac where mlx-serve was
+installed a while ago.
+
 The line `nax off (requires M5-class GPU)` is EXPECTED on every Mac up to and
 including M4. It reports an optional acceleration feature that your chip does not
 have. It is not an error.
