@@ -54,6 +54,7 @@ CATALOG='
 # The OrcaRouter builds share one repository name with the quantization as the
 # suffix, which is what MODEL_QUANT selects between. Kept here so env.sh does
 # not carry a second copy of the name.
+# shellcheck disable=SC2034
 CATALOG_ORCAROUTER_PREFIX="chimingw/Qwen3.8-27B-Uncensored-OrcaRouter-MLX-"
 
 # catalog_line <key>  — print the whole catalog line for a key, or nothing.

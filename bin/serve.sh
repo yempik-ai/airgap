@@ -269,6 +269,9 @@ if [ "$wired" != "0" ]; then
 fi
 
 # --- Build the command -------------------------------------------------------
+# LOAD_SHAPE_ARGS below is split on spaces on purpose (see env.sh); the
+# directive has to sit here, ahead of the array, for shellcheck to honour it.
+# shellcheck disable=SC2206
 args=(
   --model "$MODEL_DIR"
   --serve
@@ -278,7 +281,6 @@ args=(
   # and the vision switch come from one list in env.sh that bench.sh passes
   # too, so the peak it measures is reached under these same settings. Split on
   # spaces on purpose; see env.sh.
-  # shellcheck disable=SC2206
   $LOAD_SHAPE_ARGS
   --prefix-cache-mem "$PREFIX_CACHE_MEM"
   --prefix-cache-disk "$PREFIX_CACHE_DISK"

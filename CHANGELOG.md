@@ -77,6 +77,24 @@ First public release.
   so an unpinned `bench.sh` reads at the 8192 ceiling (peak 9.52 GB, +4.57 GB)
   and now prints a `chunk:` line saying so, quoting the figure the server chose
   in its last run and the pin that reproduces it. Closes `AUDIT.md` E1.
+- **`bench.sh` gives the model lock back after a full run.** Its own
+  `trap 'rm -rf "$TMP"' EXIT` had replaced the release trap the lock installs,
+  so every completed bench left a stale lock behind (reclaimed by the next
+  start, reported by `doctor.sh` in between). Found while running E1; the
+  refuse paths were already fine.
+- **`tests/`** — offline checks that need no server and no weights:
+  `tool-call-verdict.sh` feeds twelve captured and derived answer shapes
+  (live `tool_use` plain and streamed, `declined`, `truncated`, an API error;
+  derived `unparsed`, `wrong_tool`, `bad_input`, torn `partial_json`, no
+  `message_stop`, garbled, empty) through doctor's real reader and row
+  renderer and checks the status and detail each renders — the failure
+  branches a green doctor run never exercises; `load-shape.sh` holds the
+  `LOAD_SHAPE_ARGS` contract (the prefill-chunk flag only when pinned, and
+  named nowhere but `env.sh`). `tests/run.sh` runs both.
+- **CI** (`.github/workflows/ci.yml`): `bash -n` and `shellcheck -S warning`
+  over every script on Ubuntu, `tests/run.sh` on a macOS runner. Every script
+  is clean at that level; the four cross-file "unused" notes shellcheck cannot
+  see through are annotated in place.
 - `bin/serve.sh` — refuses, rather than warns, on a non-Apple-Silicon Mac, on a
   build that does not fit under the GPU wired ceiling, on a non-loopback host, on
   `--host`, `--lan-share`, `--lan-discover`, `--skip-mem-preflight`, `--no-mtp`

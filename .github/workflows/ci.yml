@@ -1,0 +1,30 @@
+# Static checks and the offline tests. Nothing here downloads weights or starts
+# a server: the tests read captured answers (tests/fixtures/) and this Mac's
+# memory (bin/env.sh), which is why they run on the macOS runner.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    name: shellcheck and bash -n
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update -q && sudo apt-get install -y -q shellcheck
+      - name: bash -n
+        run: bash -n start.sh bin/*.sh tests/*.sh
+      - name: shellcheck (warning and above)
+        run: shellcheck -S warning start.sh bin/*.sh tests/*.sh
+
+  tests:
+    name: offline tests (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: bash tests/run.sh

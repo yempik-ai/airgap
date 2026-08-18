@@ -86,6 +86,9 @@ if [ "$#" -eq 1 ]; then
     MODEL_DIR="$ROOT/$(basename "$1")"
   fi
   MODEL_REPO="$1"
+  # Kept in step with MODEL_DIR for anything that inherits this environment;
+  # nothing in this script reads it back.
+  # shellcheck disable=SC2034
   MODEL_ID="$(basename "$MODEL_DIR")"
 fi
 

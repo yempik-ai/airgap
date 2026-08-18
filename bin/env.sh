@@ -208,6 +208,9 @@ if [ "${HW_APPLE_SILICON:-no}" = "yes" ]; then
   # every message that quotes it quotes the truth. The GPU wired-ceiling check
   # is redone for the same reason: it must judge the weights you really have.
   HW_WEIGHTS_GB="$_w"
+  # Read by hw_report (detect-hardware.sh) and doctor.sh after this file is
+  # sourced; shellcheck cannot see across files.
+  # shellcheck disable=SC2034
   HW_WIRED_OK="$(hw_wired_fits "$_w" "$HW_KV_GB")"
   unset _w
 fi
