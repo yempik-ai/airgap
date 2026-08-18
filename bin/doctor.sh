@@ -727,12 +727,18 @@ for _h in "$ROOT"/harness/*.sh; do
   )"
   [ -n "$_endpoint" ] || _endpoint="$(harness_endpoint "$_dialect")"
   if command -v "$_bin" >/dev/null 2>&1; then
-    row PASS "$_hname" "$("$_bin" --version 2>/dev/null | awk '{print $1}') -> ${BASE_URL}${_endpoint}"
+    # The first field that looks like a version number, not simply the first
+    # word: `claude --version` leads with it, but `codex --version` prints
+    # "codex-cli 0.147.0", and a row reading "codex-cli" tells nobody which
+    # version they have. Nothing is printed when no field looks like one.
+    _ver="$("$_bin" --version 2>/dev/null \
+      | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[0-9]+(\.[0-9]+)*$/) { print $i; exit } }')"
+    row PASS "$_hname" "${_ver} -> ${BASE_URL}${_endpoint}"
   else
     row WARN "$_hname" "'${_bin}' not found — run.sh will refuse" "docs/10-other-harnesses.md"
   fi
 done
-unset _h _hname _dialect _bin _endpoint
+unset _h _hname _dialect _bin _endpoint _ver
 
 # A real key in your shell would take priority over the local server and send
 # your questions to Anthropic instead. claude-local.sh blanks it, but if you
@@ -765,10 +771,14 @@ else
   row SKIP "context" "cannot check against the model until it is downloaded (CTX_SIZE=${CTX_SIZE})"
 fi
 
+# What LEAN_MCP saves is a fact about each harness, never one figure borrowed
+# for all of them (docs/10-other-harnesses.md, rule 3), so this row states both
+# measured figures and says which is which. It sits here, under the per-harness
+# section, because the setting itself is shared by every adapter.
 if [ "$LEAN_MCP" = "1" ]; then
-  row PASS "mcp mode" "strict (LEAN_MCP=1) — saves about 17,000 prompt tokens per turn"
+  row PASS "mcp mode" "tool servers off (LEAN_MCP=1) — measured saving per turn: Claude Code ~17,000 prompt tokens, Codex 935 (its plugins only)"
 else
-  row WARN "mcp mode" "your normal config (LEAN_MCP=0) — costs about 17,000 prompt tokens per turn"
+  row WARN "mcp mode" "tool servers on (LEAN_MCP=0) — measured cost per turn: Claude Code ~17,000 prompt tokens, Codex 935 (its plugins only)"
 fi
 
 # =============================================================================

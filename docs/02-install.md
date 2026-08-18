@@ -1310,11 +1310,11 @@ PASS  bind setting      HOST=127.0.0.1 — serve.sh will listen on this Mac only
 SKIP  server            not running — start ./bin/serve.sh
 ── harness wiring ───────────────────────────
 PASS  claude-code       2.1.233 -> http://127.0.0.1:11234/v1/messages
-PASS  codex             codex-cli -> http://127.0.0.1:11234/v1/responses
+PASS  codex             0.147.0 -> http://127.0.0.1:11234/v1/responses
 PASS  ANTHROPIC_API_KEY not set in this shell
 PASS  base url          claude-local.sh will point at http://127.0.0.1:11234
 PASS  context           CTX_SIZE=65536 declared to server and Claude Code, within the model's 262144
-PASS  mcp mode          strict (LEAN_MCP=1) — saves about 17,000 prompt tokens per turn
+PASS  mcp mode          tool servers off (LEAN_MCP=1) — measured saving per turn: Claude Code ~17,000 prompt tokens, Codex 935 (its plugins only)
 ─────────────────────────────────────────────
 23 pass, 0 warn, 0 fail, 1 skipped
 doctor: OK — next: ./bin/serve.sh

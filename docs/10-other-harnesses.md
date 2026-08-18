@@ -297,13 +297,14 @@ that only exists on your Mac. Neither stops the answer.
 ```
 ── harness wiring ───────────────────────────
 PASS  claude-code       2.1.234 -> http://127.0.0.1:11234/v1/messages
-PASS  codex             codex-cli -> http://127.0.0.1:11234/v1/responses
+PASS  codex             0.147.0 -> http://127.0.0.1:11234/v1/responses
 ```
 
 Each row says the app is installed, and which address and endpoint
 ([Glossary](09-glossary.md#endpoint)) `run.sh` would point it at. The version
-shown is the first word of what that app prints for `--version`, which for
-Codex is the word `codex-cli`.
+shown is the first thing that looks like a version number in what that app
+prints for `--version`, because not every app leads with it: `claude` prints
+`2.1.234 (Claude Code)`, and `codex` prints `codex-cli 0.147.0`.
 
 A harness you have not installed gets a `WARN`, and that is **not a problem**:
 
@@ -312,10 +313,22 @@ WARN  codex             'codex' not found — run.sh will refuse  -> docs/10-oth
 ```
 
 It means exactly what it says: this repository ships an adapter for Codex, you
-do not have Codex, and `./bin/run.sh codex` would tell you so rather than fail
-strangely. Nothing about your setup is wrong, and `doctor` ending with
-`1 WARNING(S)` for that reason is safe to continue past. Install the app, or
-ignore the row.
+do not have Codex, and `./bin/run.sh codex` refuses by name rather than failing
+strangely later:
+
+```
+error: 'codex' is not installed, or not on your PATH — codex cannot start
+
+fix:   install it, or point this repo at the command you do have. The
+       setting that chooses it is named in this harness's own help:
+           ./bin/run.sh codex --help
+       Set it in config.env. See docs/10-other-harnesses.md
+```
+
+That refusal comes before the server check, so you get it whether or not
+`./bin/serve.sh` is running. Nothing about your setup is wrong, and `doctor`
+ending with `1 WARNING(S)` for that reason is safe to continue past. Install the
+app, or ignore the row.
 
 Doctor never calls the wiring; it only reads what each adapter declares. It
 changes nothing, here as everywhere.
