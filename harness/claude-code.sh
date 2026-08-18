@@ -68,8 +68,12 @@ SETTINGS
                   is the side that reports a stall. Default: 300
 
 WHAT YOU SHOULD SEE
-  Six lines starting with "claude-code", then Claude Code's normal startup,
-  then one line about an "unrecognized_model", and possibly one saying
+  Eight lines of settings, then a blank line, then Claude Code's own screen.
+  The first line starts with "claude-code"; the last two are one "note" that
+  wraps. A ninth line appears only when SERVE_TIMEOUT is low enough that
+  Claude Code's own 300-second floor overrides it, and says so.
+
+  After that: one line about an "unrecognized_model", and possibly one saying
   claude.ai connectors are disabled because an auth source is set. Both are
   EXPECTED. Neither is an error and nothing is wrong. Claude Code has simply
   never heard of a model name that only exists on your Mac, and the "auth
@@ -188,6 +192,10 @@ harness_wire() {
   # binary and takes precedence over the stream limit when set, but whether the
   # server's SSE keepalive frames feed that watchdog has not been established
   # here. Setting it on a guess would be a number this repo could not explain.
+
+  # The answer cap is Claude Code's own knob, not something every harness has,
+  # so it is a note here rather than part of run.sh's common context line.
+  HARNESS_NOTES+=( "output   $CLAUDE_CODE_MAX_OUTPUT_TOKENS max output tokens per answer (CLAUDE_CODE_MAX_OUTPUT_TOKENS)" )
 
   HARNESS_ARGS+=( --model "$MODEL_ID" )
   if [ "$LEAN_MCP" = "1" ]; then
