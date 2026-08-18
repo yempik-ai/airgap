@@ -10,7 +10,7 @@
 # that declares Node 24; Node 20 is deprecated on GitHub-hosted runners.
 #
 # The same two jobs, locally:
-#     bash -n start.sh bin/*.sh tests/*.sh && shellcheck -S warning start.sh bin/*.sh tests/*.sh
+#     bash -n start.sh bin/*.sh harness/*.sh tests/*.sh && shellcheck -S warning start.sh bin/*.sh harness/*.sh tests/*.sh
 #     bash tests/run.sh
 name: ci
 
@@ -34,9 +34,9 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update -q && sudo apt-get install -y -q shellcheck
       - name: bash -n
-        run: bash -n start.sh bin/*.sh tests/*.sh
+        run: bash -n start.sh bin/*.sh harness/*.sh tests/*.sh
       - name: shellcheck (warning and above)
-        run: shellcheck -S warning start.sh bin/*.sh tests/*.sh
+        run: shellcheck -S warning start.sh bin/*.sh harness/*.sh tests/*.sh
 
   tests:
     name: offline tests (macOS)
